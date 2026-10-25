@@ -1,0 +1,82 @@
+openapi: 3.0.3
+
+info:
+  title: STAGELINK Identity API
+  version: 0.1.0
+  description: |
+    HTTP contract for the STAGELINK identity service.
+
+    This file is the source of truth for the service interface. Add or change
+    operations here before implementing them in Django. See
+    docs/api-conventions.md for shared rules.
+
+  contact:
+    name: STAGELINK maintainers
+
+servers:
+  - url: http://localhost:8001
+    description: Local development
+  - url: https://api.stagelink.example/identity
+    description: Reserved production URL
+
+tags:
+  - name: System
+    description: Operational endpoints used by infrastructure.
+
+paths:
+  /health/:
+    get:
+      tags:
+        - System
+      operationId: getIdentityHealth
+      summary: Report service health
+      description: Returns the current liveness status of the identity service.
+      security: []
+      responses:
+        '200':
+          description: The service is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+  schemas:
+    Health:
+      type: object
+      required:
+        - status
+        - service
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        service:
+          type: string
+          example: identity
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          example: service_unavailable
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+  responses:
+    ServiceUnavailable:
+      description: The service cannot serve requests.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

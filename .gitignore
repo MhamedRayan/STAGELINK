@@ -1,0 +1,52 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Django
+*.sqlite3
+*.sqlite3-journal
+staticfiles/
+media/
+
+# Coverage and test artefacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+junit.xml
+
+# Build output
+build/
+dist/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local logs
+*.log

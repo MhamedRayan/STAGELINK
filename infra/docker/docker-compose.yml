@@ -1,0 +1,160 @@
+name: stagelink
+
+x-service-environment: &service-environment
+  DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
+  DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-insecure-development-key}"
+  DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,identity,offers,applications,internships,notifications}"
+  DB_ENGINE: django.db.backends.postgresql
+  POSTGRES_USER: "${POSTGRES_USER:-stagelink}"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-stagelink}"
+  POSTGRES_PORT: "5432"
+
+x-postgres-environment: &postgres-environment
+  POSTGRES_USER: "${POSTGRES_USER:-stagelink}"
+  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-stagelink}"
+
+x-postgres-healthcheck: &postgres-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+  interval: 5s
+  timeout: 5s
+  retries: 10
+
+x-service-healthcheck: &service-healthcheck
+  test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
+
+services:
+  identity:
+    build:
+      context: ../../services/identity
+    ports:
+      - "8001:8000"
+    environment:
+      <<: *service-environment
+      POSTGRES_DB: identity
+      POSTGRES_HOST: db-identity
+    depends_on:
+      db-identity:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+    restart: unless-stopped
+
+  db-identity:
+    image: postgres:16-alpine
+    environment:
+      <<: *postgres-environment
+      POSTGRES_DB: identity
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+  offers:
+    build:
+      context: ../../services/offers
+    ports:
+      - "8002:8000"
+    environment:
+      <<: *service-environment
+      POSTGRES_DB: offers
+      POSTGRES_HOST: db-offers
+    depends_on:
+      db-offers:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+    restart: unless-stopped
+
+  db-offers:
+    image: postgres:16-alpine
+    environment:
+      <<: *postgres-environment
+      POSTGRES_DB: offers
+    volumes:
+      - offers-data:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+  applications:
+    build:
+      context: ../../services/applications
+    ports:
+      - "8003:8000"
+    environment:
+      <<: *service-environment
+      POSTGRES_DB: applications
+      POSTGRES_HOST: db-applications
+    depends_on:
+      db-applications:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+    restart: unless-stopped
+
+  db-applications:
+    image: postgres:16-alpine
+    environment:
+      <<: *postgres-environment
+      POSTGRES_DB: applications
+    volumes:
+      - applications-data:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+  internships:
+    build:
+      context: ../../services/internships
+    ports:
+      - "8004:8000"
+    environment:
+      <<: *service-environment
+      POSTGRES_DB: internships
+      POSTGRES_HOST: db-internships
+    depends_on:
+      db-internships:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+    restart: unless-stopped
+
+  db-internships:
+    image: postgres:16-alpine
+    environment:
+      <<: *postgres-environment
+      POSTGRES_DB: internships
+    volumes:
+      - internships-data:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+  notifications:
+    build:
+      context: ../../services/notifications
+    ports:
+      - "8005:8000"
+    environment:
+      <<: *service-environment
+      POSTGRES_DB: notifications
+      POSTGRES_HOST: db-notifications
+    depends_on:
+      db-notifications:
+        condition: service_healthy
+    healthcheck: *service-healthcheck
+    restart: unless-stopped
+
+  db-notifications:
+    image: postgres:16-alpine
+    environment:
+      <<: *postgres-environment
+      POSTGRES_DB: notifications
+    volumes:
+      - notifications-data:/var/lib/postgresql/data
+    healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+volumes:
+  identity-data:
+  offers-data:
+  applications-data:
+  internships-data:
+  notifications-data:
