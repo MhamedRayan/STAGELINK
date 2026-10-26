@@ -28,6 +28,42 @@ jobs:
           - internships
           - notifications
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: stagelink
+          POSTGRES_USER: stagelink
+          POSTGRES_PASSWORD: stagelink
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stagelink -d stagelink"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DJANGO_SECRET_KEY: ci-only-django-secret-key-not-for-production-0123456789
+      DJANGO_DEBUG: "true"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      SECURE_SSL_REDIRECT: "false"
+      SECURE_HSTS_SECONDS: "0"
+
+      # All test suites run against PostgreSQL, matching Docker Compose.
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: stagelink
+      DB_USER: stagelink
+      DB_PASSWORD: stagelink
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+
+      JWT_SIGNING_KEY: ci-only-user-jwt-signing-key-not-for-production-0123456789
+      SERVICE_JWT_SIGNING_KEY: ci-only-service-jwt-signing-key-not-for-production-0123456789
+      SERVICE_JWT_ISSUER: stagelink-services
+      SERVICE_JWT_AUDIENCE: stagelink-identity
+      INTERNAL_SERVICE_TOKEN: test-service-token
+
     defaults:
       run:
         working-directory: services/${{ matrix.service }}

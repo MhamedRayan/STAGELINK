@@ -114,7 +114,9 @@ scope for this scaffold.
 **Context:** Every service needs a repeatable test signal before merge.
 
 **Decision:** Run each service's Django test suite in a GitHub Actions matrix
-on pushes and pull requests.
+on pushes and pull requests. Every suite uses the same PostgreSQL major version
+as Docker Compose.
 
-**Consequences:** Failures are isolated by service. Build caching and
-integration/end-to-end jobs can be added as the test suites grow.
+**Consequences:** Failures are isolated by service and database-specific
+behaviour is covered. Build caching and integration/end-to-end jobs can be added
+as the test suites grow.

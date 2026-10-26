@@ -1,4 +1,8 @@
 Django>=5.2,<5.3
-djangorestframework>=3.16,<4
-gunicorn>=23,<24
+djangorestframework>=3.16,<3.19
+django-environ>=0.13,<0.14
 psycopg[binary]>=3.2,<4
+PyJWT>=2.9,<3
+drf-spectacular>=0.28,<1
+gunicorn>=23,<24
+# cryptography>=42   # uncomment only if Identity & Profiles signs tokens with RS256

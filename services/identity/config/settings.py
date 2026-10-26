@@ -1,20 +1,52 @@
-"""Django settings for the STAGELINK identity service."""
-
-import os
+from datetime import timedelta
 from pathlib import Path
 
+import environ
+from django.core.exceptions import ImproperlyConfigured
+
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+env = environ.Env(
+    DJANGO_DEBUG=(bool, False),
+    DJANGO_ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
+    DJANGO_CSRF_TRUSTED_ORIGINS=(list, []),
+    TIME_ZONE=(str, "UTC"),
+    SECURE_SSL_REDIRECT=(bool, True),
+    SECURE_HSTS_SECONDS=(int, 0),
+    DATABASE_CONN_MAX_AGE=(int, 60),
+    JWT_ACCESS_TOKEN_MINUTES=(int, 15),
+    JWT_REFRESH_TOKEN_DAYS=(int, 7),
+    SERVICE_JWT_ISSUER=(str, "stagelink-services"),
+    SERVICE_JWT_AUDIENCE=(str, "stagelink-identity"),
+)
+environ.Env.read_env(BASE_DIR / ".env")
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "insecure-development-key")
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes", "on"}
+SECRET_KEY = env.str("DJANGO_SECRET_KEY")
+DEBUG = env.bool("DJANGO_DEBUG")
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS")
+DATABASE_URL = env.str("DATABASE_URL", default="")
+JWT_SIGNING_KEY = env.str("JWT_SIGNING_KEY")
+SERVICE_JWT_SIGNING_KEY = env.str("SERVICE_JWT_SIGNING_KEY")
+SERVICE_JWT_ISSUER = env.str("SERVICE_JWT_ISSUER")
+SERVICE_JWT_AUDIENCE = env.str("SERVICE_JWT_AUDIENCE")
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv(
-        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
-    ).split(",")
-    if host.strip()
-]
+if not DEBUG and (len(SECRET_KEY) < 50 or "replace-with" in SECRET_KEY):
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY must be a unique, strong production secret."
+    )
+if not DEBUG and (
+    len(JWT_SIGNING_KEY) < 32
+    or len(SERVICE_JWT_SIGNING_KEY) < 32
+    or JWT_SIGNING_KEY == SERVICE_JWT_SIGNING_KEY
+    or JWT_SIGNING_KEY == SECRET_KEY
+    or SERVICE_JWT_SIGNING_KEY == SECRET_KEY
+    or "replace-with" in JWT_SIGNING_KEY
+    or "replace-with" in SERVICE_JWT_SIGNING_KEY
+):
+    raise ImproperlyConfigured(
+        "Django and JWT signing keys must be distinct production secrets of at least 32 characters."
+    )
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -24,7 +56,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "accounts",
+    "rest_framework_simplejwt",
+    "api",
 ]
 
 MIDDLEWARE = [
@@ -38,7 +71,6 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = "config.urls"
-
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -53,46 +85,101 @@ TEMPLATES = [
         },
     },
 ]
-
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
-DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.sqlite3")
-
-if DB_ENGINE.endswith("postgresql"):
+if DATABASE_URL:
     DATABASES = {
         "default": {
-            "ENGINE": DB_ENGINE,
-            "NAME": os.getenv("POSTGRES_DB", "identity"),
-            "USER": os.getenv("POSTGRES_USER", "stagelink"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "stagelink"),
-            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
-            "PORT": os.getenv("POSTGRES_PORT", "5432"),
-            "CONN_MAX_AGE": 60,
+            **env.db_url("DATABASE_URL"),
+            "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE"),
+            "CONN_HEALTH_CHECKS": True,
         }
     }
 else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+    DB_ENGINE = env.str("DB_ENGINE", default="django.db.backends.sqlite3")
+    if DB_ENGINE.endswith("sqlite3"):
+        DATABASES = {
+            "default": {
+                "ENGINE": "django.db.backends.sqlite3",
+                "NAME": env.str("DB_NAME", default=str(BASE_DIR / "db.sqlite3")),
+            }
         }
-    }
+    else:
+        DATABASES = {
+            "default": {
+                "ENGINE": DB_ENGINE,
+                "NAME": env.str("DB_NAME", default="identity"),
+                "USER": env.str("DB_USER", default="stagelink"),
+                "PASSWORD": env.str("DB_PASSWORD", default="stagelink"),
+                "HOST": env.str("DB_HOST", default="localhost"),
+                "PORT": env.str("DB_PORT", default="5432"),
+                "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE"),
+                "CONN_HEALTH_CHECKS": True,
+            }
+        }
+
+AUTH_USER_MODEL = "api.User"
+AUTHENTICATION_BACKENDS = ["django.contrib.auth.backends.ModelBackend"]
 
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "UTC"
+TIME_ZONE = env.str("TIME_ZONE")
 USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication"
+    ],
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
+    "DEFAULT_THROTTLE_RATES": {
+        "register": "10/hour",
+        "login": "10/minute",
+    },
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_TOKEN_MINUTES")),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_TOKEN_DAYS")),
+    "ROTATE_REFRESH_TOKENS": False,
+    "BLACKLIST_AFTER_ROTATION": False,
+    "UPDATE_LAST_LOGIN": False,
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": JWT_SIGNING_KEY,
+    "VERIFYING_KEY": "",
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
+    "TOKEN_TYPE_CLAIM": "token_type",
+}
+
+SERVICE_JWT_ALGORITHM = "HS256"
+SERVICE_JWT_MAX_LIFETIME_SECONDS = 300
+
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT")
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS")
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "same-origin"

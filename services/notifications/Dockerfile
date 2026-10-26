@@ -11,6 +11,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Run as a non-root user.
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
 
+# Apply migrations, then serve. Secrets and settings come from environment variables.
 CMD ["sh", "-c", "python manage.py migrate --noinput && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2"]

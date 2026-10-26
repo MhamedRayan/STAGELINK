@@ -1,9 +1,10 @@
-"""URL configuration for the applications service."""
-
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import path, include
+
+from applications.views import health
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("", include("applications_api.urls")),
+    path('health/', health, name='health'),
+    path('admin/', admin.site.urls),
+    path('api/', include('applications.urls')),
 ]

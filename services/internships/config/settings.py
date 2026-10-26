@@ -1,20 +1,23 @@
 """Django settings for the STAGELINK internships service."""
 
-import os
 from pathlib import Path
+
+import environ
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "insecure-development-key")
-DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() in {"1", "true", "yes", "on"}
+env = environ.Env()
+environ.Env.read_env(BASE_DIR / ".env")
 
-ALLOWED_HOSTS = [
-    host.strip()
-    for host in os.getenv(
-        "DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"
-    ).split(",")
-    if host.strip()
-]
+SECRET_KEY = env(
+    "DJANGO_SECRET_KEY",
+    default=env("SECRET_KEY", default="django-insecure-internships-development-key"),
+)
+DEBUG = env.bool("DJANGO_DEBUG", default=env.bool("DEBUG", default=False))
+ALLOWED_HOSTS = env.list(
+    "DJANGO_ALLOWED_HOSTS",
+    default=env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]),
+)
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -24,7 +27,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
-    "internships_api",
+    "internships",
 ]
 
 MIDDLEWARE = [
@@ -56,25 +59,25 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.sqlite3")
+DB_ENGINE = env("DB_ENGINE", default="django.db.backends.sqlite3")
 
-if DB_ENGINE.endswith("postgresql"):
+if DB_ENGINE.endswith("sqlite3"):
     DATABASES = {
         "default": {
-            "ENGINE": DB_ENGINE,
-            "NAME": os.getenv("POSTGRES_DB", "internships"),
-            "USER": os.getenv("POSTGRES_USER", "stagelink"),
-            "PASSWORD": os.getenv("POSTGRES_PASSWORD", "stagelink"),
-            "HOST": os.getenv("POSTGRES_HOST", "localhost"),
-            "PORT": os.getenv("POSTGRES_PORT", "5432"),
-            "CONN_MAX_AGE": 60,
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": env("DB_NAME", default=str(BASE_DIR / "db.sqlite3")),
         }
     }
 else:
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "ENGINE": DB_ENGINE,
+            "NAME": env("DB_NAME", default="internships"),
+            "USER": env("DB_USER", default="stagelink"),
+            "PASSWORD": env("DB_PASSWORD", default="stagelink"),
+            "HOST": env("DB_HOST", default="localhost"),
+            "PORT": env("DB_PORT", default="5432"),
+            "CONN_MAX_AGE": env.int("DATABASE_CONN_MAX_AGE", default=60),
         }
     }
 
@@ -92,7 +95,25 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# Shared secret for service-to-service calls (X-Service-Token header).
+# Empty by default, so if it is not configured, nothing passes.
+INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
+
+# JWT issued by the Identity & Profiles service. The signing key must match theirs.
+# The algorithm is fixed in code on purpose, not read from the environment, so it
+# cannot be weakened by configuration.
+JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY)
+JWT_ALGORITHM = "HS256"
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "internships.authentication.IdentityJWTAuthentication",
+    ],
+    # Secure default: every endpoint requires an authenticated caller unless it
+    # explicitly opts out.
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}

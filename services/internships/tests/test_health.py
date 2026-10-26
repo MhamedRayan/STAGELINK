@@ -1,8 +1,8 @@
 from django.test import SimpleTestCase
 
 
-class HealthEndpointTests(SimpleTestCase):
-    def test_health_endpoint_reports_service_name(self) -> None:
+class HealthTests(SimpleTestCase):
+    def test_health_endpoint_is_public(self):
         response = self.client.get("/health/")
 
         self.assertEqual(response.status_code, 200)

@@ -21,8 +21,8 @@ flowchart LR
     Notifications -->|delivery target data| Identity
 ```
 
-The diagram shows the intended direction of synchronous calls. Calls marked
-"future" below are not implemented yet.
+The diagram shows the intended direction of synchronous calls. Some arrows are
+not wired end to end yet.
 
 ## Service boundaries
 
@@ -64,8 +64,10 @@ read model or data export.
 3. Services validate token signatures and claims without calling `identity` on
    every request.
 
-The current scaffold exposes only health endpoints. Authentication is the first
-planned cross-service capability.
+The services implement JWT-based authentication. `identity` issues tokens;
+other services validate the signature locally with the shared
+`JWT_SIGNING_KEY`. Trusted service-to-service calls use either a separate
+service JWT or the shared `X-Service-Token` secret, depending on the endpoint.
 
 ## Configuration
 

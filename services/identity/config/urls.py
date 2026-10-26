@@ -1,9 +1,11 @@
-"""URL configuration for the identity service."""
-
 from django.contrib import admin
 from django.urls import include, path
 
+from api.views import health
+
+
 urlpatterns = [
+    path("health/", health, name="health"),
     path("admin/", admin.site.urls),
-    path("", include("accounts.urls")),
+    path("api/", include("api.urls")),
 ]

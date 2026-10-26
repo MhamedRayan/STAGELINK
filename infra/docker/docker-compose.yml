@@ -2,12 +2,26 @@ name: stagelink
 
 x-service-environment: &service-environment
   DJANGO_DEBUG: "${DJANGO_DEBUG:-true}"
-  DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-insecure-development-key}"
+  DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-dev-only-django-secret-key-change-before-production-0123456789}"
   DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,identity,offers,applications,internships,notifications}"
+  DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-}"
+  SECURE_SSL_REDIRECT: "${SECURE_SSL_REDIRECT:-false}"
+  SECURE_HSTS_SECONDS: "${SECURE_HSTS_SECONDS:-0}"
+  DATABASE_CONN_MAX_AGE: "60"
+
+  # Shared JWT and service-to-service authentication.
+  JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:-dev-only-user-jwt-signing-key-change-me-0123456789}"
+  SERVICE_JWT_SIGNING_KEY: "${SERVICE_JWT_SIGNING_KEY:-dev-only-service-jwt-signing-key-change-me-0123456789}"
+  SERVICE_JWT_ISSUER: "${SERVICE_JWT_ISSUER:-stagelink-services}"
+  SERVICE_JWT_AUDIENCE: "${SERVICE_JWT_AUDIENCE:-stagelink-identity}"
+  INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:-dev-only-internal-service-token-change-me}"
+
+  # All containers use PostgreSQL in Compose. Each service still has its own
+  # database, created by its dedicated db-<service> container.
   DB_ENGINE: django.db.backends.postgresql
-  POSTGRES_USER: "${POSTGRES_USER:-stagelink}"
-  POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-stagelink}"
-  POSTGRES_PORT: "5432"
+  DB_USER: "${POSTGRES_USER:-stagelink}"
+  DB_PASSWORD: "${POSTGRES_PASSWORD:-stagelink}"
+  DB_PORT: "5432"
 
 x-postgres-environment: &postgres-environment
   POSTGRES_USER: "${POSTGRES_USER:-stagelink}"
@@ -24,7 +38,7 @@ x-service-healthcheck: &service-healthcheck
   interval: 10s
   timeout: 5s
   retries: 5
-  start_period: 15s
+  start_period: 30s
 
 services:
   identity:
@@ -34,8 +48,8 @@ services:
       - "8001:8000"
     environment:
       <<: *service-environment
-      POSTGRES_DB: identity
-      POSTGRES_HOST: db-identity
+      DB_NAME: identity
+      DB_HOST: db-identity
     depends_on:
       db-identity:
         condition: service_healthy
@@ -43,7 +57,7 @@ services:
     restart: unless-stopped
 
   db-identity:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       <<: *postgres-environment
       POSTGRES_DB: identity
@@ -59,8 +73,8 @@ services:
       - "8002:8000"
     environment:
       <<: *service-environment
-      POSTGRES_DB: offers
-      POSTGRES_HOST: db-offers
+      DB_NAME: offers
+      DB_HOST: db-offers
     depends_on:
       db-offers:
         condition: service_healthy
@@ -68,7 +82,7 @@ services:
     restart: unless-stopped
 
   db-offers:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       <<: *postgres-environment
       POSTGRES_DB: offers
@@ -84,8 +98,9 @@ services:
       - "8003:8000"
     environment:
       <<: *service-environment
-      POSTGRES_DB: applications
-      POSTGRES_HOST: db-applications
+      DB_NAME: applications
+      DB_HOST: db-applications
+      INTERNSHIP_SERVICE_URL: "${INTERNSHIP_SERVICE_URL:-http://internships:8000/api/internal/internships/}"
     depends_on:
       db-applications:
         condition: service_healthy
@@ -93,7 +108,7 @@ services:
     restart: unless-stopped
 
   db-applications:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       <<: *postgres-environment
       POSTGRES_DB: applications
@@ -109,8 +124,8 @@ services:
       - "8004:8000"
     environment:
       <<: *service-environment
-      POSTGRES_DB: internships
-      POSTGRES_HOST: db-internships
+      DB_NAME: internships
+      DB_HOST: db-internships
     depends_on:
       db-internships:
         condition: service_healthy
@@ -118,7 +133,7 @@ services:
     restart: unless-stopped
 
   db-internships:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       <<: *postgres-environment
       POSTGRES_DB: internships
@@ -134,8 +149,8 @@ services:
       - "8005:8000"
     environment:
       <<: *service-environment
-      POSTGRES_DB: notifications
-      POSTGRES_HOST: db-notifications
+      DB_NAME: notifications
+      DB_HOST: db-notifications
     depends_on:
       db-notifications:
         condition: service_healthy
@@ -143,7 +158,7 @@ services:
     restart: unless-stopped
 
   db-notifications:
-    image: postgres:16-alpine
+    image: postgres:16
     environment:
       <<: *postgres-environment
       POSTGRES_DB: notifications

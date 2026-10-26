@@ -1,5 +1,4 @@
-"""ASGI config for the service."""
-
+"""ASGI config for the notifications service."""
 import os
 
 from django.core.asgi import get_asgi_application

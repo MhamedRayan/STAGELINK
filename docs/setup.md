@@ -24,8 +24,11 @@ cd stagelink
 cp .env.example .env
 ```
 
-Review `.env`. The defaults are intended for local development only. Use a real
-secret and strong database password for any shared environment.
+Review `.env`. The defaults are intended for local development only. Use real
+secrets and a strong database password for any shared environment. Each service
+gets its own database from Compose; the shared `JWT_SIGNING_KEY`,
+`SERVICE_JWT_SIGNING_KEY`, and `INTERNAL_SERVICE_TOKEN` must be identical across
+the services that use them.
 
 ## 3. Start the stack
 
@@ -92,13 +95,15 @@ python manage.py migrate
 python manage.py runserver 8002
 ```
 
-Without database environment variables, the service uses SQLite at
+Without database environment variables, every service uses SQLite at
 `services/<service>/db.sqlite3`. This is convenient for unit tests but does not
 exercise PostgreSQL-specific behaviour.
 
 To use a running Compose database from the host, expose the database port in a
-local override file or point `POSTGRES_HOST` at a reachable host. By default,
-database ports are not published to the host.
+local override file and set `DB_ENGINE=django.db.backends.postgresql` plus
+`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD`. `identity` and
+`applications` also accept a `DATABASE_URL`, which takes precedence when set.
+By default, database ports are not published to the host.
 
 ## Run tests
 
@@ -115,6 +120,11 @@ for service in identity offers applications internships notifications; do
   (cd "services/$service" && python manage.py test) || exit 1
 done
 ```
+
+The shared CI workflow runs every suite against PostgreSQL. To reproduce that
+locally, provide `DB_ENGINE=django.db.backends.postgresql` plus the `DB_*`
+variables; the notifications concurrency test in particular is only meaningful
+against PostgreSQL.
 
 Cross-service suites under `tests/` will gain their own runner as they are
 implemented.

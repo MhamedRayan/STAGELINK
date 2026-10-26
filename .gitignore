@@ -22,7 +22,6 @@ env/
 *.sqlite3-journal
 staticfiles/
 media/
-bbb/
 
 # Coverage and test artefacts
 .coverage

@@ -1,9 +1,9 @@
-"""URL configuration for the notifications service."""
-
-from django.contrib import admin
+"""Root URL configuration."""
 from django.urls import include, path
 
+from api.views import health_check
+
 urlpatterns = [
-    path("admin/", admin.site.urls),
-    path("", include("notifications_api.urls")),
+    path("health/", health_check, name="health"),
+    path("api/", include("api.urls")),
 ]

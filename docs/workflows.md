@@ -27,8 +27,8 @@ python manage.py check
 python manage.py test
 ```
 
-A service run this way uses SQLite unless `DB_ENGINE` and the `POSTGRES_*`
-variables point at a running PostgreSQL instance.
+A service run this way uses SQLite unless `DB_ENGINE=django.db.backends.postgresql`
+and the `DB_*` variables point at a running PostgreSQL instance.
 
 ## Contract-first API change
 
