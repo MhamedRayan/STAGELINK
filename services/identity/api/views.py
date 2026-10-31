@@ -8,7 +8,6 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.db import IntegrityError, transaction
 
-from api.authentication import ServiceJWTAuthentication
 from api.models import User
 from api.permissions import IsTrustedService
 from api.serializers import (
@@ -89,8 +88,8 @@ class UserProfileView(APIView):
 
 
 class InternalUserLookupView(APIView):
-    authentication_classes = (ServiceJWTAuthentication,)
-    permission_classes = (IsAuthenticated, IsTrustedService)
+    authentication_classes = ()
+    permission_classes = (IsTrustedService,)
 
     def get(self, request, user_id):
         try:
