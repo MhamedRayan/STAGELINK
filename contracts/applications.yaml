@@ -2,13 +2,18 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Applications API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP contract for the STAGELINK applications service.
 
     This file is the source of truth for the service interface. Add or change
     operations here before implementing them in Django. See
     docs/api-conventions.md for shared rules.
+
+    Application identifiers and all cross-service references are UUID strings.
+    The owning company is identified by `company_user_id`, matching the offers
+    and internships services. All endpoints require a bearer access token
+    issued by identity. Role values are lowercase snake_case.
 
   contact:
     name: STAGELINK maintainers
@@ -22,6 +27,8 @@ servers:
 tags:
   - name: System
     description: Operational endpoints used by infrastructure.
+  - name: Applications
+    description: Application submission, decisions and confirmation.
 
 paths:
   /health/:
@@ -42,7 +49,197 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/applications/:
+    get:
+      tags:
+        - Applications
+      operationId: listApplications
+      summary: List applications visible to the caller
+      description: |
+        Students see their own applications, companies see applications for
+        their company, and university or platform administrators see all
+        applications.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Applications visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Applications
+      operationId: createApplication
+      summary: Submit an application
+      description: Only students can submit applications. Duplicate applications for the same offer are rejected.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplicationCreate'
+      responses:
+        '201':
+          description: The application was submitted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/applications/{id}/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags:
+        - Applications
+      operationId: getApplication
+      summary: Read an application
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/applications/{id}/company-decision/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags:
+        - Applications
+      operationId: decideAsCompany
+      summary: Accept or reject an application as the company
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyDecision'
+      responses:
+        '200':
+          description: The updated application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/applications/{id}/university-decision/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags:
+        - Applications
+      operationId: decideAsUniversity
+      summary: Validate or reject an application as a university administrator
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UniversityDecision'
+      responses:
+        '200':
+          description: The updated application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/applications/{id}/student-decision/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags:
+        - Applications
+      operationId: decideAsStudent
+      summary: Accept or decline a validated application as the student
+      description: |
+        Accepting triggers a synchronous call to the internships service. The
+        application is confirmed only after the internship record is created.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StudentDecision'
+      responses:
+        '200':
+          description: The updated application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '502':
+          $ref: '#/components/responses/BadGateway'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      description: Application UUID.
+      schema:
+        type: string
+        format: uuid
+
   schemas:
     Health:
       type: object
@@ -58,6 +255,138 @@ components:
           type: string
           example: applications
 
+    ApplicationStatus:
+      type: string
+      enum:
+        - SUBMITTED
+        - COMPANY_ACCEPTED
+        - COMPANY_REJECTED
+        - UNIVERSITY_VALIDATED
+        - UNIVERSITY_REJECTED
+        - STUDENT_ACCEPTED
+        - STUDENT_DECLINED
+        - CONFIRMED
+        - WITHDRAWN
+
+    CompanyDecisionValue:
+      type: string
+      enum:
+        - ACCEPT
+        - REJECT
+
+    StudentDecisionValue:
+      type: string
+      enum:
+        - ACCEPT
+        - DECLINE
+
+    ApplicationCreate:
+      type: object
+      required:
+        - offer_id
+        - company_user_id
+        - start_date
+        - end_date
+      properties:
+        offer_id:
+          type: string
+          format: uuid
+        company_user_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+
+    Application:
+      type: object
+      required:
+        - id
+        - offer_id
+        - company_user_id
+        - student_user_id
+        - start_date
+        - end_date
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        offer_id:
+          type: string
+          format: uuid
+        company_user_id:
+          type: string
+          format: uuid
+        student_user_id:
+          type: string
+          format: uuid
+        university_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        company_decision:
+          $ref: '#/components/schemas/CompanyDecisionValue'
+        company_reason:
+          type: string
+          nullable: true
+        university_decision:
+          $ref: '#/components/schemas/CompanyDecisionValue'
+        university_reason:
+          type: string
+          nullable: true
+        student_decision:
+          $ref: '#/components/schemas/StudentDecisionValue'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CompanyDecision:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          $ref: '#/components/schemas/CompanyDecisionValue'
+        reason:
+          type: string
+          description: Required when the decision is `REJECT`.
+
+    UniversityDecision:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          $ref: '#/components/schemas/CompanyDecisionValue'
+        reason:
+          type: string
+          description: Required when the decision is `REJECT`.
+
+    StudentDecision:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          $ref: '#/components/schemas/StudentDecisionValue'
+
     Error:
       type: object
       required:
@@ -66,7 +395,7 @@ components:
       properties:
         code:
           type: string
-          example: service_unavailable
+          example: downstream_unavailable
         message:
           type: string
         details:
@@ -74,6 +403,36 @@ components:
           additionalProperties: true
 
   responses:
+    BadRequest:
+      description: The request is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller lacks the required access.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    BadGateway:
+      description: The internships service could not create the official record.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     ServiceUnavailable:
       description: The service cannot serve requests.
       content:

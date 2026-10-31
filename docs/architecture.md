@@ -66,8 +66,9 @@ read model or data export.
 
 The services implement JWT-based authentication. `identity` issues tokens;
 other services validate the signature locally with the shared
-`JWT_SIGNING_KEY`. Trusted service-to-service calls use either a separate
-service JWT or the shared `X-Service-Token` secret, depending on the endpoint.
+`JWT_SIGNING_KEY`. Trusted service-to-service calls use the shared
+`X-Service-Token` secret from `INTERNAL_SERVICE_TOKEN`; they do not reuse user
+access tokens.
 
 ## Configuration
 

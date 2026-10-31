@@ -120,3 +120,33 @@ as Docker Compose.
 **Consequences:** Failures are isolated by service and database-specific
 behaviour is covered. Build caching and integration/end-to-end jobs can be added
 as the test suites grow.
+
+---
+
+## ADR-007: UUID identifiers, canonical roles, and service tokens
+
+**Status:** accepted
+**Date:** 2026-10-31
+
+**Context:** The services were scaffolded independently and disagreed on
+identifier types, role spellings, and internal authentication. Those differences
+made cross-service calls unreliable and forced consumers to translate values at
+every boundary.
+
+**Decision:**
+
+- Service-owned resource identifiers and cross-service references are UUIDs.
+  APIs expose them as UUID strings, and service routes use UUID converters.
+- Role values are lowercase `snake_case`: `student`, `company`, `supervisor`,
+  `university_admin`, `platform_admin`. Role matching is exact and
+  case-sensitive.
+- Trusted service-to-service calls authenticate with the shared
+  `X-Service-Token` header. User-facing calls continue to use
+  `Authorization: Bearer <access-token>`.
+
+**Consequences:** Payloads and routes are consistent across services and cannot
+leak database row order. Existing integer identifiers in offers and internships
+cannot be mapped to the UUIDs they reference, so adopting this decision requires
+recreating those development tables. The shared service token is a simple
+secret; rotating it requires a coordinated deployment. Finer-grained service
+authorization would need a signed service token or mutual TLS in the future.

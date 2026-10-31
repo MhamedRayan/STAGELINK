@@ -2,13 +2,17 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Internships API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP contract for the STAGELINK internships service.
 
     This file is the source of truth for the service interface. Add or change
     operations here before implementing them in Django. See
     docs/api-conventions.md for shared rules.
+
+    Internship identifiers and all cross-service references are UUID strings.
+    Public reads require a bearer access token. The internal create endpoint
+    requires the shared X-Service-Token header.
 
   contact:
     name: STAGELINK maintainers
@@ -22,6 +26,10 @@ servers:
 tags:
   - name: System
     description: Operational endpoints used by infrastructure.
+  - name: Internships
+    description: Internship records and visibility.
+  - name: Internal
+    description: Trusted service-to-service endpoints.
 
 paths:
   /health/:
@@ -42,7 +50,127 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/internal/internships/:
+    post:
+      tags:
+        - Internal
+      operationId: createInternship
+      summary: Create an internship for an accepted application
+      description: |
+        Called by applications after a student accepts a validated offer. The
+        source application identifier is the idempotency key: retrying the same
+        request returns the existing internship with `200` instead of creating
+        another row. The status is always set to `confirmed` by this service.
+      security:
+        - serviceToken: []
+      parameters:
+        - name: X-Idempotency-Key
+          in: header
+          required: false
+          description: The source application UUID, also used as the idempotency key.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternshipCreate'
+      responses:
+        '201':
+          description: A new internship was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Internship'
+        '200':
+          description: The internship already existed for this application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Internship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The student already has an active internship.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/internships/:
+    get:
+      tags:
+        - Internships
+      operationId: listInternships
+      summary: List internships visible to the caller
+      description: |
+        Visibility is role-based: students see their own internships, companies
+        see internships for their company, supervisors see assigned internships,
+        and university administrators see all internships.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Internships visible to the caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Internship'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/internships/{id}/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+    get:
+      tags:
+        - Internships
+      operationId: getInternship
+      summary: Read an internship
+      description: Internships outside the caller's visibility return `404`.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The internship.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Internship'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+
+  parameters:
+    InternshipId:
+      name: id
+      in: path
+      required: true
+      description: Internship UUID.
+      schema:
+        type: string
+        format: uuid
+
   schemas:
     Health:
       type: object
@@ -58,6 +186,87 @@ components:
           type: string
           example: internships
 
+    InternshipStatus:
+      type: string
+      enum:
+        - confirmed
+        - in_progress
+        - completed
+        - cancelled
+
+    InternshipCreate:
+      type: object
+      required:
+        - source_application_id
+        - student_user_id
+        - company_user_id
+        - offer_id
+        - start_date
+        - end_date
+      properties:
+        source_application_id:
+          type: string
+          format: uuid
+        student_user_id:
+          type: string
+          format: uuid
+        company_user_id:
+          type: string
+          format: uuid
+        offer_id:
+          type: string
+          format: uuid
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+
+    Internship:
+      type: object
+      required:
+        - id
+        - source_application_id
+        - student_user_id
+        - company_user_id
+        - offer_id
+        - start_date
+        - end_date
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        source_application_id:
+          type: string
+          format: uuid
+        student_user_id:
+          type: string
+          format: uuid
+        company_user_id:
+          type: string
+          format: uuid
+        offer_id:
+          type: string
+          format: uuid
+        supervisor_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        start_date:
+          type: string
+          format: date
+        end_date:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/InternshipStatus'
+        created_at:
+          type: string
+          format: date-time
+
     Error:
       type: object
       required:
@@ -66,7 +275,7 @@ components:
       properties:
         code:
           type: string
-          example: service_unavailable
+          example: active_internship_conflict
         message:
           type: string
         details:
@@ -74,6 +283,30 @@ components:
           additionalProperties: true
 
   responses:
+    BadRequest:
+      description: The request is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller lacks the required access.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     ServiceUnavailable:
       description: The service cannot serve requests.
       content:
