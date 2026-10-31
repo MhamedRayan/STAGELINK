@@ -8,13 +8,13 @@ class InternshipCreateSerializer(serializers.Serializer):
     Input for creating an internship. It is a plain Serializer on purpose:
     a ModelSerializer would add a uniqueness validator on source_application_id
     and reject retries with 400. Retries must return the existing record instead.
-    The status field is absent on purpose: the server always sets it to Confirmed.
+    The status field is absent on purpose: the server always sets it to confirmed.
     """
 
-    source_application_id = serializers.IntegerField(min_value=1)
-    student_user_id = serializers.IntegerField(min_value=1)
-    company_user_id = serializers.IntegerField(min_value=1)
-    offer_id = serializers.IntegerField(min_value=1)
+    source_application_id = serializers.UUIDField()
+    student_user_id = serializers.UUIDField()
+    company_user_id = serializers.UUIDField()
+    offer_id = serializers.UUIDField()
     start_date = serializers.DateField()
     end_date = serializers.DateField()
 

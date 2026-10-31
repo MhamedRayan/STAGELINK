@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 
 from django.test import TestCase, override_settings
@@ -8,16 +9,20 @@ from .models import Internship, InternshipStatus
 TEST_TOKEN = "test-service-token"
 CREATE_URL = "/api/internal/internships/"
 
+STUDENT_ID = uuid.uuid4()
+COMPANY_ID = uuid.uuid4()
+OFFER_ID = uuid.uuid4()
+
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TEST_TOKEN)
 class InternalCreateApiTests(TestCase):
     def setUp(self):
         self.api = APIClient()
         self.payload = {
-            "source_application_id": 1,
-            "student_user_id": 10,
-            "company_user_id": 20,
-            "offer_id": 30,
+            "source_application_id": str(uuid.uuid4()),
+            "student_user_id": str(STUDENT_ID),
+            "company_user_id": str(COMPANY_ID),
+            "offer_id": str(OFFER_ID),
             "start_date": "2027-02-01",
             "end_date": "2027-06-30",
         }
@@ -37,6 +42,7 @@ class InternalCreateApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], InternshipStatus.CONFIRMED)
         self.assertEqual(Internship.objects.count(), 1)
+        self.assertEqual(response.data["student_user_id"], str(STUDENT_ID))
 
     def test_status_sent_by_caller_is_ignored(self):
         self._post({**self.payload, "status": "completed"})
@@ -73,7 +79,9 @@ class InternalCreateApiTests(TestCase):
 
     def test_student_with_active_internship_gets_conflict(self):
         self._post()
-        response = self._post({**self.payload, "source_application_id": 2})
+        response = self._post(
+            {**self.payload, "source_application_id": str(uuid.uuid4())}
+        )
 
         self.assertEqual(response.status_code, 409)
         self.assertEqual(Internship.objects.count(), 1)
@@ -87,6 +95,12 @@ class InternalCreateApiTests(TestCase):
     def test_missing_required_field_is_rejected(self):
         data = {k: v for k, v in self.payload.items() if k != "offer_id"}
         response = self._post(data)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Internship.objects.count(), 0)
+
+    def test_non_uuid_identifier_is_rejected(self):
+        response = self._post({**self.payload, "offer_id": "not-a-uuid"})
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(Internship.objects.count(), 0)

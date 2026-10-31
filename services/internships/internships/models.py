@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.db.models import F, Q
 
@@ -17,14 +19,15 @@ ACTIVE_INTERNSHIP_STATUSES = (
 
 
 class Internship(models.Model):
-    # Identifiers owned by other services: plain numbers, no foreign keys.
+    # Identifiers owned by other services: UUIDs, no foreign keys.
     # source_application_id is the idempotency key. It is unique in the
     # database, so a duplicate creation request cannot insert a second row.
-    source_application_id = models.PositiveBigIntegerField(unique=True)
-    student_user_id = models.PositiveBigIntegerField()
-    company_user_id = models.PositiveBigIntegerField()
-    offer_id = models.PositiveBigIntegerField()
-    supervisor_user_id = models.PositiveBigIntegerField(null=True, blank=True)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_application_id = models.UUIDField(unique=True)
+    student_user_id = models.UUIDField()
+    company_user_id = models.UUIDField()
+    offer_id = models.UUIDField()
+    supervisor_user_id = models.UUIDField(null=True, blank=True)
 
     start_date = models.DateField()
     end_date = models.DateField()

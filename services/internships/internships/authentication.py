@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 
 import jwt
@@ -12,7 +13,7 @@ from .roles import ALL_ROLES
 class Actor:
     """The authenticated caller, built from a verified JWT."""
 
-    user_id: int
+    user_id: uuid.UUID
     role: str
 
     @property
@@ -65,16 +66,14 @@ class IdentityJWTAuthentication(BaseAuthentication):
         except jwt.InvalidTokenError:
             raise AuthenticationFailed("Invalid token.")
 
-        # Role values are matched exactly. "STUDENT" and "Student" are different.
+        # Role values are matched exactly. "STUDENT" and "student" are different.
         role = payload["role"]
         if role not in ALL_ROLES:
             raise AuthenticationFailed("Unknown role.")
 
         try:
-            user_id = int(payload["user_id"])
-        except (TypeError, ValueError):
-            raise AuthenticationFailed("Invalid user id.")
-        if user_id < 1:
+            user_id = uuid.UUID(str(payload["user_id"]))
+        except (TypeError, ValueError, AttributeError):
             raise AuthenticationFailed("Invalid user id.")
 
         return Actor(user_id=user_id, role=role)
