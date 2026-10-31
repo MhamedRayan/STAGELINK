@@ -103,21 +103,18 @@ AUTH_PASSWORD_VALIDATORS = [
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "applications.authentication.IdentityJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
 
+# JWT issued by the Identity & Profiles service. The signing key must match theirs.
+# The algorithm is fixed in code on purpose, not read from the environment, so it
+# cannot be weakened by configuration.
 JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY)
-
-SIMPLE_JWT = {
-    "ALGORITHM": "HS256",
-    "SIGNING_KEY": JWT_SIGNING_KEY,
-    "USER_ID_CLAIM": env("JWT_USER_ID_CLAIM", default="user_id"),
-    "AUTH_HEADER_TYPES": ("Bearer",),
-}
+JWT_ALGORITHM = "HS256"
 
 # Microservice integration.
 INTERNSHIP_SERVICE_URL = env(

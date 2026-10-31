@@ -10,7 +10,14 @@ class ApplicationSerializer(serializers.ModelSerializer):
 class ApplicationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
-        fields = ('offer_id', 'company_id')
+        fields = ('offer_id', 'company_user_id', 'start_date', 'end_date')
+
+    def validate(self, attrs):
+        if attrs['end_date'] < attrs['start_date']:
+            raise serializers.ValidationError(
+                {'end_date': 'End date cannot be before start date.'}
+            )
+        return attrs
 
 class CompanyDecisionSerializer(serializers.Serializer):
     decision = serializers.ChoiceField(choices=DecisionChoices.choices)

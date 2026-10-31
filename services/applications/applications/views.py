@@ -6,11 +6,12 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 
 from .models import Application, ApplicationStatus, DecisionChoices, StudentDecisionChoices
+from .roles import Role
 from .serializers import (
-    ApplicationSerializer, 
+    ApplicationSerializer,
     ApplicationCreateSerializer,
-    CompanyDecisionSerializer, 
-    UniversityDecisionSerializer, 
+    CompanyDecisionSerializer,
+    UniversityDecisionSerializer,
     StudentDecisionSerializer
 )
 from .permissions import IsStudent, IsCompany, IsUniversity, IsApplicationParticipant
@@ -31,21 +32,21 @@ class ApplicationListCreateView(generics.ListCreateAPIView):
         user_id = str(getattr(user, 'id', ''))
         role = getattr(user, 'role', None)
 
-        if role == 'STUDENT':
+        if role == Role.STUDENT:
             return Application.objects.filter(student_user_id=user_id)
-        elif role == 'COMPANY':
-            return Application.objects.filter(company_id=user_id)
-        elif role == 'UNIVERSITY':
+        elif role == Role.COMPANY:
+            return Application.objects.filter(company_user_id=user_id)
+        elif role in (Role.UNIVERSITY_ADMIN, Role.PLATFORM_ADMIN):
             return Application.objects.all()
         return Application.objects.none()
 
     def create(self, request, *args, **kwargs):
-        if getattr(request.user, 'role', None) != 'STUDENT':
+        if getattr(request.user, 'role', None) != Role.STUDENT:
             return Response({"detail": "Only students can submit applications."}, status=status.HTTP_403_FORBIDDEN)
-        
+
         serializer = ApplicationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        
+
         student_id = request.user.id
         offer_id = serializer.validated_data['offer_id']
 
@@ -56,8 +57,10 @@ class ApplicationListCreateView(generics.ListCreateAPIView):
 
             app = Application.objects.create(
                 offer_id=offer_id,
-                company_id=serializer.validated_data['company_id'],
+                company_user_id=serializer.validated_data['company_user_id'],
                 student_user_id=student_id,
+                start_date=serializer.validated_data['start_date'],
+                end_date=serializer.validated_data['end_date'],
                 status=ApplicationStatus.SUBMITTED
             )
 
@@ -78,12 +81,12 @@ class CompanyDecisionView(APIView):
         serializer.is_valid(raise_exception=True)
 
         with transaction.atomic():
-            app = Application.objects.select_for_update().filter(pk=pk, company_id=request.user.id).first()
+            app = Application.objects.select_for_update().filter(pk=pk, company_user_id=request.user.id).first()
             if not app:
                 return Response({"detail": "Application not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
 
             if app.status != ApplicationStatus.SUBMITTED:
-                return Response({"detail": f"Cannot make company decision on application in state '{app.status}'."}, 
+                return Response({"detail": f"Cannot make company decision on application in state '{app.status}'."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             decision = serializer.validated_data['decision']
@@ -115,7 +118,7 @@ class UniversityDecisionView(APIView):
                 return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
 
             if app.status != ApplicationStatus.COMPANY_ACCEPTED:
-                return Response({"detail": "University can only evaluate applications accepted by company."}, 
+                return Response({"detail": "University can only evaluate applications accepted by company."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             decision = serializer.validated_data['decision']
@@ -148,7 +151,7 @@ class StudentDecisionView(APIView):
                 return Response({"detail": "Application not found or unauthorized."}, status=status.HTTP_404_NOT_FOUND)
 
             if app.status != ApplicationStatus.UNIVERSITY_VALIDATED:
-                return Response({"detail": "Student can only make decision after University validation."}, 
+                return Response({"detail": "Student can only make decision after University validation."},
                                 status=status.HTTP_400_BAD_REQUEST)
 
             decision = serializer.validated_data['decision']
