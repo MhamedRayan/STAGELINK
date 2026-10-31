@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import uuid
+
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -23,7 +25,7 @@ class CreateOfferTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["company_user_id"], OWNER_ID)
+        self.assertEqual(response.data["company_user_id"], str(OWNER_ID))
         self.assertEqual(response.data["status"], OfferStatus.DRAFT)
         offer = Offer.objects.get(pk=response.data["id"])
         self.assertEqual(offer.company_user_id, OWNER_ID)
@@ -32,7 +34,7 @@ class CreateOfferTests(APITestCase):
 
     def test_client_cannot_spoof_owner_status_or_id(self):
         payload = build_payload(
-            id=999999,
+            id=uuid.uuid4(),
             company_user_id=OTHER_COMPANY_ID,
             status=OfferStatus.PUBLISHED,
         )
@@ -43,7 +45,7 @@ class CreateOfferTests(APITestCase):
         offer = Offer.objects.get()
         self.assertEqual(offer.company_user_id, OWNER_ID)
         self.assertEqual(offer.status, OfferStatus.DRAFT)
-        self.assertNotEqual(offer.id, 999999)
+        self.assertNotEqual(offer.id, uuid.uuid4())
 
     def test_invalid_values_return_400_and_create_nothing(self):
         cases = (
@@ -130,7 +132,7 @@ class UpdateOfferTests(APITestCase):
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(response.data["title"], "Updated Title")
-                self.assertEqual(response.data["company_user_id"], OWNER_ID)
+                self.assertEqual(response.data["company_user_id"], str(OWNER_ID))
                 offer.refresh_from_db()
                 self.assertEqual(offer.title, "Updated Title")
                 self.assertEqual(offer.capacity, 5)
@@ -147,7 +149,7 @@ class UpdateOfferTests(APITestCase):
                 "title": "Updated Title",
                 "status": OfferStatus.CLOSED,
                 "company_user_id": OTHER_COMPANY_ID,
-                "id": 999999,
+                "id": uuid.uuid4(),
             },
             format="json",
         )
@@ -158,7 +160,7 @@ class UpdateOfferTests(APITestCase):
         self.assertEqual(offer.status, OfferStatus.DRAFT)
         self.assertEqual(offer.company_user_id, OWNER_ID)
         self.assertEqual(offer.id, original_id)
-        self.assertFalse(Offer.objects.filter(pk=999999).exists())
+        self.assertFalse(Offer.objects.filter(pk=uuid.uuid4()).exists())
 
     def test_other_company_cannot_modify_published_offer(self):
         offer = create_offer(company_user_id=OWNER_ID, status=OfferStatus.PUBLISHED)
@@ -231,7 +233,7 @@ class UpdateOfferTests(APITestCase):
 
     def test_updating_non_existent_offer_returns_404(self):
         response = self.owner_client.patch(
-            self.detail_url(999999), {"title": "Updated Title"}, format="json"
+            self.detail_url(uuid.uuid4()), {"title": "Updated Title"}, format="json"
         )
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

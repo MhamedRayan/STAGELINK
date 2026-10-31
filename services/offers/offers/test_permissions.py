@@ -1,4 +1,5 @@
 from datetime import timedelta
+import uuid
 
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -18,8 +19,8 @@ from offers.permissions import (
     UserRole,
 )
 
-OWNER_ID = 7
-OTHER_COMPANY_ID = 8
+OWNER_ID = uuid.uuid4()
+OTHER_COMPANY_ID = uuid.uuid4()
 
 NON_COMPANY_ROLES = (
     UserRole.STUDENT,
@@ -31,7 +32,7 @@ NON_COMPANY_ROLES = (
 
 def make_access_token(user_id, role=None):
     token = AccessToken()
-    token[settings.SIMPLE_JWT["USER_ID_CLAIM"]] = user_id
+    token[settings.SIMPLE_JWT["USER_ID_CLAIM"]] = str(user_id)
     if role is not None:
         token[settings.JWT_ROLE_CLAIM] = str(role)
     return token
@@ -65,7 +66,7 @@ class TokenAuthenticationTests(SimpleTestCase):
 
         user, validated_token = JWTStatelessUserAuthentication().authenticate(request)
 
-        self.assertEqual(user.id, OWNER_ID)
+        self.assertEqual(str(user.id), str(OWNER_ID))
         self.assertEqual(validated_token[settings.JWT_ROLE_CLAIM], "company")
 
     def test_missing_authorization_header_returns_none(self):
@@ -95,7 +96,7 @@ class TokenAuthenticationTests(SimpleTestCase):
 
     def test_refresh_token_is_rejected_as_access_token(self):
         refresh_token = RefreshToken()
-        refresh_token[settings.SIMPLE_JWT["USER_ID_CLAIM"]] = OWNER_ID
+        refresh_token[settings.SIMPLE_JWT["USER_ID_CLAIM"]] = str(OWNER_ID)
         refresh_token[settings.JWT_ROLE_CLAIM] = str(UserRole.COMPANY)
         request = build_request(refresh_token)
 
@@ -163,7 +164,7 @@ class IsOfferOwnerTests(SimpleTestCase):
             IsOfferOwner().has_object_permission(request, None, build_offer())
         )
 
-    def test_string_caller_id_matches_numeric_company_user_id(self):
+    def test_string_caller_id_matches_company_user_id(self):
         request = build_request_for(str(OWNER_ID), UserRole.COMPANY)
 
         self.assertTrue(
