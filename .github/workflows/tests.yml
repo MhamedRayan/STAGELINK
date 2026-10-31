@@ -93,9 +93,13 @@ jobs:
     env:
       DJANGO_SECRET_KEY: ci-only-django-secret-key-for-integration-0123456789
       DJANGO_DEBUG: "true"
-      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
       SECURE_SSL_REDIRECT: "false"
       SECURE_HSTS_SECONDS: "0"
+
+      # DJANGO_ALLOWED_HOSTS is intentionally not set here. Compose supplies a
+      # default that includes the in-network service hostnames (internships,
+      # offers, ...). Overriding it with localhost-only makes applications fail
+      # to call internships with DisallowedHost.
 
       JWT_SIGNING_KEY: ci-only-user-jwt-signing-key-for-integration-0123456789
       INTERNAL_SERVICE_TOKEN: test-service-token
