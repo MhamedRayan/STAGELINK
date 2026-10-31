@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import uuid
+
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -44,7 +46,7 @@ class PublishOfferTests(APITestCase):
 
         list_response = self.client.get(reverse("offer-list"))
         listed_ids = [item["id"] for item in list_response.data["results"]]
-        self.assertIn(offer.id, listed_ids)
+        self.assertIn(str(offer.id), listed_ids)
 
     def test_publishing_requires_all_text_fields(self):
         for field_name in ("title", "description", "requirements", "location"):
@@ -123,7 +125,7 @@ class PublishOfferTests(APITestCase):
         self.assertEqual(offer.status, OfferStatus.DRAFT)
 
     def test_publishing_non_existent_offer_returns_404(self):
-        response = self.owner_client.post(publish_url(999999))
+        response = self.owner_client.post(publish_url(uuid.uuid4()))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -160,7 +162,7 @@ class CloseOfferTests(APITestCase):
 
         list_response = self.client.get(reverse("offer-list"))
         listed_ids = [item["id"] for item in list_response.data["results"]]
-        self.assertNotIn(offer.id, listed_ids)
+        self.assertNotIn(str(offer.id), listed_ids)
 
     def test_owner_can_close_published_offer_after_deadline(self):
         offer = create_owned_offer(
@@ -226,7 +228,7 @@ class CloseOfferTests(APITestCase):
         self.assertEqual(offer.status, OfferStatus.PUBLISHED)
 
     def test_closing_non_existent_offer_returns_404(self):
-        response = self.owner_client.post(close_url(999999))
+        response = self.owner_client.post(close_url(uuid.uuid4()))
 
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 

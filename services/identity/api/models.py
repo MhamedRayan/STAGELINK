@@ -10,14 +10,11 @@ from django.utils import timezone
 
 
 class UserRole(models.TextChoices):
-    STUDENT = "Student", "Student"
-    COMPANY = "Company", "Company"
-    SUPERVISOR = "Supervisor", "Supervisor"
-    UNIVERSITY_ADMINISTRATION = (
-        "University Administration",
-        "University Administration",
-    )
-    PLATFORM_ADMINISTRATOR = "Platform Administrator", "Platform Administrator"
+    STUDENT = "student", "Student"
+    COMPANY = "company", "Company"
+    SUPERVISOR = "supervisor", "Supervisor"
+    UNIVERSITY_ADMIN = "university_admin", "University administration"
+    PLATFORM_ADMIN = "platform_admin", "Platform administrator"
 
 
 PUBLIC_REGISTRATION_ROLES = (UserRole.STUDENT, UserRole.COMPANY)
@@ -59,11 +56,11 @@ class UserManager(BaseUserManager):
         email,
         password,
         name,
-        role=UserRole.PLATFORM_ADMINISTRATOR,
+        role=UserRole.PLATFORM_ADMIN,
         **extra_fields,
     ):
-        if role != UserRole.PLATFORM_ADMINISTRATOR:
-            raise ValueError("A superuser must have the Platform Administrator role.")
+        if role != UserRole.PLATFORM_ADMIN:
+            raise ValueError("A superuser must have the platform_admin role.")
         for field_name in ("is_staff", "is_superuser", "is_active"):
             extra_fields[field_name] = True
         return self._create_user(email, password, name, role, **extra_fields)

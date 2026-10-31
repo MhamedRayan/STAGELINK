@@ -9,18 +9,27 @@ def create_official_internship_record(application) -> bool:
     Calls Internship Management Service synchronously to generate official internship.
     Returns True on success, False on failure.
     """
+    if not settings.INTERNAL_SERVICE_TOKEN:
+        logger.error(
+            "INTERNAL_SERVICE_TOKEN is not configured; cannot create internship for App %s",
+            application.id,
+        )
+        return False
+
     url = settings.INTERNSHIP_SERVICE_URL
     headers = {
-        'Authorization': f'Bearer {settings.INTERNAL_SERVICE_TOKEN}',
+        'X-Service-Token': settings.INTERNAL_SERVICE_TOKEN,
         'X-Idempotency-Key': str(application.id),
         'Content-Type': 'application/json'
     }
-    
+
     payload = {
-        'application_id': str(application.id),
+        'source_application_id': str(application.id),
         'offer_id': str(application.offer_id),
         'student_user_id': str(application.student_user_id),
-        'company_id': str(application.company_id),
+        'company_user_id': str(application.company_user_id),
+        'start_date': application.start_date.isoformat(),
+        'end_date': application.end_date.isoformat(),
     }
 
     try:

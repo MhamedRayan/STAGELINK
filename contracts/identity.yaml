@@ -2,13 +2,17 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Identity API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP contract for the STAGELINK identity service.
 
     This file is the source of truth for the service interface. Add or change
     operations here before implementing them in Django. See
     docs/api-conventions.md for shared rules.
+
+    Identifiers are UUID strings. Role values are lowercase snake_case.
+    User endpoints require a bearer access token. Internal endpoints require
+    the shared X-Service-Token header.
 
   contact:
     name: STAGELINK maintainers
@@ -22,6 +26,12 @@ servers:
 tags:
   - name: System
     description: Operational endpoints used by infrastructure.
+  - name: Authentication
+    description: Registration, login and token refresh.
+  - name: Profiles
+    description: Authenticated user profile operations.
+  - name: Internal
+    description: Trusted service-to-service endpoints.
 
 paths:
   /health/:
@@ -42,7 +52,169 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/auth/register/:
+    post:
+      tags:
+        - Authentication
+      operationId: registerUser
+      summary: Register a student or company account
+      description: |
+        Public registration is limited to the `student` and `company` roles.
+        Company accounts are created inactive until an administrator activates
+        them. Other roles must be provisioned by an administrator.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserRegistration'
+      responses:
+        '201':
+          description: The account was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/auth/login/:
+    post:
+      tags:
+        - Authentication
+      operationId: loginUser
+      summary: Authenticate and issue a token pair
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserLogin'
+      responses:
+        '200':
+          description: Credentials are valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPair'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/auth/refresh/:
+    post:
+      tags:
+        - Authentication
+      operationId: refreshAccessToken
+      summary: Exchange a refresh token for a new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: A new access token was issued.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/me/:
+    get:
+      tags:
+        - Profiles
+      operationId: getCurrentUser
+      summary: Read the authenticated user's profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      tags:
+        - Profiles
+      operationId: updateCurrentUser
+      summary: Update the authenticated user's name or email
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfileUpdate'
+      responses:
+        '200':
+          description: The updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/internal/users/{user_id}/:
+    get:
+      tags:
+        - Internal
+      operationId: getInternalUser
+      summary: Look up a user for a trusted service
+      description: |
+        Returns the minimal user record other services need. This endpoint is
+        only available with the shared service token; user access tokens are
+        rejected.
+      security:
+        - serviceToken: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The user record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+
   schemas:
     Health:
       type: object
@@ -58,6 +230,153 @@ components:
           type: string
           example: identity
 
+    Role:
+      type: string
+      enum:
+        - student
+        - company
+        - supervisor
+        - university_admin
+        - platform_admin
+
+    PublicRole:
+      type: string
+      enum:
+        - student
+        - company
+
+    UserProfile:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - role
+        - is_active
+        - date_joined
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        is_active:
+          type: boolean
+        date_joined:
+          type: string
+          format: date-time
+
+    UserProfileUpdate:
+      type: object
+      minProperties: 1
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+
+    UserRegistration:
+      type: object
+      required:
+        - email
+        - password
+        - name
+        - role
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 255
+        role:
+          $ref: '#/components/schemas/PublicRole'
+
+    UserLogin:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+
+    TokenPair:
+      type: object
+      required:
+        - token_type
+        - access
+        - refresh
+        - expires_in
+        - user
+      properties:
+        token_type:
+          type: string
+          enum:
+            - Bearer
+        access:
+          type: string
+        refresh:
+          type: string
+        expires_in:
+          type: integer
+          example: 900
+        user:
+          $ref: '#/components/schemas/UserProfile'
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh
+      properties:
+        refresh:
+          type: string
+
+    RefreshResponse:
+      type: object
+      required:
+        - access
+      properties:
+        access:
+          type: string
+
+    InternalUser:
+      type: object
+      required:
+        - id
+        - email
+        - name
+        - role
+        - is_active
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        is_active:
+          type: boolean
+
     Error:
       type: object
       required:
@@ -66,7 +385,7 @@ components:
       properties:
         code:
           type: string
-          example: service_unavailable
+          example: unauthorized
         message:
           type: string
         details:
@@ -74,6 +393,36 @@ components:
           additionalProperties: true
 
   responses:
+    BadRequest:
+      description: The request body is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller lacks the required access.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    TooManyRequests:
+      description: The rate limit was exceeded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     ServiceUnavailable:
       description: The service cannot serve requests.
       content:

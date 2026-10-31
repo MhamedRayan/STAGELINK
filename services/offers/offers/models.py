@@ -1,3 +1,5 @@
+import uuid
+
 from django.core.validators import MinValueValidator
 from django.db import models
 
@@ -9,7 +11,8 @@ class OfferStatus(models.TextChoices):
 
 
 class Offer(models.Model):
-    company_user_id = models.PositiveBigIntegerField()
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_user_id = models.UUIDField(db_index=True)
     title = models.CharField(max_length=200)
     description = models.TextField()
     requirements = models.TextField()

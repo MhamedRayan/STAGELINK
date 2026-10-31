@@ -11,7 +11,7 @@ class UserAdminCreationForm(forms.ModelForm):
         choices=tuple(
             choice
             for choice in UserRole.choices
-            if choice[0] != UserRole.PLATFORM_ADMINISTRATOR
+            if choice[0] != UserRole.PLATFORM_ADMIN
         )
     )
     password = forms.CharField(

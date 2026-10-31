@@ -1,6 +1,6 @@
 import uuid
 from django.db import models
-from django.core.exceptions import ValidationError
+from django.db.models import F, Q
 
 class ApplicationStatus(models.TextChoices):
     SUBMITTED = 'SUBMITTED', 'Submitted'
@@ -23,12 +23,16 @@ class StudentDecisionChoices(models.TextChoices):
 
 class Application(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
     # Microservice plain ID references
     offer_id = models.UUIDField(db_index=True)
-    company_id = models.UUIDField(db_index=True)
+    company_user_id = models.UUIDField(db_index=True)
     student_user_id = models.UUIDField(db_index=True)
     university_user_id = models.UUIDField(db_index=True, null=True, blank=True)
+
+    # Internship period agreed on the application and forwarded to internships.
+    start_date = models.DateField()
+    end_date = models.DateField()
 
     # Workflow state
     status = models.CharField(
@@ -57,7 +61,11 @@ class Application(models.Model):
             models.UniqueConstraint(
                 fields=['offer_id', 'student_user_id'],
                 name='unique_application_per_student_offer'
-            )
+            ),
+            models.CheckConstraint(
+                condition=Q(end_date__gte=F('start_date')),
+                name='application_end_not_before_start',
+            ),
         ]
 
     def __str__(self):

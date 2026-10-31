@@ -1,18 +1,16 @@
+import uuid
+
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import BaseFilterBackend
-
-MAX_COMPANY_USER_ID = 9223372036854775807
 
 
 def _parse_company_user_id(raw_value):
     try:
-        company_user_id = int(raw_value)
-    except ValueError:
-        company_user_id = None
-
-    if company_user_id is None or not 0 <= company_user_id <= MAX_COMPANY_USER_ID:
-        raise ValidationError({"company_user_id": "A valid integer is required."})
-    return company_user_id
+        return uuid.UUID(str(raw_value))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValidationError(
+            {"company_user_id": "A valid UUID is required."}
+        ) from exc
 
 
 class OfferFilterBackend(BaseFilterBackend):

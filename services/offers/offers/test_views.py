@@ -1,3 +1,5 @@
+import uuid
+
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
@@ -46,7 +48,7 @@ class OfferListTests(APITestCase):
                 response = client.get(self.list_url)
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(result_ids(response), [published.id])
+                self.assertEqual(result_ids(response), [str(published.id)])
 
     def test_list_is_paginated_and_newest_first(self):
         for index in range(12):
@@ -61,8 +63,13 @@ class OfferListTests(APITestCase):
         self.assertIsNotNone(first_page.data["next"])
         self.assertEqual(len(second_page.data["results"]), 2)
         self.assertEqual(len(small_page.data["results"]), 5)
-        ids = result_ids(first_page)
-        self.assertEqual(ids, sorted(ids, reverse=True))
+        first_titles = [item["title"] for item in first_page.data["results"]]
+        second_titles = [item["title"] for item in second_page.data["results"]]
+        self.assertEqual(
+            first_titles,
+            [f"Offer {index}" for index in range(11, 1, -1)],
+        )
+        self.assertEqual(second_titles, ["Offer 1", "Offer 0"])
 
     def test_search_matches_text_fields_case_insensitively(self):
         python_offer = create_offer(
@@ -79,9 +86,9 @@ class OfferListTests(APITestCase):
         )
 
         cases = (
-            ("PYTHON", [python_offer.id]),
-            ("spring", [java_offer.id]),
-            ("boumerdes", [python_offer.id]),
+            ("PYTHON", [str(python_offer.id)]),
+            ("spring", [str(java_offer.id)]),
+            ("boumerdes", [str(python_offer.id)]),
             ("nomatchterm", []),
         )
         for term, expected_ids in cases:
@@ -114,11 +121,11 @@ class OfferListTests(APITestCase):
         )
 
         cases = (
-            ({"location": "BOUM"}, [python_offer.id]),
-            ({"requirements": "spring"}, [java_offer.id]),
-            ({"company_user_id": OTHER_COMPANY_ID}, [java_offer.id]),
+            ({"location": "BOUM"}, [str(python_offer.id)]),
+            ({"requirements": "spring"}, [str(java_offer.id)]),
+            ({"company_user_id": OTHER_COMPANY_ID}, [str(java_offer.id)]),
             ({"location": "algiers", "requirements": "django"}, []),
-            ({"location": "algiers", "company_user_id": OTHER_COMPANY_ID}, [java_offer.id]),
+            ({"location": "algiers", "company_user_id": OTHER_COMPANY_ID}, [str(java_offer.id)]),
         )
         for params, expected_ids in cases:
             with self.subTest(params=params):
@@ -169,7 +176,7 @@ class OfferDetailTests(APITestCase):
                 response = client.get(self.detail_url(offer.id))
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(response.data["id"], offer.id)
+                self.assertEqual(response.data["id"], str(offer.id))
 
     def test_draft_and_closed_offers_are_visible_only_to_owner(self):
         for offer_status in (OfferStatus.DRAFT, OfferStatus.CLOSED):
@@ -189,7 +196,7 @@ class OfferDetailTests(APITestCase):
     def test_non_existent_offer_returns_404(self):
         for name, client in build_callers().items():
             with self.subTest(caller=name):
-                response = client.get(self.detail_url(999999))
+                response = client.get(self.detail_url(uuid.uuid4()))
 
                 self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 

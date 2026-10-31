@@ -26,12 +26,31 @@ Contracts must remain valid OpenAPI 3.0 documents.
 
 - Request and response bodies are JSON (`application/json`).
 - Field names use `snake_case`.
-- Resource identifiers are opaque strings/UUIDs; do not expose database row
-  order as an identifier.
+- Resource identifiers are UUID strings (`8-4-4-4-12` hexadecimal form). Do not
+  expose database row order as an identifier.
+- Cross-service references use the same UUID string format as the identifier
+  owned by the other service.
 - Timestamps use ISO 8601 in UTC, for example `2026-10-25T14:30:00Z`.
+- Dates use ISO 8601 calendar dates, for example `2026-10-31`.
 - Durations are expressed in a named unit, for example `duration_weeks`.
 - Monetary values use a decimal string plus an ISO 4217 currency code; never
   use binary floating point for money.
+
+## Roles
+
+Role values are lowercase `snake_case` and are matched exactly. The canonical
+values are:
+
+| Value             | Meaning                                  |
+| ----------------- | ---------------------------------------- |
+| `student`         | Student account                          |
+| `company`         | Company account                          |
+| `supervisor`      | Internship supervisor                    |
+| `university_admin`| University administration                |
+| `platform_admin`  | Platform administrator                   |
+
+Services must not introduce aliases such as `Student`, `STUDENT`,
+`university_administration`, or `admin`.
 
 ## Methods and status codes
 
@@ -90,11 +109,22 @@ Never return stack traces or internal exception text.
 
 ## Authentication and authorization
 
-Send a bearer access token:
+User-facing endpoints accept a bearer access token issued by `identity`:
 
 ```http
 Authorization: Bearer <access-token>
 ```
+
+Internal service-to-service endpoints accept the shared service token:
+
+```http
+X-Service-Token: <internal-service-token>
+```
+
+The service token is read from `INTERNAL_SERVICE_TOKEN`, never from a user
+token. Internal endpoints fail closed when the configured or provided token is
+missing, and compare tokens in constant time. A service token must never be
+sent to the browser or included in a public contract example.
 
 Permissions are checked in the owning service. A gateway or frontend must not
 be the only place where authorization is enforced.

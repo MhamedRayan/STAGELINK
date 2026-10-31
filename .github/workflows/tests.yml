@@ -59,9 +59,6 @@ jobs:
       DB_PORT: "5432"
 
       JWT_SIGNING_KEY: ci-only-user-jwt-signing-key-not-for-production-0123456789
-      SERVICE_JWT_SIGNING_KEY: ci-only-service-jwt-signing-key-not-for-production-0123456789
-      SERVICE_JWT_ISSUER: stagelink-services
-      SERVICE_JWT_AUDIENCE: stagelink-identity
       INTERNAL_SERVICE_TOKEN: test-service-token
 
     defaults:
@@ -87,3 +84,78 @@ jobs:
 
       - name: Run tests
         run: python manage.py test
+
+  integration-tests:
+    name: Integration tests (applications -> internships)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      DJANGO_SECRET_KEY: ci-only-django-secret-key-for-integration-0123456789
+      DJANGO_DEBUG: "true"
+      SECURE_SSL_REDIRECT: "false"
+      SECURE_HSTS_SECONDS: "0"
+
+      # DJANGO_ALLOWED_HOSTS is intentionally not set here. Compose supplies a
+      # default that includes the in-network service hostnames (internships,
+      # offers, ...). Overriding it with localhost-only makes applications fail
+      # to call internships with DisallowedHost.
+
+      JWT_SIGNING_KEY: ci-only-user-jwt-signing-key-for-integration-0123456789
+      INTERNAL_SERVICE_TOKEN: test-service-token
+
+      IDENTITY_BASE_URL: http://localhost:8001
+      OFFERS_BASE_URL: http://localhost:8002
+      APPLICATIONS_BASE_URL: http://localhost:8003
+      INTERNSHIPS_BASE_URL: http://localhost:8004
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/integration/requirements.txt
+
+      - name: Install test dependencies
+        run: pip install -r tests/integration/requirements.txt
+
+      - name: Start services
+        run: >-
+          docker compose -f infra/docker/docker-compose.yml up -d --build
+          identity offers applications internships
+
+      - name: Wait for services
+        run: |
+          set -euo pipefail
+          for url in \
+            http://localhost:8001 \
+            http://localhost:8002 \
+            http://localhost:8003 \
+            http://localhost:8004; do
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent "$url/health/" > /dev/null 2>&1; then
+                echo "$url is ready"
+                break
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "$url did not become healthy" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Run integration tests
+        run: python -m unittest discover -s tests/integration -v
+
+      - name: Show service logs
+        if: failure()
+        run: docker compose -f infra/docker/docker-compose.yml logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.yml down -v

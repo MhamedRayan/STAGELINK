@@ -26,9 +26,8 @@ cp .env.example .env
 
 Review `.env`. The defaults are intended for local development only. Use real
 secrets and a strong database password for any shared environment. Each service
-gets its own database from Compose; the shared `JWT_SIGNING_KEY`,
-`SERVICE_JWT_SIGNING_KEY`, and `INTERNAL_SERVICE_TOKEN` must be identical across
-the services that use them.
+gets its own database from Compose; the shared `JWT_SIGNING_KEY` and
+`INTERNAL_SERVICE_TOKEN` must be identical across the services that use them.
 
 ## 3. Start the stack
 
@@ -126,8 +125,23 @@ locally, provide `DB_ENGINE=django.db.backends.postgresql` plus the `DB_*`
 variables; the notifications concurrency test in particular is only meaningful
 against PostgreSQL.
 
-Cross-service suites under `tests/` will gain their own runner as they are
-implemented.
+Cross-service tests live in `tests/integration/` and run against the Compose
+stack over real HTTP:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build \
+  identity offers applications internships
+
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -r tests/integration/requirements.txt
+python -m unittest discover -s tests/integration -v
+```
+
+The suite reads `JWT_SIGNING_KEY` and `INTERNAL_SERVICE_TOKEN` from the
+environment; its defaults match `.env.example`. See
+[`tests/integration/README.md`](../tests/integration/README.md) for the covered
+scenarios and cleanup commands.
 
 ## Reset local data
 

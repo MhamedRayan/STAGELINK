@@ -17,7 +17,7 @@ def visible_internships_for(actor):
         # Supervisors see only internships explicitly assigned to them.
         return Internship.objects.filter(supervisor_user_id=actor.user_id)
 
-    if actor.role == Role.UNIVERSITY_ADMINISTRATION:
+    if actor.role == Role.UNIVERSITY_ADMIN:
         return Internship.objects.all()
 
     # Platform Administrator, and any role not listed above, sees nothing.

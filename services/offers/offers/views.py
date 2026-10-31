@@ -31,10 +31,7 @@ def health(request):
 
 
 def _get_caller_company_id(request):
-    try:
-        return int(get_authenticated_company_id(request))
-    except (TypeError, ValueError):
-        return None
+    return get_authenticated_company_id(request)
 
 
 def _get_visible_offers(request):

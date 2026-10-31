@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from rest_framework.permissions import BasePermission
@@ -49,7 +51,11 @@ class IsCompanyUser(BasePermission):
 def get_authenticated_company_id(request):
     if not _is_company(request):
         return None
-    return _get_caller_id(request)
+    caller_id = _get_caller_id(request)
+    try:
+        return uuid.UUID(str(caller_id))
+    except (TypeError, ValueError, AttributeError):
+        return None
 
 class IsOfferOwner(BasePermission):
     message = "You can only manage your own offers."

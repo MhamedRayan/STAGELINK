@@ -11,9 +11,6 @@ x-service-environment: &service-environment
 
   # Shared JWT and service-to-service authentication.
   JWT_SIGNING_KEY: "${JWT_SIGNING_KEY:-dev-only-user-jwt-signing-key-change-me-0123456789}"
-  SERVICE_JWT_SIGNING_KEY: "${SERVICE_JWT_SIGNING_KEY:-dev-only-service-jwt-signing-key-change-me-0123456789}"
-  SERVICE_JWT_ISSUER: "${SERVICE_JWT_ISSUER:-stagelink-services}"
-  SERVICE_JWT_AUDIENCE: "${SERVICE_JWT_AUDIENCE:-stagelink-identity}"
   INTERNAL_SERVICE_TOKEN: "${INTERNAL_SERVICE_TOKEN:-dev-only-internal-service-token-change-me}"
 
   # All containers use PostgreSQL in Compose. Each service still has its own

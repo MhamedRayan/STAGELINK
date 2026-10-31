@@ -16,8 +16,6 @@ env = environ.Env(
     DATABASE_CONN_MAX_AGE=(int, 60),
     JWT_ACCESS_TOKEN_MINUTES=(int, 15),
     JWT_REFRESH_TOKEN_DAYS=(int, 7),
-    SERVICE_JWT_ISSUER=(str, "stagelink-services"),
-    SERVICE_JWT_AUDIENCE=(str, "stagelink-identity"),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -27,9 +25,7 @@ ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS")
 DATABASE_URL = env.str("DATABASE_URL", default="")
 JWT_SIGNING_KEY = env.str("JWT_SIGNING_KEY")
-SERVICE_JWT_SIGNING_KEY = env.str("SERVICE_JWT_SIGNING_KEY")
-SERVICE_JWT_ISSUER = env.str("SERVICE_JWT_ISSUER")
-SERVICE_JWT_AUDIENCE = env.str("SERVICE_JWT_AUDIENCE")
+INTERNAL_SERVICE_TOKEN = env.str("INTERNAL_SERVICE_TOKEN", default="")
 
 if not DEBUG and (len(SECRET_KEY) < 50 or "replace-with" in SECRET_KEY):
     raise ImproperlyConfigured(
@@ -37,12 +33,8 @@ if not DEBUG and (len(SECRET_KEY) < 50 or "replace-with" in SECRET_KEY):
     )
 if not DEBUG and (
     len(JWT_SIGNING_KEY) < 32
-    or len(SERVICE_JWT_SIGNING_KEY) < 32
-    or JWT_SIGNING_KEY == SERVICE_JWT_SIGNING_KEY
     or JWT_SIGNING_KEY == SECRET_KEY
-    or SERVICE_JWT_SIGNING_KEY == SECRET_KEY
     or "replace-with" in JWT_SIGNING_KEY
-    or "replace-with" in SERVICE_JWT_SIGNING_KEY
 ):
     raise ImproperlyConfigured(
         "Django and JWT signing keys must be distinct production secrets of at least 32 characters."
@@ -170,9 +162,6 @@ SIMPLE_JWT = {
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
 }
-
-SERVICE_JWT_ALGORITHM = "HS256"
-SERVICE_JWT_MAX_LIFETIME_SECONDS = 300
 
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT")
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS")

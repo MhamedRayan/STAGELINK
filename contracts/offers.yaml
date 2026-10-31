@@ -2,13 +2,17 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Offers API
-  version: 0.1.0
+  version: 0.2.0
   description: |
     HTTP contract for the STAGELINK offers service.
 
     This file is the source of truth for the service interface. Add or change
     operations here before implementing them in Django. See
     docs/api-conventions.md for shared rules.
+
+    Offer identifiers and the owning company identifier are UUID strings.
+    User endpoints require a bearer access token issued by identity.
+    Company roles are lowercase snake_case.
 
   contact:
     name: STAGELINK maintainers
@@ -22,6 +26,8 @@ servers:
 tags:
   - name: System
     description: Operational endpoints used by infrastructure.
+  - name: Offers
+    description: Company offers and their lifecycle.
 
 paths:
   /health/:
@@ -42,7 +48,208 @@ paths:
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
 
+  /api/offers/:
+    get:
+      tags:
+        - Offers
+      operationId: listOffers
+      summary: List published offers
+      description: Returns published offers only. Supports text search and filters.
+      security: []
+      parameters:
+        - name: search
+          in: query
+          description: Case-insensitive search across title, description, requirements and location.
+          schema:
+            type: string
+        - name: location
+          in: query
+          schema:
+            type: string
+        - name: requirements
+          in: query
+          schema:
+            type: string
+        - name: company_user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: A page of published offers.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOffers'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    post:
+      tags:
+        - Offers
+      operationId: createOffer
+      summary: Create a draft offer
+      description: The owning company is the authenticated caller. The company role is required.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferWrite'
+      responses:
+        '201':
+          description: The offer was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/offers/{id}/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+        - Offers
+      operationId: getOffer
+      summary: Read an offer
+      description: Published offers are public. Draft and closed offers are visible only to their owner.
+      responses:
+        '200':
+          description: The offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Offers
+      operationId: updateOffer
+      summary: Partially update an offer
+      description: Only the owning company can update an offer, and closed offers cannot be edited.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OfferWrite'
+      responses:
+        '200':
+          description: The updated offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/offers/{id}/publish/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    post:
+      tags:
+        - Offers
+      operationId: publishOffer
+      summary: Publish a draft offer
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The published offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/offers/{id}/close/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    post:
+      tags:
+        - Offers
+      operationId: closeOffer
+      summary: Close a published offer
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The closed offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Offer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OfferId:
+      name: id
+      in: path
+      required: true
+      description: Offer UUID.
+      schema:
+        type: string
+        format: uuid
+
   schemas:
     Health:
       type: object
@@ -58,6 +265,89 @@ components:
           type: string
           example: offers
 
+    OfferStatus:
+      type: string
+      enum:
+        - draft
+        - published
+        - closed
+
+    OfferWrite:
+      type: object
+      required:
+        - title
+        - description
+        - requirements
+        - location
+        - deadline
+        - capacity
+      properties:
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+        requirements:
+          type: string
+        location:
+          type: string
+          maxLength: 255
+        deadline:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+
+    Offer:
+      allOf:
+        - $ref: '#/components/schemas/OfferWrite'
+        - type: object
+          required:
+            - id
+            - company_user_id
+            - status
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              format: uuid
+            company_user_id:
+              type: string
+              format: uuid
+            status:
+              $ref: '#/components/schemas/OfferStatus'
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    PaginatedOffers:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Offer'
+
     Error:
       type: object
       required:
@@ -66,7 +356,7 @@ components:
       properties:
         code:
           type: string
-          example: service_unavailable
+          example: offer_state_conflict
         message:
           type: string
         details:
@@ -74,6 +364,36 @@ components:
           additionalProperties: true
 
   responses:
+    BadRequest:
+      description: The request is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: The caller lacks the required access.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: The resource does not exist.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: The offer's current state does not allow this action.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     ServiceUnavailable:
       description: The service cannot serve requests.
       content:

@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import uuid
+
 import jwt
 from django.urls import reverse
 from django.utils import timezone
@@ -12,7 +14,7 @@ from offers.test_permissions import OTHER_COMPANY_ID, OWNER_ID, make_access_toke
 from offers.test_serializers import build_payload, create_offer
 from offers.test_views import build_client
 
-STUDENT_ID = 100
+STUDENT_ID = uuid.uuid4()
 
 
 def list_url():
@@ -133,7 +135,7 @@ class CompanyIsolationTests(APITestCase):
         created = client.post(list_url(), build_payload(), format="json")
 
         self.assertEqual(created.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(created.data["company_user_id"], OWNER_ID)
+        self.assertEqual(created.data["company_user_id"], str(OWNER_ID))
         offer_id = created.data["id"]
         steps = (
             client.patch(detail_url(offer_id), {"title": "Edited"}, format="json"),

@@ -1,4 +1,5 @@
 from datetime import timedelta
+import uuid
 
 from django.test import TestCase
 from django.utils import timezone
@@ -26,7 +27,7 @@ def build_payload(**overrides):
 
 def create_offer(**overrides):
     data = build_payload(**overrides)
-    data.setdefault("company_user_id", 1)
+    data.setdefault("company_user_id", uuid.uuid4())
     return Offer.objects.create(**data)
 
 
@@ -124,8 +125,8 @@ class OfferCreateUpdateSerializerValidationTests(TestCase):
     def test_system_fields_in_payload_are_ignored(self):
         serializer = OfferCreateUpdateSerializer(
             data=build_payload(
-                id=999,
-                company_user_id=42,
+                id=uuid.uuid4(),
+                company_user_id=uuid.uuid4(),
                 status=OfferStatus.PUBLISHED,
             )
         )
@@ -165,13 +166,14 @@ class OfferCreateUpdateSerializerPartialUpdateTests(TestCase):
         self.assertIn("capacity", serializer.errors)
 
     def test_update_does_not_change_status_or_owner(self):
-        offer = create_offer(company_user_id=7)
+        owner_id = uuid.uuid4()
+        offer = create_offer(company_user_id=owner_id)
         serializer = OfferCreateUpdateSerializer(
             offer,
             data={
                 "title": "Changed Title",
                 "status": OfferStatus.CLOSED,
-                "company_user_id": 99,
+                "company_user_id": uuid.uuid4(),
             },
             partial=True,
         )
@@ -182,7 +184,7 @@ class OfferCreateUpdateSerializerPartialUpdateTests(TestCase):
 
         self.assertEqual(offer.title, "Changed Title")
         self.assertEqual(offer.status, OfferStatus.DRAFT)
-        self.assertEqual(offer.company_user_id, 7)
+        self.assertEqual(offer.company_user_id, owner_id)
 
 
 class OfferSerializerTests(TestCase):

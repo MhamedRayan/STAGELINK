@@ -1,3 +1,4 @@
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import jwt
@@ -10,10 +11,23 @@ from .roles import Role
 TEST_KEY = "test-jwt-signing-key-with-enough-length-0123456789"
 LIST_URL = "/api/internships/"
 
+STUDENT_ID = uuid.uuid4()
+OTHER_STUDENT_ID = uuid.uuid4()
+COMPANY_ID = uuid.uuid4()
+OTHER_COMPANY_ID = uuid.uuid4()
+SUPERVISOR_ID = uuid.uuid4()
+OTHER_SUPERVISOR_ID = uuid.uuid4()
+ADMIN_ID = uuid.uuid4()
 
-def make_token(user_id=1, role=Role.STUDENT, ttl=timedelta(minutes=15), key=TEST_KEY, algorithm="HS256"):
+
+def make_token(user_id=None, role=Role.STUDENT, ttl=timedelta(minutes=15), key=TEST_KEY, algorithm="HS256"):
     now = datetime.now(timezone.utc)
-    payload = {"user_id": user_id, "role": role, "iat": now, "exp": now + ttl}
+    payload = {
+        "user_id": str(user_id if user_id is not None else STUDENT_ID),
+        "role": role,
+        "iat": now,
+        "exp": now + ttl,
+    }
     return jwt.encode(payload, key, algorithm=algorithm)
 
 
@@ -22,20 +36,20 @@ class PublicInternshipApiTests(TestCase):
     def setUp(self):
         self.api = APIClient()
         self.own = Internship.objects.create(
-            source_application_id=1,
-            student_user_id=10,
-            company_user_id=20,
-            supervisor_user_id=40,
-            offer_id=30,
+            source_application_id=uuid.uuid4(),
+            student_user_id=STUDENT_ID,
+            company_user_id=COMPANY_ID,
+            supervisor_user_id=SUPERVISOR_ID,
+            offer_id=uuid.uuid4(),
             start_date=date(2027, 2, 1),
             end_date=date(2027, 6, 30),
         )
         self.other = Internship.objects.create(
-            source_application_id=2,
-            student_user_id=11,
-            company_user_id=21,
-            supervisor_user_id=41,
-            offer_id=31,
+            source_application_id=uuid.uuid4(),
+            student_user_id=OTHER_STUDENT_ID,
+            company_user_id=OTHER_COMPANY_ID,
+            supervisor_user_id=OTHER_SUPERVISOR_ID,
+            offer_id=uuid.uuid4(),
             start_date=date(2027, 2, 1),
             end_date=date(2027, 6, 30),
         )
@@ -64,7 +78,11 @@ class PublicInternshipApiTests(TestCase):
     def test_alg_none_token_is_rejected(self):
         now = datetime.now(timezone.utc)
         token = jwt.encode(
-            {"user_id": 10, "role": Role.STUDENT, "exp": now + timedelta(minutes=15)},
+            {
+                "user_id": str(STUDENT_ID),
+                "role": Role.STUDENT,
+                "exp": now + timedelta(minutes=15),
+            },
             None,
             algorithm="none",
         )
@@ -79,6 +97,10 @@ class PublicInternshipApiTests(TestCase):
         )
         self.assertEqual(self._get(LIST_URL, token).status_code, 401)
 
+    def test_non_uuid_user_id_returns_401(self):
+        token = make_token(user_id=10)
+        self.assertEqual(self._get(LIST_URL, token).status_code, 401)
+
     def test_unknown_role_returns_401(self):
         token = make_token(role="Intern")
         self.assertEqual(self._get(LIST_URL, token).status_code, 401)
@@ -90,31 +112,33 @@ class PublicInternshipApiTests(TestCase):
     # Visibility on the list endpoint
 
     def test_student_sees_only_own_internships(self):
-        response = self._get(LIST_URL, make_token(user_id=10, role=Role.STUDENT))
+        response = self._get(LIST_URL, make_token(user_id=STUDENT_ID, role=Role.STUDENT))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([row["id"] for row in response.data], [self.own.pk])
+        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
 
     def test_company_sees_only_its_internships(self):
-        response = self._get(LIST_URL, make_token(user_id=20, role=Role.COMPANY))
+        response = self._get(LIST_URL, make_token(user_id=COMPANY_ID, role=Role.COMPANY))
 
-        self.assertEqual([row["id"] for row in response.data], [self.own.pk])
+        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
 
     def test_supervisor_sees_only_assigned_internships(self):
-        response = self._get(LIST_URL, make_token(user_id=40, role=Role.SUPERVISOR))
+        response = self._get(
+            LIST_URL, make_token(user_id=SUPERVISOR_ID, role=Role.SUPERVISOR)
+        )
 
-        self.assertEqual([row["id"] for row in response.data], [self.own.pk])
+        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
 
     def test_university_administration_sees_all_internships(self):
         response = self._get(
-            LIST_URL, make_token(user_id=99, role=Role.UNIVERSITY_ADMINISTRATION)
+            LIST_URL, make_token(user_id=ADMIN_ID, role=Role.UNIVERSITY_ADMIN)
         )
 
         self.assertEqual(len(response.data), 2)
 
     def test_platform_administrator_sees_no_internships(self):
         response = self._get(
-            LIST_URL, make_token(user_id=99, role=Role.PLATFORM_ADMINISTRATOR)
+            LIST_URL, make_token(user_id=ADMIN_ID, role=Role.PLATFORM_ADMIN)
         )
 
         self.assertEqual(response.status_code, 200)
@@ -124,33 +148,33 @@ class PublicInternshipApiTests(TestCase):
 
     def test_student_can_open_own_internship(self):
         url = f"{LIST_URL}{self.own.pk}/"
-        response = self._get(url, make_token(user_id=10, role=Role.STUDENT))
+        response = self._get(url, make_token(user_id=STUDENT_ID, role=Role.STUDENT))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["id"], self.own.pk)
+        self.assertEqual(response.data["id"], str(self.own.pk))
 
     def test_student_cannot_open_another_students_internship(self):
         url = f"{LIST_URL}{self.other.pk}/"
-        response = self._get(url, make_token(user_id=10, role=Role.STUDENT))
+        response = self._get(url, make_token(user_id=STUDENT_ID, role=Role.STUDENT))
 
         self.assertEqual(response.status_code, 404)
 
     def test_company_cannot_open_unrelated_internship(self):
         url = f"{LIST_URL}{self.other.pk}/"
-        response = self._get(url, make_token(user_id=20, role=Role.COMPANY))
+        response = self._get(url, make_token(user_id=COMPANY_ID, role=Role.COMPANY))
 
         self.assertEqual(response.status_code, 404)
 
     def test_supervisor_cannot_open_unassigned_internship(self):
         url = f"{LIST_URL}{self.other.pk}/"
-        response = self._get(url, make_token(user_id=40, role=Role.SUPERVISOR))
+        response = self._get(url, make_token(user_id=SUPERVISOR_ID, role=Role.SUPERVISOR))
 
         self.assertEqual(response.status_code, 404)
 
     def test_university_administration_can_open_any_internship(self):
         url = f"{LIST_URL}{self.other.pk}/"
         response = self._get(
-            url, make_token(user_id=99, role=Role.UNIVERSITY_ADMINISTRATION)
+            url, make_token(user_id=ADMIN_ID, role=Role.UNIVERSITY_ADMIN)
         )
 
         self.assertEqual(response.status_code, 200)
@@ -158,10 +182,12 @@ class PublicInternshipApiTests(TestCase):
     def test_unauthorized_and_missing_ids_look_identical(self):
         # Same 404 for "exists but not yours" and "does not exist".
         not_yours = self._get(
-            f"{LIST_URL}{self.other.pk}/", make_token(user_id=10, role=Role.STUDENT)
+            f"{LIST_URL}{self.other.pk}/",
+            make_token(user_id=STUDENT_ID, role=Role.STUDENT),
         )
         missing = self._get(
-            f"{LIST_URL}999999/", make_token(user_id=10, role=Role.STUDENT)
+            f"{LIST_URL}{uuid.uuid4()}/",
+            make_token(user_id=STUDENT_ID, role=Role.STUDENT),
         )
 
         self.assertEqual(not_yours.status_code, missing.status_code)
