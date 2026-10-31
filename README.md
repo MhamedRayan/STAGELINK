@@ -79,5 +79,17 @@ cd services/identity
 python manage.py test
 ```
 
-Cross-service tests are collected under `tests/`. Continuous integration runs
-the unit tests for all services on every push and pull request.
+Cross-service tests live under `tests/integration/` and run against the Docker
+Compose stack:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build \
+  identity offers applications internships
+
+python -m pip install -r tests/integration/requirements.txt
+python -m unittest discover -s tests/integration -v
+```
+
+Continuous integration runs the unit tests for all services and the integration
+suite on every push and pull request. See
+[`tests/integration/README.md`](tests/integration/README.md) for details.
