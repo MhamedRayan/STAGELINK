@@ -225,7 +225,7 @@ class ApplicationsToInternshipsIntegrationTests(unittest.TestCase):
             self.student_headers,
         )
         self.assert_status(response, 200)
-        return response.json()
+        return response.json()["results"]
 
     def internships_for_application(self, application_id):
         return [

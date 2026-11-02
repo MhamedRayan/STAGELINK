@@ -123,6 +123,7 @@ services:
       <<: *service-environment
       DB_NAME: internships
       DB_HOST: db-internships
+      IDENTITY_BASE_URL: "http://identity:8000"
     depends_on:
       db-internships:
         condition: service_healthy

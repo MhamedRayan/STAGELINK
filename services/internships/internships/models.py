@@ -28,6 +28,9 @@ class Internship(models.Model):
     company_user_id = models.UUIDField()
     offer_id = models.UUIDField()
     supervisor_user_id = models.UUIDField(null=True, blank=True)
+    # Who assigned the current supervisor, and when. Set by university administration.
+    supervisor_assigned_by_user_id = models.UUIDField(null=True, blank=True)
+    supervisor_assigned_at = models.DateTimeField(null=True, blank=True)
 
     start_date = models.DateField()
     end_date = models.DateField()
@@ -57,3 +60,43 @@ class Internship(models.Model):
 
     def __str__(self):
         return f"Internship {self.pk} (application {self.source_application_id})"
+
+
+class InternshipAuditAction(models.TextChoices):
+    CREATED = "created", "Created"
+    STATUS_CHANGED = "status_changed", "Status changed"
+    SUPERVISOR_ASSIGNED = "supervisor_assigned", "Supervisor assigned"
+    SUPERVISOR_REASSIGNED = "supervisor_reassigned", "Supervisor reassigned"
+
+
+class InternshipAudit(models.Model):
+    """
+    Append-only history of internship events. Rows are written in the same
+    transaction as the change they describe and are never edited by the API.
+    actor_user_id is None when the system (for example the scheduled start) acted.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    internship = models.ForeignKey(
+        Internship,
+        on_delete=models.PROTECT,
+        related_name="audit_entries",
+    )
+    action = models.CharField(max_length=32, choices=InternshipAuditAction.choices)
+    from_status = models.CharField(
+        max_length=20, choices=InternshipStatus.choices, null=True, blank=True
+    )
+    to_status = models.CharField(
+        max_length=20, choices=InternshipStatus.choices, null=True, blank=True
+    )
+    from_supervisor_user_id = models.UUIDField(null=True, blank=True)
+    to_supervisor_user_id = models.UUIDField(null=True, blank=True)
+    actor_user_id = models.UUIDField(null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "pk"]
+
+    def __str__(self):
+        return f"{self.internship_id}: {self.action}"

@@ -1,10 +1,60 @@
+"""
+Business operations for internships.
+
+Every change to an internship goes through a function in this module. Each one
+runs in a database transaction, writes its audit entry in that same transaction,
+and locks the row when the change depends on its current state.
+"""
+
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
-from .models import Internship, InternshipStatus
+from .exceptions import (
+    ActiveInternshipConflict,
+    EvaluationRequired,
+    InvalidInternshipState,
+    InvalidSupervisor,
+    ReasonRequired,
+    StartDateNotReached,
+)
+from .identity_client import fetch_identity_user
+from .lifecycle import ensure_transition_allowed
+from .models import (
+    Internship,
+    InternshipAudit,
+    InternshipAuditAction,
+    InternshipStatus,
+)
+from .roles import Role
+
+# A supervisor can only be assigned while the internship is still running or about to start.
+SUPERVISOR_ASSIGNABLE_STATUSES = (
+    InternshipStatus.CONFIRMED,
+    InternshipStatus.IN_PROGRESS,
+)
 
 
-class ActiveInternshipConflict(Exception):
-    """The student already has a Confirmed or In progress internship."""
+def _record(
+    internship,
+    *,
+    action,
+    actor_user_id=None,
+    from_status=None,
+    to_status=None,
+    from_supervisor_user_id=None,
+    to_supervisor_user_id=None,
+    reason="",
+):
+    InternshipAudit.objects.create(
+        internship=internship,
+        action=action,
+        actor_user_id=actor_user_id,
+        from_status=from_status,
+        to_status=to_status,
+        from_supervisor_user_id=from_supervisor_user_id,
+        to_supervisor_user_id=to_supervisor_user_id,
+        reason=reason,
+    )
 
 
 def _find_by_source_application(source_application_id):
@@ -23,11 +73,10 @@ def create_internship(
     """
     Create an internship for an accepted application.
 
-    Returns (internship, created). created is False when the internship
-    already existed for this source_application_id (an idempotent retry).
+    Returns (internship, created). created is False when the internship already
+    existed for this source_application_id (an idempotent retry).
 
-    Raises ActiveInternshipConflict if the student already has an active
-    internship from a different application.
+    Raises ActiveInternshipConflict if the student already has an active internship.
     """
     existing = _find_by_source_application(source_application_id)
     if existing is not None:
@@ -44,6 +93,11 @@ def create_internship(
                 end_date=end_date,
                 status=InternshipStatus.CONFIRMED,
             )
+            _record(
+                internship,
+                action=InternshipAuditAction.CREATED,
+                to_status=InternshipStatus.CONFIRMED,
+            )
         return internship, True
     except IntegrityError:
         # Two identical requests raced. The other one committed first, so the
@@ -53,4 +107,154 @@ def create_internship(
             return existing, False
         # No row for this application, so the database refused because the
         # student already has an active internship.
-        raise ActiveInternshipConflict("Student already has an active internship.")
+        raise ActiveInternshipConflict()
+
+
+def change_internship_status(internship, target_status, *, actor_user_id=None, reason=""):
+    """
+    The only place where an internship's status changes. It validates the
+    transition, updates the row and writes the audit entry in one transaction.
+    """
+    with transaction.atomic():
+        ensure_transition_allowed(internship.status, target_status)
+
+        previous_status = internship.status
+        internship.status = target_status
+        internship.save(update_fields=["status"])
+
+        _record(
+            internship,
+            action=InternshipAuditAction.STATUS_CHANGED,
+            actor_user_id=actor_user_id,
+            from_status=previous_status,
+            to_status=target_status,
+            reason=reason,
+        )
+    return internship
+
+
+def start_due_internships(today=None):
+    """
+    Scheduled job: move every Confirmed internship whose start date has been
+    reached to In progress. Returns how many were started.
+
+    select_for_update locks the rows, so overlapping runs cannot start the same
+    internship twice. Running it again changes nothing.
+    """
+    today = today or timezone.localdate()
+
+    with transaction.atomic():
+        due = list(
+            Internship.objects.select_for_update()
+            .filter(status=InternshipStatus.CONFIRMED, start_date__lte=today)
+            .order_by("pk")
+        )
+        for internship in due:
+            change_internship_status(
+                internship,
+                InternshipStatus.IN_PROGRESS,
+                reason="Start date reached.",
+            )
+
+    return len(due)
+
+
+def start_internship(internship, *, actor_user_id, today=None):
+    """
+    Manual start by university administration. Allowed only once the start date
+    has been reached, because the spec makes the start automatic on that date.
+    """
+    today = today or timezone.localdate()
+
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+        ensure_transition_allowed(locked.status, InternshipStatus.IN_PROGRESS)
+        if locked.start_date > today:
+            raise StartDateNotReached()
+        return change_internship_status(
+            locked,
+            InternshipStatus.IN_PROGRESS,
+            actor_user_id=actor_user_id,
+            reason="Started by university administration.",
+        )
+
+
+def _has_approved_evaluation(internship):
+    # Placeholder until the evaluation model exists (P1-4). Until then no
+    # internship can be completed, which is the safe default.
+    return False
+
+
+def complete_internship(internship, *, actor_user_id):
+    """
+    Move an In progress internship to Completed. The spec requires an approved
+    final submission and a supervisor evaluation first.
+    """
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+        ensure_transition_allowed(locked.status, InternshipStatus.COMPLETED)
+        if not _has_approved_evaluation(locked):
+            raise EvaluationRequired()
+        return change_internship_status(
+            locked,
+            InternshipStatus.COMPLETED,
+            actor_user_id=actor_user_id,
+            reason="Evaluation recorded.",
+        )
+
+
+def assign_supervisor(internship, *, supervisor_user_id, actor_user_id, reason=""):
+    """
+    Assign or reassign the supervisor of a Confirmed or In progress internship.
+
+    The supervisor is checked with the Identity service before any database
+    lock is taken, so no transaction is held open during an HTTP call.
+    Re-assigning requires a reason. Assigning the same supervisor again changes nothing.
+    """
+    reason = (reason or "").strip()
+
+    user = fetch_identity_user(supervisor_user_id)
+    if user is None or user.get("role") != Role.SUPERVISOR or not user.get("is_active"):
+        raise InvalidSupervisor()
+
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+
+        if locked.status not in SUPERVISOR_ASSIGNABLE_STATUSES:
+            raise InvalidInternshipState()
+
+        previous = locked.supervisor_user_id
+        if previous == supervisor_user_id:
+            return locked
+
+        if previous is not None and not reason:
+            raise ReasonRequired(message="A reason is required to change the supervisor.")
+
+        locked.supervisor_user_id = supervisor_user_id
+        locked.supervisor_assigned_by_user_id = actor_user_id
+        locked.supervisor_assigned_at = timezone.now()
+        locked.save(
+            update_fields=[
+                "supervisor_user_id",
+                "supervisor_assigned_by_user_id",
+                "supervisor_assigned_at",
+            ]
+        )
+
+        _record(
+            locked,
+            action=(
+                InternshipAuditAction.SUPERVISOR_REASSIGNED
+                if previous is not None
+                else InternshipAuditAction.SUPERVISOR_ASSIGNED
+            ),
+            actor_user_id=actor_user_id,
+            from_supervisor_user_id=previous,
+            to_supervisor_user_id=supervisor_user_id,
+            reason=reason,
+        )
+    return locked
+
+
+def get_history(internship):
+    return InternshipAudit.objects.filter(internship=internship).order_by("at", "pk")

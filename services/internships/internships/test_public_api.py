@@ -115,26 +115,26 @@ class PublicInternshipApiTests(TestCase):
         response = self._get(LIST_URL, make_token(user_id=STUDENT_ID, role=Role.STUDENT))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
+        self.assertEqual([row["id"] for row in response.data["results"]], [str(self.own.pk)])
 
     def test_company_sees_only_its_internships(self):
         response = self._get(LIST_URL, make_token(user_id=COMPANY_ID, role=Role.COMPANY))
 
-        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
+        self.assertEqual([row["id"] for row in response.data["results"]], [str(self.own.pk)])
 
     def test_supervisor_sees_only_assigned_internships(self):
         response = self._get(
             LIST_URL, make_token(user_id=SUPERVISOR_ID, role=Role.SUPERVISOR)
         )
 
-        self.assertEqual([row["id"] for row in response.data], [str(self.own.pk)])
+        self.assertEqual([row["id"] for row in response.data["results"]], [str(self.own.pk)])
 
     def test_university_administration_sees_all_internships(self):
         response = self._get(
             LIST_URL, make_token(user_id=ADMIN_ID, role=Role.UNIVERSITY_ADMIN)
         )
 
-        self.assertEqual(len(response.data), 2)
+        self.assertEqual(len(response.data["results"]), 2)
 
     def test_platform_administrator_sees_no_internships(self):
         response = self._get(
@@ -142,7 +142,7 @@ class PublicInternshipApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, [])
+        self.assertEqual(response.data["results"], [])
 
     # Visibility on the detail endpoint
 

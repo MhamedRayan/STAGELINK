@@ -111,6 +111,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Empty by default, so if it is not configured, nothing passes.
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
 
+# Identity & Profiles internal directory, used to verify supervisors before assignment.
+IDENTITY_BASE_URL = env("IDENTITY_BASE_URL", default="http://localhost:8001")
+IDENTITY_TIMEOUT_SECONDS = env.float("IDENTITY_TIMEOUT_SECONDS", default=5.0)
+
 # JWT issued by the Identity & Profiles service. The signing key must match theirs.
 # The algorithm is fixed in code on purpose, not read from the environment, so it
 # cannot be weakened by configuration.
@@ -126,4 +130,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Every error uses the shared {code, message, details} envelope.
+    "EXCEPTION_HANDLER": "internships.exceptions.service_exception_handler",
 }
