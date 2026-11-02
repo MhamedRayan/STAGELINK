@@ -5,9 +5,18 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .permissions import IsInternalService, IsSupervisorOrUniversityAdmin, IsUniversityAdmin
+from .permissions import (
+    IsInternalService,
+    IsStudentOrCompany,
+    IsSupervisorOrUniversityAdmin,
+    IsUniversityAdmin,
+)
 from .selectors import filter_internships, visible_internships_for
+from .models import CancellationRequest
 from .serializers import (
+    CancellationDecisionSerializer,
+    CancellationRequestCreateSerializer,
+    CancellationRequestSerializer,
     InternshipAuditSerializer,
     InternshipCreateSerializer,
     InternshipQuerySerializer,
@@ -18,7 +27,9 @@ from .services import (
     assign_supervisor,
     complete_internship,
     create_internship,
+    decide_cancellation,
     get_history,
+    request_cancellation,
     start_internship,
 )
 
@@ -134,3 +145,70 @@ class InternshipHistoryView(APIView):
         internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
         entries = get_history(internship)
         return Response({"results": InternshipAuditSerializer(entries, many=True).data})
+
+
+class CancellationRequestListCreateView(APIView):
+    """
+    GET: cancellation requests for an internship the caller can see.
+    POST: request a cancellation (student or company on the internship only).
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsStudentOrCompany()]
+        return [IsAuthenticated()]
+
+    def get(self, request, pk):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        requests_qs = internship.cancellation_requests.all()
+        return Response(
+            {"results": CancellationRequestSerializer(requests_qs, many=True).data}
+        )
+
+    def post(self, request, pk):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        serializer = CancellationRequestCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        cancellation = request_cancellation(
+            internship,
+            requested_by_user_id=request.user.user_id,
+            requested_by_role=request.user.role,
+            reason=serializer.validated_data["reason"],
+        )
+        return Response(
+            CancellationRequestSerializer(cancellation).data,
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class CancellationDecisionView(APIView):
+    """Base for approve and reject. University administration only."""
+
+    permission_classes = [IsAuthenticated, IsUniversityAdmin]
+    approve = False
+
+    def post(self, request, pk, request_id):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        cancellation = get_object_or_404(
+            CancellationRequest.objects.filter(internship=internship), pk=request_id
+        )
+        serializer = CancellationDecisionSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+
+        _, updated_internship = decide_cancellation(
+            internship,
+            cancellation,
+            approve=self.approve,
+            actor_user_id=request.user.user_id,
+            reason=serializer.validated_data["reason"],
+        )
+        return Response(InternshipSerializer(updated_internship).data)
+
+
+class CancellationApproveView(CancellationDecisionView):
+    approve = True
+
+
+class CancellationRejectView(CancellationDecisionView):
+    approve = False

@@ -11,6 +11,8 @@ from django.utils import timezone
 
 from .exceptions import (
     ActiveInternshipConflict,
+    CancellationAlreadyPending,
+    CancellationNotPending,
     EvaluationRequired,
     InvalidInternshipState,
     InvalidSupervisor,
@@ -20,6 +22,8 @@ from .exceptions import (
 from .identity_client import fetch_identity_user
 from .lifecycle import ensure_transition_allowed
 from .models import (
+    CancellationRequest,
+    CancellationStatus,
     Internship,
     InternshipAudit,
     InternshipAuditAction,
@@ -258,3 +262,124 @@ def assign_supervisor(internship, *, supervisor_user_id, actor_user_id, reason="
 
 def get_history(internship):
     return InternshipAudit.objects.filter(internship=internship).order_by("at", "pk")
+
+
+# ---------------------------------------------------------------------------
+# Cancellation requests (functional spec section 4.2)
+#
+# Cancelled is reached only through an approved request. The generic status
+# change refuses it, so these two functions are the only way out.
+# ---------------------------------------------------------------------------
+
+CANCELLABLE_STATUSES = (
+    InternshipStatus.CONFIRMED,
+    InternshipStatus.IN_PROGRESS,
+)
+
+
+def request_cancellation(internship, *, requested_by_user_id, requested_by_role, reason):
+    """
+    Create a pending cancellation request. The internship row is locked, so two
+    simultaneous requests cannot both succeed. The partial unique index is a second guard.
+    """
+    reason = (reason or "").strip()
+    if not reason:
+        raise ReasonRequired(message="A reason is required to request a cancellation.")
+
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+
+        if locked.status not in CANCELLABLE_STATUSES:
+            raise InvalidInternshipState(
+                message="Only a confirmed or in-progress internship can be cancelled."
+            )
+        if locked.cancellation_requests.filter(status=CancellationStatus.PENDING).exists():
+            raise CancellationAlreadyPending()
+
+        request = CancellationRequest.objects.create(
+            internship=locked,
+            requested_by_user_id=requested_by_user_id,
+            requested_by_role=requested_by_role,
+            reason=reason,
+        )
+        _record(
+            locked,
+            action=InternshipAuditAction.CANCELLATION_REQUESTED,
+            actor_user_id=requested_by_user_id,
+            reason=reason,
+        )
+    return request
+
+
+def decide_cancellation(internship, request, *, approve, actor_user_id, reason=""):
+    """
+    University administration approves or rejects a pending request.
+
+    Approval moves the internship to Cancelled and records the decision.
+    Rejection leaves the internship unchanged.
+
+    TODO(P1-1, cross-team): approval must also release the student's place on
+    the offer through Applications/Offers. No such internal endpoint exists yet,
+    so the release is not performed here. This needs a contract agreed with
+    the Applications/Offers owner before it can be added.
+    """
+    reason = (reason or "").strip()
+    if not approve and not reason:
+        raise ReasonRequired(message="A reason is required to reject a cancellation.")
+
+    with transaction.atomic():
+        # Lock the internship first, then the request: same order every time,
+        # so concurrent decisions cannot deadlock.
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+        current = CancellationRequest.objects.select_for_update().get(pk=request.pk)
+
+        if current.internship_id != locked.pk:
+            raise CancellationNotPending()
+        if current.status != CancellationStatus.PENDING:
+            raise CancellationNotPending()
+
+        now = timezone.now()
+        current.decided_by_user_id = actor_user_id
+        current.decided_at = now
+        current.decision_reason = reason
+
+        if approve:
+            if locked.status not in CANCELLABLE_STATUSES:
+                raise InvalidInternshipState()
+
+            previous_status = locked.status
+            locked.status = InternshipStatus.CANCELLED
+            locked.save(update_fields=["status"])
+
+            current.status = CancellationStatus.APPROVED
+            current.save(
+                update_fields=["status", "decided_by_user_id", "decided_at", "decision_reason"]
+            )
+
+            _record(
+                locked,
+                action=InternshipAuditAction.STATUS_CHANGED,
+                actor_user_id=actor_user_id,
+                from_status=previous_status,
+                to_status=InternshipStatus.CANCELLED,
+                reason="Cancellation approved.",
+            )
+            _record(
+                locked,
+                action=InternshipAuditAction.CANCELLATION_APPROVED,
+                actor_user_id=actor_user_id,
+                reason=reason,
+            )
+        else:
+            current.status = CancellationStatus.REJECTED
+            current.save(
+                update_fields=["status", "decided_by_user_id", "decided_at", "decision_reason"]
+            )
+            _record(
+                locked,
+                action=InternshipAuditAction.CANCELLATION_REJECTED,
+                actor_user_id=actor_user_id,
+                reason=reason,
+            )
+
+    return current, locked

@@ -39,3 +39,12 @@ class IsSupervisorOrUniversityAdmin(BasePermission):
 
     def has_permission(self, request, view):
         return getattr(request.user, "role", None) in {Role.SUPERVISOR, Role.UNIVERSITY_ADMIN}
+
+
+class IsStudentOrCompany(BasePermission):
+    """Only the student or the company on an internship may request its cancellation."""
+
+    message = "Only the student or the company can request a cancellation."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) in {Role.STUDENT, Role.COMPANY}

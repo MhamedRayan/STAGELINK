@@ -67,6 +67,9 @@ class InternshipAuditAction(models.TextChoices):
     STATUS_CHANGED = "status_changed", "Status changed"
     SUPERVISOR_ASSIGNED = "supervisor_assigned", "Supervisor assigned"
     SUPERVISOR_REASSIGNED = "supervisor_reassigned", "Supervisor reassigned"
+    CANCELLATION_REQUESTED = "cancellation_requested", "Cancellation requested"
+    CANCELLATION_APPROVED = "cancellation_approved", "Cancellation approved"
+    CANCELLATION_REJECTED = "cancellation_rejected", "Cancellation rejected"
 
 
 class InternshipAudit(models.Model):
@@ -100,3 +103,49 @@ class InternshipAudit(models.Model):
 
     def __str__(self):
         return f"{self.internship_id}: {self.action}"
+
+
+class CancellationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
+class CancellationRequest(models.Model):
+    """
+    A request by the student or the company to cancel an active internship.
+    University administration decides it. At most one request may be pending
+    per internship, enforced by a partial unique index.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    internship = models.ForeignKey(
+        Internship,
+        on_delete=models.PROTECT,
+        related_name="cancellation_requests",
+    )
+    requested_by_user_id = models.UUIDField()
+    requested_by_role = models.CharField(max_length=20)
+    reason = models.CharField(max_length=500)
+    status = models.CharField(
+        max_length=20,
+        choices=CancellationStatus.choices,
+        default=CancellationStatus.PENDING,
+    )
+    decided_by_user_id = models.UUIDField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_reason = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "pk"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["internship"],
+                condition=Q(status=CancellationStatus.PENDING),
+                name="one_pending_cancellation_per_internship",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Cancellation {self.pk} ({self.status}) for {self.internship_id}"

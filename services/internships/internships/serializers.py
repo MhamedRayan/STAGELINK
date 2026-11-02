@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from .models import Internship, InternshipAudit, InternshipStatus
+from .models import CancellationRequest, Internship, InternshipAudit, InternshipStatus
 
 ORDERING_CHOICES = ["created_at", "-created_at", "start_date", "-start_date"]
 
@@ -90,5 +90,37 @@ class InternshipAuditSerializer(serializers.ModelSerializer):
             "actor_user_id",
             "reason",
             "at",
+        ]
+        read_only_fields = fields
+
+
+class CancellationRequestCreateSerializer(serializers.Serializer):
+    reason = serializers.CharField(max_length=500, allow_blank=False, trim_whitespace=True)
+
+
+class CancellationDecisionSerializer(serializers.Serializer):
+    """Approving may omit the reason. Rejecting requires it; the service enforces that rule."""
+
+    reason = serializers.CharField(
+        max_length=500, required=False, allow_blank=True, trim_whitespace=True, default=""
+    )
+
+
+class CancellationRequestSerializer(serializers.ModelSerializer):
+    internship_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = CancellationRequest
+        fields = [
+            "id",
+            "internship_id",
+            "requested_by_user_id",
+            "requested_by_role",
+            "reason",
+            "status",
+            "decided_by_user_id",
+            "decided_at",
+            "decision_reason",
+            "created_at",
         ]
         read_only_fields = fields

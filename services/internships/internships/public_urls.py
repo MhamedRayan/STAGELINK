@@ -1,6 +1,9 @@
 from django.urls import path
 
 from .views import (
+    CancellationApproveView,
+    CancellationRejectView,
+    CancellationRequestListCreateView,
     InternshipCompleteView,
     InternshipDetailView,
     InternshipHistoryView,
@@ -24,4 +27,19 @@ urlpatterns = [
         name="internship-complete",
     ),
     path("internships/<uuid:pk>/history/", InternshipHistoryView.as_view(), name="internship-history"),
+    path(
+        "internships/<uuid:pk>/cancellation-requests/",
+        CancellationRequestListCreateView.as_view(),
+        name="internship-cancellation-requests",
+    ),
+    path(
+        "internships/<uuid:pk>/cancellation-requests/<uuid:request_id>/approve/",
+        CancellationApproveView.as_view(),
+        name="internship-cancellation-approve",
+    ),
+    path(
+        "internships/<uuid:pk>/cancellation-requests/<uuid:request_id>/reject/",
+        CancellationRejectView.as_view(),
+        name="internship-cancellation-reject",
+    ),
 ]

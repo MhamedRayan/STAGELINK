@@ -55,6 +55,18 @@ class InvalidInternshipState(DomainError):
     default_message = "This action is not allowed for the internship's current status."
 
 
+class CancellationAlreadyPending(DomainError):
+    code = "cancellation_already_pending"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "A cancellation request is already pending for this internship."
+
+
+class CancellationNotPending(DomainError):
+    code = "cancellation_not_pending"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "This cancellation request has already been decided."
+
+
 class ReasonRequired(DomainError):
     code = "reason_required"
     status_code = status.HTTP_400_BAD_REQUEST
