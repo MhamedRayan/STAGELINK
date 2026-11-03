@@ -2,13 +2,27 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Notifications API
-  version: 0.1.0
+  version: 0.3.0
   description: |
     HTTP contract for the STAGELINK notifications service.
 
     This file is the source of truth for the service interface. Add or change
     operations here before implementing them in Django. See
     docs/api-conventions.md for shared rules.
+
+    Notification identifiers and all cross-service references are UUID strings.
+    The service stores other services' IDs as plain fields; there are no
+    cross-service foreign keys.
+
+    Two authentication schemes are used:
+
+    - User endpoints accept a bearer access token issued by identity
+      (`Authorization: Bearer <access-token>`).
+    - The internal create endpoint accepts only the shared service token in the
+      `X-Service-Token` header. A user token never grants access there.
+
+    The caller decides who must be notified and sends one request per
+    recipient. Notification content is never inferred by this service.
 
   contact:
     name: STAGELINK maintainers
@@ -22,6 +36,10 @@ servers:
 tags:
   - name: System
     description: Operational endpoints used by infrastructure.
+  - name: Notifications
+    description: A user's own in-app notifications and read state.
+  - name: Internal
+    description: Service-to-service notification creation.
 
 paths:
   /health/:
@@ -39,10 +57,206 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/health/:
+    get:
+      tags:
+        - System
+      operationId: getNotificationsApiHealth
+      summary: Report service health (API prefix alias)
+      description: |
+        Alias of `GET /health/`, mounted under the API prefix so clients that
+        only know the `/api/` base path can probe liveness.
+      security: []
+      responses:
+        '200':
+          description: The service is running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /api/notifications/:
+    get:
+      tags:
+        - Notifications
+      operationId: listMyNotifications
+      summary: List my notifications
+      description: |
+        Returns only the caller's own notifications, newest first, paginated at
+        20 items per page. A notification owned by another user is never
+        returned.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: unread
+          in: query
+          required: false
+          description: |
+            When `true` (also `1` or `yes`), only unread notifications are
+            returned.
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/PageNumber'
+      responses:
+        '200':
+          description: A page of the caller's notifications.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/unread-count/:
+    get:
+      tags:
+        - Notifications
+      operationId: getMyUnreadCount
+      summary: Count my unread notifications
+      description: |
+        Returns the number of unread notifications owned by the caller. The
+        frontend polls this endpoint (suggested interval 30-60 seconds).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's unread count.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UnreadCount'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/notifications/{id}/read/:
+    parameters:
+      - $ref: '#/components/parameters/NotificationId'
+    patch:
+      tags:
+        - Notifications
+      operationId: markNotificationRead
+      summary: Mark one notification as read
+      description: |
+        Marks the caller's notification as read. The operation is idempotent:
+        the first `read_at` is kept on repeated calls. A notification that does
+        not exist, belongs to another user, or has a non-UUID identifier
+        returns `404` so its existence is never revealed. No request body is
+        required; any body is ignored.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The updated notification.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Notification'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/notifications/read-all/:
+    post:
+      tags:
+        - Notifications
+      operationId: markAllNotificationsRead
+      summary: Mark all my notifications as read
+      description: |
+        Marks only the caller's own unread notifications as read and returns how
+        many rows were updated. Already-read notifications keep their original
+        `read_at`. No request body is required; any body is ignored.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The number of notifications that changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkedRead'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/internal/notifications/:
+    post:
+      tags:
+        - Internal
+      operationId: createNotification
+      summary: Create a notification (service to service)
+      description: |
+        Creates one notification for one recipient. Send one request per
+        recipient; an event with two recipients is two requests, each with its
+        own deduplication key.
+
+        Deduplication: `deduplication_key` is unique. Retrying with the same key
+        is safe. A new row returns `201`; an existing row returns `200` with the
+        stored notification unchanged, even if the retry changed title or
+        message. This makes caller retries idempotent.
+
+        Authentication: send the shared `X-Service-Token` header. A user bearer
+        token is not accepted on this endpoint. The endpoint fails closed when
+        no token is configured on the server or no token is supplied.
+      security:
+        - serviceToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalNotificationCreate'
+      responses:
+        '201':
+          description: A new notification was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalNotification'
+        '200':
+          description: |
+            A notification with the same `deduplication_key` already existed.
+            The existing notification is returned unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalNotification'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Access token issued by Identity & Profiles.
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
+      description: Shared secret known only by trusted services.
+
+  parameters:
+    NotificationId:
+      name: id
+      in: path
+      required: true
+      description: Notification UUID.
+      schema:
+        type: string
+        format: uuid
+    PageNumber:
+      name: page
+      in: query
+      required: false
+      description: One-based page number (20 items per page).
+      schema:
+        type: integer
+        minimum: 1
+
   schemas:
     Health:
       type: object
@@ -58,25 +272,238 @@ components:
           type: string
           example: notifications
 
-    Error:
+    NotificationType:
+      type: string
+      description: |
+        Notification category. New values require a service change and a
+        migration; coordinate with the notifications owner.
+      enum:
+        - application_pending_validation
+        - application_validated
+        - application_rejected_by_university
+        - student_decision
+        - application_confirmed
+        - application_withdrawn
+        - internship_created
+        - supervisor_assigned
+        - cancellation_requested
+        - cancellation_decided
+        - submission_reviewed
+        - evaluation_published
+        - generic
+
+    Notification:
       type: object
+      description: A notification as shown to its recipient.
       required:
-        - code
+        - id
+        - type
+        - title
         - message
+        - related_object_type
+        - related_object_id
+        - is_read
+        - created_at
+        - read_at
       properties:
-        code:
+        id:
           type: string
-          example: service_unavailable
+          format: uuid
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        title:
+          type: string
+          maxLength: 255
         message:
           type: string
-        details:
-          type: object
-          additionalProperties: true
+        related_object_type:
+          type: string
+          maxLength: 64
+          description: Caller-defined object type, for example `application`.
+        related_object_id:
+          type: string
+          maxLength: 64
+          description: Caller-defined identifier, stored as an opaque string.
+        is_read:
+          type: boolean
+          description: True when `read_at` is set.
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    NotificationList:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        next:
+          type: string
+          format: uri
+          nullable: true
+          description: Absolute URL of the next page, or null.
+        previous:
+          type: string
+          format: uri
+          nullable: true
+          description: Absolute URL of the previous page, or null.
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Notification'
+
+    UnreadCount:
+      type: object
+      required:
+        - unread_count
+      properties:
+        unread_count:
+          type: integer
+          minimum: 0
+
+    MarkedRead:
+      type: object
+      required:
+        - marked_read
+      properties:
+        marked_read:
+          type: integer
+          minimum: 0
+          description: Number of notifications updated by this call.
+
+    InternalNotificationCreate:
+      type: object
+      required:
+        - recipient_user_id
+        - type
+        - title
+        - message
+        - deduplication_key
+      properties:
+        recipient_user_id:
+          type: string
+          format: uuid
+          description: Recipient user UUID from Identity & Profiles.
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        title:
+          type: string
+          maxLength: 255
+        message:
+          type: string
+        related_object_type:
+          type: string
+          maxLength: 64
+          default: ''
+          description: Optional caller-defined object type.
+        related_object_id:
+          type: string
+          maxLength: 64
+          default: ''
+          description: Optional caller-defined identifier, stored as a string.
+        deduplication_key:
+          type: string
+          maxLength: 255
+          description: |
+            Stable per event and recipient. Convention:
+            `{object_type}:{object_id}:{event}:recipient:{user_id}`.
+            Example: `application:1234:rejected_by_university:recipient:3f2c9a1e-7b4d-4c6a-9e2f-1a2b3c4d5e6f`.
+
+    InternalNotification:
+      type: object
+      description: The stored notification as returned to the calling service.
+      required:
+        - id
+        - recipient_user_id
+        - type
+        - title
+        - message
+        - related_object_type
+        - related_object_id
+        - deduplication_key
+      properties:
+        id:
+          type: string
+          format: uuid
+        recipient_user_id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/NotificationType'
+        title:
+          type: string
+          maxLength: 255
+        message:
+          type: string
+        related_object_type:
+          type: string
+          maxLength: 64
+        related_object_id:
+          type: string
+          maxLength: 64
+        deduplication_key:
+          type: string
+          maxLength: 255
+
+    DetailError:
+      type: object
+      description: DRF error body for authentication, permission and not-found failures.
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          example: Authentication credentials were not provided.
+
+    FieldErrors:
+      type: object
+      description: |
+        DRF validation error body. Each key is a request field and each value is
+        a list of human-readable messages.
+      additionalProperties:
+        type: array
+        items:
+          type: string
+      example:
+        recipient_user_id:
+          - '"not-a-uuid" is not a valid UUID.'
+        type:
+          - '"not_a_real_type" is not a valid choice.'
 
   responses:
-    ServiceUnavailable:
-      description: The service cannot serve requests.
+    Unauthorized:
+      description: Authentication is missing, invalid or expired.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/DetailError'
+    Forbidden:
+      description: The caller lacks the required access (wrong or missing service token).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DetailError'
+    NotFound:
+      description: |
+        The resource does not exist or belongs to another user; existence is
+        never revealed. A syntactically invalid (non-UUID) path identifier is
+        rejected by URL routing before the view runs and also returns `404`.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/DetailError'
+    ValidationError:
+      description: The request body is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/FieldErrors'

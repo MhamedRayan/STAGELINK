@@ -1,4 +1,6 @@
 import threading
+import unittest
+import uuid
 
 from django.db import connection
 from django.test import TestCase, TransactionTestCase, override_settings
@@ -13,10 +15,11 @@ TEST_SERVICE_TOKEN = "test-service-token"
 @override_settings(DEV_AUTH_ENABLED=True)
 class PaginationTests(TestCase):
     def setUp(self):
+        self.user_id = uuid.uuid4()
         Notification.objects.bulk_create(
             [
                 Notification(
-                    recipient_user_id=42,
+                    recipient_user_id=self.user_id,
                     type=Notification.Type.GENERIC,
                     title=f"Title {index}",
                     message="Message",
@@ -26,7 +29,7 @@ class PaginationTests(TestCase):
             ]
         )
         self.api_client = APIClient()
-        self.api_client.credentials(HTTP_X_USER_ID="42")
+        self.api_client.credentials(HTTP_X_USER_ID=str(self.user_id))
 
     def test_first_page_has_twenty_items_and_a_next_link(self):
         body = self.api_client.get("/api/notifications/").json()
@@ -43,6 +46,10 @@ class PaginationTests(TestCase):
 
 
 @override_settings(INTERNAL_SERVICE_TOKEN=TEST_SERVICE_TOKEN)
+@unittest.skipIf(
+    connection.vendor != "postgresql",
+    "Concurrent writes need PostgreSQL; SQLite locks the whole table.",
+)
 class ConcurrentDeduplicationTests(TransactionTestCase):
     """Real threads and real database connections (needs PostgreSQL)."""
 
@@ -51,12 +58,13 @@ class ConcurrentDeduplicationTests(TransactionTestCase):
         barrier = threading.Barrier(thread_count)
         status_codes = []
         errors = []
+        recipient_id = uuid.uuid4()
         payload = {
-            "recipient_user_id": 42,
+            "recipient_user_id": str(recipient_id),
             "type": "generic",
             "title": "Concurrent",
             "message": "Same event sent many times at once",
-            "deduplication_key": "concurrent:event:recipient:42",
+            "deduplication_key": f"concurrent:event:recipient:{recipient_id}",
         }
 
         def send_request():

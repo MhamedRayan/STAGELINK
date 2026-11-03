@@ -1,3 +1,5 @@
+import uuid
+
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -5,17 +7,18 @@ from api.models import Notification
 
 INTERNAL_URL = "/api/internal/notifications/"
 TEST_TOKEN = "test-service-token"
+RECIPIENT_ID = uuid.uuid4()
 
 
 def _build_payload(**overrides):
     payload = {
-        "recipient_user_id": 42,
+        "recipient_user_id": str(RECIPIENT_ID),
         "type": "application_validated",
         "title": "Application validated",
         "message": "The university validated your application.",
         "related_object_type": "application",
         "related_object_id": "1234",
-        "deduplication_key": "application:1234:validated:recipient:42",
+        "deduplication_key": f"application:1234:validated:recipient:{RECIPIENT_ID}",
     }
     payload.update(overrides)
     return payload
@@ -42,7 +45,7 @@ class InternalNotificationCreateTests(TestCase):
         self.assertEqual(response.status_code, 201)
         body = response.json()
         notification = Notification.objects.get(pk=body["id"])
-        self.assertEqual(notification.recipient_user_id, 42)
+        self.assertEqual(notification.recipient_user_id, RECIPIENT_ID)
         self.assertEqual(notification.type, "application_validated")
         self.assertIsNone(notification.read_at)
 
@@ -50,9 +53,9 @@ class InternalNotificationCreateTests(TestCase):
         self._post()
 
         recipient_client = APIClient()
-        recipient_client.credentials(HTTP_X_USER_ID="42")
+        recipient_client.credentials(HTTP_X_USER_ID=str(RECIPIENT_ID))
         other_client = APIClient()
-        other_client.credentials(HTTP_X_USER_ID="77")
+        other_client.credentials(HTTP_X_USER_ID=str(uuid.uuid4()))
 
         self.assertEqual(recipient_client.get("/api/notifications/").json()["count"], 1)
         self.assertEqual(other_client.get("/api/notifications/").json()["count"], 0)
@@ -77,8 +80,20 @@ class InternalNotificationCreateTests(TestCase):
         self.assertEqual(Notification.objects.count(), 1)
 
     def test_same_event_for_different_recipients_creates_two_notifications(self):
-        self._post(_build_payload(recipient_user_id=42, deduplication_key="application:9:rejected:recipient:42"))
-        self._post(_build_payload(recipient_user_id=77, deduplication_key="application:9:rejected:recipient:77"))
+        first_recipient = uuid.uuid4()
+        second_recipient = uuid.uuid4()
+        self._post(
+            _build_payload(
+                recipient_user_id=str(first_recipient),
+                deduplication_key=f"application:9:rejected:recipient:{first_recipient}",
+            )
+        )
+        self._post(
+            _build_payload(
+                recipient_user_id=str(second_recipient),
+                deduplication_key=f"application:9:rejected:recipient:{second_recipient}",
+            )
+        )
 
         self.assertEqual(Notification.objects.count(), 2)
 
@@ -96,7 +111,7 @@ class InternalNotificationCreateTests(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
 
     def test_user_credentials_do_not_grant_access(self):
-        self.api_client.credentials(HTTP_X_USER_ID="42")
+        self.api_client.credentials(HTTP_X_USER_ID=str(RECIPIENT_ID))
 
         response = self._post(token=None)
 
@@ -115,6 +130,19 @@ class InternalNotificationCreateTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_application_confirmed_type_is_accepted(self):
+        response = self._post(
+            _build_payload(
+                type="application_confirmed",
+                deduplication_key=(
+                    f"application:1234:confirmed:recipient:{RECIPIENT_ID}"
+                ),
+            )
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["type"], "application_confirmed")
+
     def test_missing_required_fields_are_rejected(self):
         for field in ["recipient_user_id", "type", "title", "message", "deduplication_key"]:
             payload = _build_payload()
@@ -122,8 +150,13 @@ class InternalNotificationCreateTests(TestCase):
 
             self.assertEqual(self._post(payload).status_code, 400, field)
 
-    def test_recipient_user_id_must_be_positive(self):
-        self.assertEqual(self._post(_build_payload(recipient_user_id=0)).status_code, 400)
+    def test_recipient_user_id_must_be_a_uuid(self):
+        for invalid_recipient in ["not-a-uuid", "42", 42]:
+            self.assertEqual(
+                self._post(_build_payload(recipient_user_id=invalid_recipient)).status_code,
+                400,
+                invalid_recipient,
+            )
 
     def test_too_long_title_is_rejected(self):
         self.assertEqual(self._post(_build_payload(title="x" * 256)).status_code, 400)

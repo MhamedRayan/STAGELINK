@@ -5,4 +5,7 @@ psycopg[binary]>=3.2,<4
 PyJWT>=2.9,<3
 drf-spectacular>=0.28,<1
 gunicorn>=23,<24
+# Used by the reference caller in docs/examples/notifications_client.py and its
+# tests. The service itself does not make outbound HTTP calls.
+requests>=2.32,<3
 # cryptography>=42   # uncomment only if Identity & Profiles signs tokens with RS256
