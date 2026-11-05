@@ -122,21 +122,21 @@ class UpdateOfferTests(APITestCase):
         for offer_status in (OfferStatus.DRAFT, OfferStatus.PUBLISHED):
             with self.subTest(status=offer_status):
                 offer = create_offer(company_user_id=OWNER_ID, status=offer_status)
-                original_description = offer.description
+                original_title = offer.title
 
                 response = self.owner_client.patch(
                     self.detail_url(offer.id),
-                    {"title": "Updated Title", "capacity": 5},
+                    {"description": "Updated description", "capacity": 5},
                     format="json",
                 )
 
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(response.data["title"], "Updated Title")
+                self.assertEqual(response.data["description"], "Updated description")
                 self.assertEqual(response.data["company_user_id"], str(OWNER_ID))
                 offer.refresh_from_db()
-                self.assertEqual(offer.title, "Updated Title")
+                self.assertEqual(offer.description, "Updated description")
                 self.assertEqual(offer.capacity, 5)
-                self.assertEqual(offer.description, original_description)
+                self.assertEqual(offer.title, original_title)
                 self.assertEqual(offer.status, offer_status)
 
     def test_protected_fields_are_ignored(self):
