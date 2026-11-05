@@ -17,6 +17,16 @@ OFFER_READ_FIELDS = (
     "updated_at",
 )
 
+OFFER_INTERNAL_FIELDS = (
+    "id",
+    "company_user_id",
+    "title",
+    "status",
+    "deadline",
+    "capacity",
+    "created_at",
+)
+
 OFFER_WRITE_FIELDS = (
     "title",
     "description",
@@ -32,6 +42,13 @@ class OfferSerializer(serializers.ModelSerializer):
         model = Offer
         fields = OFFER_READ_FIELDS
         read_only_fields = OFFER_READ_FIELDS
+
+
+class OfferInternalSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Offer
+        fields = OFFER_INTERNAL_FIELDS
+        read_only_fields = OFFER_INTERNAL_FIELDS
 
 
 class OfferCreateUpdateSerializer(serializers.ModelSerializer):

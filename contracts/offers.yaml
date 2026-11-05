@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Offers API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP contract for the STAGELINK offers service.
 
@@ -53,10 +53,37 @@ paths:
       tags:
         - Offers
       operationId: listOffers
-      summary: List published offers
-      description: Returns published offers only. Supports text search and filters.
-      security: []
+      summary: List published offers, or the caller's own offers
+      description: >-
+        Returns published offers only by default (public, no authentication).
+        With mine=true the caller must be a company; the response then contains
+        that company's own offers of every status (soft-deleted drafts excluded).
+      security:
+        - {}
+        - bearerAuth: []
       parameters:
+        - name: mine
+          in: query
+          description: When true, list the authenticated company's own offers (any status). Requires a company token.
+          schema:
+            type: boolean
+            default: false
+        - name: status
+          in: query
+          description: Filter by status. On the public list only published offers exist, so draft or closed returns an empty page.
+          schema:
+            $ref: '#/components/schemas/OfferStatus'
+        - name: ordering
+          in: query
+          description: Sort order. Default is -created_at.
+          schema:
+            type: string
+            enum: [deadline, -deadline, created_at, -created_at]
+        - name: deadline_after
+          in: query
+          description: Only offers whose deadline is strictly after this ISO 8601 date or datetime (a date means 00:00 UTC).
+          schema:
+            type: string
         - name: search
           in: query
           description: Case-insensitive search across title, description, requirements and location.
@@ -97,6 +124,10 @@ paths:
                 $ref: '#/components/schemas/PaginatedOffers'
         '400':
           $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
     post:
       tags:
         - Offers
@@ -152,7 +183,10 @@ paths:
         - Offers
       operationId: updateOffer
       summary: Partially update an offer
-      description: Only the owning company can update an offer, and closed offers cannot be edited.
+      description: >-
+        Only the owning company can update an offer. Closed offers cannot be edited.
+        While published, title and location cannot change and capacity cannot be
+        reduced (409).
       security:
         - bearerAuth: []
       requestBody:
@@ -178,6 +212,48 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+    delete:
+      tags:
+        - Offers
+      operationId: deleteOffer
+      summary: Soft delete a draft offer
+      description: Only the owning company can delete, and only draft offers. The offer then returns 404.
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/internal/offers/{id}/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+        - Offers
+      operationId: getOfferInternal
+      summary: Look up an offer (service-to-service)
+      description: Returns a non-deleted offer of any status. Requires the X-Service-Token header; user JWTs are not accepted.
+      security:
+        - serviceToken: []
+      responses:
+        '200':
+          description: The offer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferInternal'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/offers/{id}/publish/:
     parameters:
@@ -239,6 +315,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
 
   parameters:
     OfferId:
@@ -324,6 +404,30 @@ components:
             updated_at:
               type: string
               format: date-time
+
+    OfferInternal:
+      type: object
+      required: [id, company_user_id, title, status, deadline, capacity, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        company_user_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          $ref: '#/components/schemas/OfferStatus'
+        deadline:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
 
     PaginatedOffers:
       type: object

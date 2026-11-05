@@ -7,6 +7,9 @@ from offers.models import Offer, OfferStatus
 
 REQUIRED_TEXT_FIELDS = ("title", "description", "requirements", "location")
 
+# Fields that identify the offer to applicants and cannot change once published.
+PUBLISHED_LOCKED_FIELDS = ("title", "location")
+
 
 def _get_publish_errors(offer):
     errors = {}
@@ -29,6 +32,42 @@ def _get_publish_errors(offer):
 def ensure_offer_is_editable(offer):
     if offer.status == OfferStatus.CLOSED:
         raise OfferStateConflict("Closed offers cannot be edited.")
+
+
+def ensure_capacity_change_allowed(offer, new_capacity):
+    """Block capacity reductions while an offer is published.
+
+    Applications owns reservations and has not published its committed-places
+    endpoint yet, so every reduction is refused. Increases are always allowed.
+    """
+    if new_capacity is None or offer.status != OfferStatus.PUBLISHED:
+        return
+    if new_capacity < offer.capacity:
+        raise OfferStateConflict(
+            "Capacity cannot be reduced while the offer is published.",
+            code="capacity_reduction_blocked",
+        )
+
+
+def ensure_published_edit_allowed(offer, validated_data):
+    """Reject changes to locked fields while an offer is published.
+
+    Sending the current value again is accepted, so clients may resend a form.
+    """
+    if offer.status != OfferStatus.PUBLISHED:
+        return
+    locked = [
+        field_name
+        for field_name in PUBLISHED_LOCKED_FIELDS
+        if field_name in validated_data
+        and validated_data[field_name] != getattr(offer, field_name)
+    ]
+    if locked:
+        raise OfferStateConflict(
+            f"These fields cannot be changed while the offer is published: "
+            f"{', '.join(locked)}.",
+            code="field_locked_while_published",
+        )
 
 
 @transaction.atomic
@@ -56,4 +95,32 @@ def close_offer(offer_id):
 
     offer.status = OfferStatus.CLOSED
     offer.save(update_fields=["status", "updated_at"])
+    return offer
+
+
+@transaction.atomic
+def close_expired_offers(now=None):
+    """Close every published offer whose deadline has passed.
+
+    Idempotent: only published offers are touched, so running it repeatedly
+    (for example from a scheduler) is safe. Returns the number of closed offers.
+    """
+    now = now or timezone.now()
+    return Offer.objects.filter(
+        status=OfferStatus.PUBLISHED, deadline__lte=now
+    ).update(status=OfferStatus.CLOSED, updated_at=now)
+
+
+@transaction.atomic
+def delete_draft_offer(offer_id):
+    """Soft delete a draft offer. Published and closed offers are kept."""
+    offer = Offer.objects.select_for_update().get(
+        pk=offer_id, deleted_at__isnull=True
+    )
+
+    if offer.status != OfferStatus.DRAFT:
+        raise OfferStateConflict("Only draft offers can be deleted.")
+
+    offer.deleted_at = timezone.now()
+    offer.save(update_fields=["deleted_at", "updated_at"])
     return offer
