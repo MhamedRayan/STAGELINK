@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Internships API
-  version: 0.4.0
+  version: 0.6.0
   description: |
     HTTP contract for the STAGELINK internships service.
 
@@ -21,6 +21,21 @@ info:
     cancellation with a mandatory reason; university administration approves or
     rejects it. Approval sets the internship to `cancelled`.
 
+    Changes in 0.5.0: final submissions and supervisor review. The student on an
+    internship uploads versioned files (maximum 10 MB); the assigned supervisor
+    approves or rejects a version with a mandatory reason. Files are only
+    available through the authorised download endpoint, never as a public media
+    URL. The company does not see submission files.
+
+    Changes in 0.6.0: supervisor evaluation. The assigned supervisor records one
+    grade out of 20 after an approved submission; the internship becomes
+    `completed` in the same operation. The student, the company, the assigned
+    supervisor and university administration can read the evaluation.
+
+    Approval of a cancellation also asks the Applications service to release the
+    reserved place. That call is best effort and retried by an operational
+    command; it does not change this synchronous interface.
+
   contact:
     name: STAGELINK maintainers
 
@@ -37,6 +52,10 @@ tags:
     description: Internship records, visibility, lifecycle and supervision.
   - name: Cancellations
     description: Cancellation requests and their decisions.
+  - name: Submissions
+    description: Versioned final submissions and their review.
+  - name: Evaluations
+    description: The supervisor's final grade.
   - name: Internal
     description: Trusted service-to-service endpoints.
 
@@ -485,6 +504,257 @@ paths:
         '409':
           $ref: '#/components/responses/Conflict'
 
+  /api/internships/{id}/submissions/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+    get:
+      tags:
+        - Submissions
+      operationId: listInternshipSubmissions
+      summary: List the final submission versions of an internship
+      description: |
+        Returns versions newest first. Available to the student on the
+        internship, the assigned supervisor and university administration. The
+        company receives 404: submission files are not part of its access.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The submission versions, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Submissions
+      operationId: createInternshipSubmission
+      summary: Upload a new final submission version
+      description: |
+        Restricted to the student on the internship. The internship must be
+        `in_progress`.
+
+        A new version is accepted when there is no earlier submission or the
+        latest version was rejected. While a version is pending, the request is
+        refused with `submission_already_pending`. After a version is approved,
+        it is refused with `submission_already_approved`.
+
+        Maximum file size is 10 MB. Allowed extensions are `.pdf`, `.docx`,
+        `.pptx`, `.jpg`, `.jpeg`, `.png` and `.csv`, case-insensitive.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: The stored submission version.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipSubmission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/internships/{id}/submissions/{submission_id}/download/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+      - $ref: '#/components/parameters/SubmissionId'
+    get:
+      tags:
+        - Submissions
+      operationId: downloadInternshipSubmission
+      summary: Download one stored submission file
+      description: |
+        The only way to read an uploaded file; media files are never served
+        directly. Same visibility as the submission list: the student on the
+        internship, the assigned supervisor and university administration. The
+        company receives 404.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The stored file as an attachment.
+          headers:
+            Content-Disposition:
+              description: Contains the original filename.
+              schema:
+                type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
+                enum:
+                  - nosniff
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/internships/{id}/submissions/{submission_id}/approve/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+      - $ref: '#/components/parameters/SubmissionId'
+    post:
+      tags:
+        - Submissions
+      operationId: approveInternshipSubmission
+      summary: Approve a pending submission
+      description: |
+        Restricted to the supervisor assigned to the internship. A non-empty
+        reason is mandatory. The internship must be `in_progress` and the
+        version must still be pending.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionReview'
+      responses:
+        '200':
+          description: The reviewed submission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipSubmission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/internships/{id}/submissions/{submission_id}/reject/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+      - $ref: '#/components/parameters/SubmissionId'
+    post:
+      tags:
+        - Submissions
+      operationId: rejectInternshipSubmission
+      summary: Reject a pending submission
+      description: |
+        Restricted to the supervisor assigned to the internship. A non-empty
+        reason is mandatory. Rejection allows the student to upload a new
+        version while the internship remains `in_progress`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmissionReview'
+      responses:
+        '200':
+          description: The reviewed submission.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipSubmission'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/internships/{id}/evaluation/:
+    parameters:
+      - $ref: '#/components/parameters/InternshipId'
+    get:
+      tags:
+        - Evaluations
+      operationId: getInternshipEvaluation
+      summary: Read the evaluation of an internship
+      description: |
+        Visible to the student and the company on the internship, the assigned
+        supervisor and university administration. Returns 404 when no evaluation
+        exists or the caller cannot see the internship.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The evaluation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipEvaluation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+        - Evaluations
+      operationId: createInternshipEvaluation
+      summary: Record the evaluation and complete the internship
+      description: |
+        Restricted to the supervisor assigned to the internship. The internship
+        must be `in_progress` and an approved submission must exist. Only one
+        evaluation can be recorded. On success the internship moves to
+        `completed` in the same transaction, and the student is notified.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvaluationCreate'
+      responses:
+        '201':
+          description: The created evaluation; the internship is now completed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipEvaluation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -510,6 +780,14 @@ components:
       in: path
       required: true
       description: Internship UUID.
+      schema:
+        type: string
+        format: uuid
+    SubmissionId:
+      name: submission_id
+      in: path
+      required: true
+      description: Submission version UUID.
       schema:
         type: string
         format: uuid
@@ -694,6 +972,11 @@ components:
             - cancellation_requested
             - cancellation_approved
             - cancellation_rejected
+            - submission_created
+            - submission_approved
+            - submission_rejected
+            - evaluation_published
+            - place_released
         from_status:
           $ref: '#/components/schemas/InternshipStatus'
         to_status:
@@ -782,6 +1065,129 @@ components:
           type: string
           format: date-time
 
+    SubmissionStatus:
+      type: string
+      enum:
+        - SUBMITTED
+        - APPROVED
+        - REJECTED
+
+    SubmissionReview:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    InternshipSubmission:
+      type: object
+      required:
+        - id
+        - internship_id
+        - version
+        - original_filename
+        - size_bytes
+        - submitted_by_user_id
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        internship_id:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          minimum: 1
+          description: Starts at 1 and increases by one per accepted resubmission.
+        original_filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+          minimum: 1
+        submitted_by_user_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/SubmissionStatus'
+        reviewed_by_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        reviewed_at:
+          type: string
+          format: date-time
+          nullable: true
+        review_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SubmissionList:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternshipSubmission'
+
+    EvaluationCreate:
+      type: object
+      required:
+        - grade
+      properties:
+        grade:
+          oneOf:
+            - type: string
+              pattern: '^(20(\.0{1,2})?|1?[0-9](\.[0-9]{1,2})?)$'
+              example: '17.50'
+            - type: number
+              format: float
+              minimum: 0
+              maximum: 20
+          description: Grade out of 20, with at most two decimal places.
+        comment:
+          type: string
+          maxLength: 5000
+
+    InternshipEvaluation:
+      type: object
+      required:
+        - id
+        - internship_id
+        - supervisor_user_id
+        - grade
+        - comment
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        internship_id:
+          type: string
+          format: uuid
+        supervisor_user_id:
+          type: string
+          format: uuid
+        grade:
+          type: string
+          description: Decimal grade out of 20, serialised as a string with two decimal places.
+          example: '17.50'
+        comment:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
     Error:
       type: object
       required:
@@ -808,6 +1214,12 @@ components:
             - identity_unavailable
             - cancellation_already_pending
             - cancellation_not_pending
+            - submission_already_pending
+            - submission_already_approved
+            - submission_not_pending
+            - approved_submission_required
+            - evaluation_already_exists
+            - applications_unavailable
           example: start_date_not_reached
         message:
           type: string

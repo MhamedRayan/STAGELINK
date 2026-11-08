@@ -49,6 +49,20 @@ provisioning; it still exercises the exact token claims the services validate.
 - The internal endpoint rejects missing and incorrect service tokens.
 - A downstream conflict returns `502` and rolls back the application state.
 
+## Pending internship scenarios
+
+These are part of the internship delivery but stay gated on other services:
+
+| Scenario | Blocked on |
+| --- | --- |
+| Supervisor assignment visible to the supervisor | Identity provisioning of a real supervisor account (Identity P0-4), or a seed command |
+| Cancellation approval releases the place | `POST /api/internal/applications/{id}/release-place/` in Applications |
+| Exactly one notification on confirmation | Notifications UUID recipient support (Notifications P0-1) |
+
+The service-level tests in `services/internships` cover the same rules with the
+external clients mocked, so the internship behaviour is verified while the seams
+are unavailable.
+
 ## Stop the stack
 
 ```bash

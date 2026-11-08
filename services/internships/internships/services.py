@@ -6,18 +6,31 @@ runs in a database transaction, writes its audit entry in that same transaction,
 and locks the row when the change depends on its current state.
 """
 
+import logging
+import os
+
+from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from .applications_client import release_place
 from .exceptions import (
     ActiveInternshipConflict,
+    ApplicationsUnavailable,
+    ApprovedSubmissionRequired,
     CancellationAlreadyPending,
     CancellationNotPending,
+    EvaluationAlreadyExists,
     EvaluationRequired,
     InvalidInternshipState,
     InvalidSupervisor,
+    NotAssignedSupervisor,
     ReasonRequired,
     StartDateNotReached,
+    SubmissionAlreadyApproved,
+    SubmissionAlreadyPending,
+    SubmissionNotFound,
+    SubmissionNotPending,
 )
 from .identity_client import fetch_identity_user
 from .lifecycle import ensure_transition_allowed
@@ -27,9 +40,22 @@ from .models import (
     Internship,
     InternshipAudit,
     InternshipAuditAction,
+    InternshipEvaluation,
     InternshipStatus,
+    InternshipSubmission,
+    SubmissionStatus,
+)
+from .notifications import (
+    notify_cancellation_decided,
+    notify_cancellation_requested,
+    notify_evaluation_published,
+    notify_internship_created,
+    notify_submission_reviewed,
+    notify_supervisor_assigned,
 )
 from .roles import Role
+
+logger = logging.getLogger(__name__)
 
 # A supervisor can only be assigned while the internship is still running or about to start.
 SUPERVISOR_ASSIGNABLE_STATUSES = (
@@ -102,6 +128,7 @@ def create_internship(
                 action=InternshipAuditAction.CREATED,
                 to_status=InternshipStatus.CONFIRMED,
             )
+            notify_internship_created(internship)
         return internship, True
     except IntegrityError:
         # Two identical requests raced. The other one committed first, so the
@@ -184,9 +211,9 @@ def start_internship(internship, *, actor_user_id, today=None):
 
 
 def _has_approved_evaluation(internship):
-    # Placeholder until the evaluation model exists (P1-4). Until then no
-    # internship can be completed, which is the safe default.
-    return False
+    # Completion requires a recorded evaluation. The evaluation is the output of
+    # the supervisor's review, so its existence is the authoritative check.
+    return InternshipEvaluation.objects.filter(internship=internship).exists()
 
 
 def complete_internship(internship, *, actor_user_id):
@@ -257,6 +284,7 @@ def assign_supervisor(internship, *, supervisor_user_id, actor_user_id, reason="
             to_supervisor_user_id=supervisor_user_id,
             reason=reason,
         )
+        notify_supervisor_assigned(locked, supervisor_user_id)
     return locked
 
 
@@ -308,20 +336,51 @@ def request_cancellation(internship, *, requested_by_user_id, requested_by_role,
             actor_user_id=requested_by_user_id,
             reason=reason,
         )
+        notify_cancellation_requested(locked, request)
     return request
+
+
+def deliver_place_release(internship_id):
+    """
+    Release the place reserved by the internship's source application.
+
+    Best effort and idempotent: Applications releases at most once, and the
+    marker means a successful release is never repeated. Returns True when the
+    place is known to be released (now or earlier), False when delivery failed.
+    """
+    internship = Internship.objects.filter(pk=internship_id).first()
+    if internship is None or internship.place_released_at is not None:
+        return internship is not None
+
+    try:
+        release_place(internship.source_application_id)
+    except ApplicationsUnavailable as exc:
+        logger.warning(
+            "Place release failed for internship %s: %s", internship_id, exc.message
+        )
+        return False
+
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship_id)
+        if locked.place_released_at is None:
+            locked.place_released_at = timezone.now()
+            locked.save(update_fields=["place_released_at"])
+            _record(
+                locked,
+                action=InternshipAuditAction.PLACE_RELEASED,
+                reason="Reserved place released to the offer.",
+            )
+    return True
 
 
 def decide_cancellation(internship, request, *, approve, actor_user_id, reason=""):
     """
     University administration approves or rejects a pending request.
 
-    Approval moves the internship to Cancelled and records the decision.
-    Rejection leaves the internship unchanged.
-
-    TODO(P1-1, cross-team): approval must also release the student's place on
-    the offer through Applications/Offers. No such internal endpoint exists yet,
-    so the release is not performed here. This needs a contract agreed with
-    the Applications/Offers owner before it can be added.
+    Approval moves the internship to Cancelled, records the decision and queues
+    the release of the place on the source application. The release is
+    best-effort after commit; the release_cancelled_places command retries any
+    release that did not succeed. Rejection leaves the internship unchanged.
     """
     reason = (reason or "").strip()
     if not approve and not reason:
@@ -370,6 +429,8 @@ def decide_cancellation(internship, request, *, approve, actor_user_id, reason="
                 actor_user_id=actor_user_id,
                 reason=reason,
             )
+            internship_id = locked.pk
+            transaction.on_commit(lambda: deliver_place_release(internship_id))
         else:
             current.status = CancellationStatus.REJECTED
             current.save(
@@ -382,4 +443,187 @@ def decide_cancellation(internship, request, *, approve, actor_user_id, reason="
                 reason=reason,
             )
 
+        notify_cancellation_decided(locked, current, approved=approve)
+
     return current, locked
+
+
+# ---------------------------------------------------------------------------
+# Final submissions (P1-2) and supervisor review (P1-3)
+# ---------------------------------------------------------------------------
+
+SUBMISSION_STATUSES = (InternshipStatus.IN_PROGRESS,)
+
+
+def _submission_original_filename(upload):
+    name = os.path.basename(getattr(upload, "name", "") or "")
+    return name[:255] or "submission"
+
+
+def _submission_content_type(upload):
+    content_type = getattr(upload, "content_type", "") or ""
+    if content_type not in settings.ALLOWED_SUBMISSION_CONTENT_TYPES:
+        return "application/octet-stream"
+    return content_type
+
+
+def create_submission(internship, *, upload, submitted_by_user_id):
+    """
+    Store a new version of the student's final submission.
+
+    Versions are allocated under the internship row lock, so concurrent uploads
+    cannot pick the same version number. The partial unique indexes enforce the
+    same rules in the database as a second guard.
+    """
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+
+        if locked.status not in SUBMISSION_STATUSES:
+            raise InvalidInternshipState(
+                message="Submissions are only accepted while the internship is in progress."
+            )
+
+        latest = locked.submissions.order_by("-version").first()
+        if latest is not None:
+            if latest.status == SubmissionStatus.SUBMITTED:
+                raise SubmissionAlreadyPending()
+            if latest.status == SubmissionStatus.APPROVED:
+                raise SubmissionAlreadyApproved()
+            version = latest.version + 1
+        else:
+            version = 1
+
+        submission = InternshipSubmission.objects.create(
+            internship=locked,
+            version=version,
+            file=upload,
+            original_filename=_submission_original_filename(upload),
+            content_type=_submission_content_type(upload),
+            size_bytes=upload.size,
+            submitted_by_user_id=submitted_by_user_id,
+            status=SubmissionStatus.SUBMITTED,
+        )
+        _record(
+            locked,
+            action=InternshipAuditAction.SUBMISSION_CREATED,
+            actor_user_id=submitted_by_user_id,
+            reason=f"Submission version {version} uploaded.",
+        )
+    return submission
+
+
+def list_submissions(internship):
+    """Newest version first; only versions of this internship."""
+    return internship.submissions.order_by("-version", "pk")
+
+
+def review_submission(internship, submission, *, approve, actor_user_id, reason):
+    """
+    Approve or reject a pending submission. Only the assigned supervisor may
+    review it, and every decision requires a reason.
+    """
+    reason = (reason or "").strip()
+    if not reason:
+        raise ReasonRequired(message="A reason is required to review a submission.")
+
+    with transaction.atomic():
+        # Same lock order as every other operation: internship, then child row.
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+        current = InternshipSubmission.objects.select_for_update().get(pk=submission.pk)
+
+        if locked.supervisor_user_id != actor_user_id:
+            raise NotAssignedSupervisor()
+        if locked.status not in SUBMISSION_STATUSES:
+            raise InvalidInternshipState(
+                message="Submissions can only be reviewed while the internship is in progress."
+            )
+        if current.internship_id != locked.pk:
+            raise SubmissionNotFound()
+        if current.status != SubmissionStatus.SUBMITTED:
+            raise SubmissionNotPending()
+
+        now = timezone.now()
+        current.status = (
+            SubmissionStatus.APPROVED if approve else SubmissionStatus.REJECTED
+        )
+        current.reviewed_by_user_id = actor_user_id
+        current.reviewed_at = now
+        current.review_reason = reason
+        current.save(
+            update_fields=[
+                "status",
+                "reviewed_by_user_id",
+                "reviewed_at",
+                "review_reason",
+            ]
+        )
+
+        _record(
+            locked,
+            action=(
+                InternshipAuditAction.SUBMISSION_APPROVED
+                if approve
+                else InternshipAuditAction.SUBMISSION_REJECTED
+            ),
+            actor_user_id=actor_user_id,
+            reason=reason,
+        )
+        notify_submission_reviewed(locked, current, approved=approve)
+
+    return current
+
+
+# ---------------------------------------------------------------------------
+# Supervisor evaluation (P1-4)
+# ---------------------------------------------------------------------------
+
+
+def create_evaluation(internship, *, supervisor_user_id, grade, comment=""):
+    """
+    Record the final grade and complete the internship in the same transaction.
+
+    An approved submission must exist. One evaluation per internship: the
+    OneToOne field and this check make a second attempt impossible.
+    """
+    comment = (comment or "").strip()
+
+    with transaction.atomic():
+        locked = Internship.objects.select_for_update().get(pk=internship.pk)
+
+        if locked.supervisor_user_id != supervisor_user_id:
+            raise NotAssignedSupervisor()
+        if InternshipEvaluation.objects.filter(internship=locked).exists():
+            raise EvaluationAlreadyExists()
+        if locked.status not in SUBMISSION_STATUSES:
+            raise InvalidInternshipState(
+                message="An evaluation can only be recorded while the internship is in progress."
+            )
+        if not locked.submissions.filter(status=SubmissionStatus.APPROVED).exists():
+            raise ApprovedSubmissionRequired()
+
+        evaluation = InternshipEvaluation.objects.create(
+            internship=locked,
+            supervisor_user_id=supervisor_user_id,
+            grade=grade,
+            comment=comment,
+        )
+        _record(
+            locked,
+            action=InternshipAuditAction.EVALUATION_PUBLISHED,
+            actor_user_id=supervisor_user_id,
+            reason=comment,
+        )
+        change_internship_status(
+            locked,
+            InternshipStatus.COMPLETED,
+            actor_user_id=supervisor_user_id,
+            reason="Evaluation recorded.",
+        )
+        notify_evaluation_published(locked, evaluation)
+
+    return evaluation
+
+
+def get_evaluation(internship):
+    """Return the internship's evaluation, or None when it has not been graded."""
+    return InternshipEvaluation.objects.filter(internship=internship).first()

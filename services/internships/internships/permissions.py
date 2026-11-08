@@ -48,3 +48,19 @@ class IsStudentOrCompany(BasePermission):
 
     def has_permission(self, request, view):
         return getattr(request.user, "role", None) in {Role.STUDENT, Role.COMPANY}
+
+
+class IsStudent(BasePermission):
+    message = "Only a student can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == Role.STUDENT
+
+
+class IsSupervisor(BasePermission):
+    """Role check only; assignment to the specific internship is checked in the service."""
+
+    message = "Only a supervisor can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == Role.SUPERVISOR

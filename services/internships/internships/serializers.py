@@ -1,6 +1,17 @@
+from decimal import Decimal
+from pathlib import Path
+
+from django.conf import settings
 from rest_framework import serializers
 
-from .models import CancellationRequest, Internship, InternshipAudit, InternshipStatus
+from .models import (
+    CancellationRequest,
+    Internship,
+    InternshipAudit,
+    InternshipEvaluation,
+    InternshipStatus,
+    InternshipSubmission,
+)
 
 ORDERING_CHOICES = ["created_at", "-created_at", "start_date", "-start_date"]
 
@@ -121,6 +132,91 @@ class CancellationRequestSerializer(serializers.ModelSerializer):
             "decided_by_user_id",
             "decided_at",
             "decision_reason",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class SubmissionFileSerializer(serializers.Serializer):
+    """Validates an uploaded final submission before it reaches the service."""
+
+    file = serializers.FileField()
+
+    def validate_file(self, upload):
+        extension = Path(upload.name or "").suffix.lower()
+        if extension not in settings.ALLOWED_SUBMISSION_EXTENSIONS:
+            allowed = ", ".join(settings.ALLOWED_SUBMISSION_EXTENSIONS)
+            raise serializers.ValidationError(
+                f"Unsupported file type. Allowed extensions: {allowed}."
+            )
+        if upload.size <= 0:
+            raise serializers.ValidationError("The uploaded file is empty.")
+        if upload.size > settings.MAX_SUBMISSION_SIZE_BYTES:
+            raise serializers.ValidationError(
+                "The uploaded file exceeds the maximum size of "
+                f"{settings.MAX_SUBMISSION_SIZE_BYTES} bytes."
+            )
+        return upload
+
+
+class InternshipSubmissionSerializer(serializers.ModelSerializer):
+    """
+    Read-only submission metadata. The storage path is deliberately absent:
+    files are only reachable through the authorised download endpoint.
+    """
+
+    internship_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = InternshipSubmission
+        fields = [
+            "id",
+            "internship_id",
+            "version",
+            "original_filename",
+            "content_type",
+            "size_bytes",
+            "submitted_by_user_id",
+            "status",
+            "reviewed_by_user_id",
+            "reviewed_at",
+            "review_reason",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class SubmissionReviewSerializer(serializers.Serializer):
+    """A reason is required for both approval and rejection. The service enforces it."""
+
+    reason = serializers.CharField(
+        max_length=500, allow_blank=True, trim_whitespace=True
+    )
+
+
+class EvaluationCreateSerializer(serializers.Serializer):
+    grade = serializers.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        min_value=Decimal("0.00"),
+        max_value=Decimal("20.00"),
+    )
+    comment = serializers.CharField(
+        required=False, allow_blank=True, max_length=5000, default=""
+    )
+
+
+class InternshipEvaluationSerializer(serializers.ModelSerializer):
+    internship_id = serializers.UUIDField(read_only=True)
+
+    class Meta:
+        model = InternshipEvaluation
+        fields = [
+            "id",
+            "internship_id",
+            "supervisor_user_id",
+            "grade",
+            "comment",
             "created_at",
         ]
         read_only_fields = fields

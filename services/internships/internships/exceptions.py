@@ -85,6 +85,60 @@ class IdentityUnavailable(DomainError):
     default_message = "The identity service is unavailable. Try again later."
 
 
+class ApplicationsUnavailable(DomainError):
+    code = "applications_unavailable"
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_message = "The applications service is unavailable. Try again later."
+
+
+class SubmissionAlreadyPending(DomainError):
+    code = "submission_already_pending"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "The current submission is still awaiting review."
+
+
+class SubmissionAlreadyApproved(DomainError):
+    code = "submission_already_approved"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "The submission has already been approved."
+
+
+class SubmissionNotPending(DomainError):
+    code = "submission_not_pending"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "This submission has already been reviewed."
+
+
+class NotAssignedSupervisor(DomainError):
+    code = "permission_denied"
+    status_code = status.HTTP_403_FORBIDDEN
+    default_message = "Only the assigned supervisor can perform this action."
+
+
+class SubmissionNotFound(DomainError):
+    code = "not_found"
+    status_code = status.HTTP_404_NOT_FOUND
+    default_message = "Submission not found."
+
+
+class ApprovedSubmissionRequired(DomainError):
+    code = "approved_submission_required"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "An approved submission is required before grading."
+
+
+class EvaluationAlreadyExists(DomainError):
+    code = "evaluation_already_exists"
+    status_code = status.HTTP_409_CONFLICT
+    default_message = "This internship already has an evaluation."
+
+
+class EvaluationNotFound(DomainError):
+    code = "not_found"
+    status_code = status.HTTP_404_NOT_FOUND
+    default_message = "Evaluation not found."
+
+
 _DRF_CODES = {
     status.HTTP_400_BAD_REQUEST: "invalid_request",
     status.HTTP_401_UNAUTHORIZED: "unauthenticated",

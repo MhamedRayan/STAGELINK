@@ -150,3 +150,56 @@ cannot be mapped to the UUIDs they reference, so adopting this decision requires
 recreating those development tables. The shared service token is a simple
 secret; rotating it requires a coordinated deployment. Finer-grained service
 authorization would need a signed service token or mutual TLS in the future.
+
+---
+
+## ADR-010: Internship submissions, review, evaluation and side effects
+
+**Status:** accepted
+**Date:** 2026-11-08
+
+**Context:** The internship record needs the rest of the academic workflow:
+the student's final report, the supervisor's review, the final grade, and the
+cross-service consequences of cancellation. These steps touch files, external
+services, and irreversible state, so their rules must be explicit.
+
+**Decision:**
+
+- The internship lifecycle remains `confirmed → in_progress → completed`.
+  `cancelled` is reached only through an approved cancellation request.
+- The student on the internship uploads versioned final submissions while the
+  internship is `in_progress`. At most one version is pending. A rejected
+  version allows a resubmission; an approved version ends the upload flow.
+- Submission status values are uppercase `SUBMITTED`, `APPROVED`, `REJECTED`.
+  Existing internship and cancellation values remain lowercase because they are
+  already shipped.
+- Files are validated by extension and size (maximum 10 MB), stored under
+  `MEDIA_ROOT` on a mounted volume, and never served directly. Every download
+  goes through an authorised endpoint. The student, the assigned supervisor and
+  university administration can read submissions; the company cannot.
+- The assigned supervisor reviews a pending version with a mandatory reason.
+  Approval or rejection stores the reviewer, time and reason and writes an audit
+  entry.
+- The assigned supervisor records exactly one evaluation, with a grade from 0 to
+  20. An approved submission is required. Creating the evaluation moves the
+  internship to `completed` in the same transaction.
+- The audit history is append-only. Every state change writes its entry in the
+  same transaction as the change it describes.
+- Notifications are best effort and scheduled with `transaction.on_commit`.
+  Failures are logged and never roll back the internship change. Recipient IDs
+  are UUIDs and deduplication keys are stable per event and recipient.
+  University-administrator recipients come from
+  `UNIVERSITY_ADMIN_USER_IDS` until Identity exposes a role directory.
+- Approving a cancellation queues a call to
+  `POST /api/internal/applications/{source_application_id}/release-place/` on
+  the Applications service. That endpoint is owned by Applications and is
+  expected to be idempotent. The `place_released_at` marker records success, and
+  the `release_cancelled_places` management command retries failures. The
+  cancellation itself is never blocked by an Applications outage.
+
+**Consequences:** Uploaded files require an operational backup in addition to
+the database; see [`media-storage.md`](media-storage.md). The release call and
+some notifications depend on contracts owned by other services, so integration
+tests for those seams stay gated until the endpoints and UUID recipient support
+land. Because evaluations are immutable in v1, a correction requires a
+deliberate administrative data change rather than a second API call.

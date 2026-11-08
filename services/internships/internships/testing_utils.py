@@ -1,11 +1,31 @@
 """Shared helpers for the internships test modules (not a test module itself)."""
 
+import shutil
+import tempfile
 import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import jwt
+from django.test import override_settings
 
 TEST_JWT_KEY = "test-jwt-signing-key-with-enough-length-0123456789"
+
+
+class TemporaryMediaMixin:
+    """Point MEDIA_ROOT at a throwaway directory and remove it afterwards."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._media_dir = tempfile.mkdtemp(prefix="stagelink-media-")
+        cls._media_override = override_settings(MEDIA_ROOT=cls._media_dir)
+        cls._media_override.enable()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._media_override.disable()
+        shutil.rmtree(cls._media_dir, ignore_errors=True)
 
 
 def make_token(user_id, role, *, ttl=timedelta(minutes=15)):
@@ -64,3 +84,53 @@ def identity_user(user_id, role="supervisor", is_active=True):
         "role": role,
         "is_active": is_active,
     }
+
+
+def make_submission(
+    internship,
+    *,
+    version=1,
+    status=None,
+    submitted_by=None,
+    filename="report.pdf",
+    content=b"%PDF-1.4 test content",
+    content_type="application/pdf",
+    reviewed_by=None,
+    reason="",
+):
+    """
+    Create a stored submission row directly.
+
+    The caller must use TemporaryMediaMixin (or override MEDIA_ROOT), because
+    the file is written to disk.
+    """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from django.utils import timezone
+
+    from .models import InternshipSubmission, SubmissionStatus
+
+    upload = SimpleUploadedFile(filename, content, content_type=content_type)
+    return InternshipSubmission.objects.create(
+        internship=internship,
+        version=version,
+        file=upload,
+        original_filename=filename,
+        content_type=content_type,
+        size_bytes=len(content),
+        submitted_by_user_id=submitted_by or internship.student_user_id,
+        status=status or SubmissionStatus.SUBMITTED,
+        reviewed_by_user_id=reviewed_by,
+        reviewed_at=timezone.now() if reviewed_by else None,
+        review_reason=reason,
+    )
+
+
+def make_evaluation(internship, *, supervisor=None, grade="15.00", comment=""):
+    from .models import InternshipEvaluation
+
+    return InternshipEvaluation.objects.create(
+        internship=internship,
+        supervisor_user_id=supervisor or internship.supervisor_user_id,
+        grade=grade,
+        comment=comment,
+    )

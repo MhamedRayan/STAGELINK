@@ -1,35 +1,52 @@
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from rest_framework import generics, status as http_status
 from rest_framework.generics import get_object_or_404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .exceptions import EvaluationNotFound, SubmissionNotFound
 from .permissions import (
     IsInternalService,
+    IsStudent,
     IsStudentOrCompany,
+    IsSupervisor,
     IsSupervisorOrUniversityAdmin,
     IsUniversityAdmin,
 )
-from .selectors import filter_internships, visible_internships_for
+from .selectors import (
+    filter_internships,
+    visible_internships_for,
+    visible_internships_for_submissions,
+)
 from .models import CancellationRequest
 from .serializers import (
     CancellationDecisionSerializer,
     CancellationRequestCreateSerializer,
     CancellationRequestSerializer,
+    EvaluationCreateSerializer,
     InternshipAuditSerializer,
     InternshipCreateSerializer,
+    InternshipEvaluationSerializer,
     InternshipQuerySerializer,
     InternshipSerializer,
+    InternshipSubmissionSerializer,
+    SubmissionFileSerializer,
+    SubmissionReviewSerializer,
     SupervisorAssignSerializer,
 )
 from .services import (
     assign_supervisor,
     complete_internship,
+    create_evaluation,
     create_internship,
+    create_submission,
     decide_cancellation,
+    get_evaluation,
     get_history,
+    list_submissions,
     request_cancellation,
+    review_submission,
     start_internship,
 )
 
@@ -212,3 +229,140 @@ class CancellationApproveView(CancellationDecisionView):
 
 class CancellationRejectView(CancellationDecisionView):
     approve = False
+
+
+# ---------------------------------------------------------------------------
+# Final submissions (P1-2), review (P1-3) and evaluation (P1-4)
+# ---------------------------------------------------------------------------
+
+
+class InternshipSubmissionListCreateView(APIView):
+    """
+    GET: list the submission versions of an internship the caller may read.
+    POST: upload a new version (student on the internship only).
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsStudent()]
+        return [IsAuthenticated()]
+
+    def get(self, request, pk):
+        internship = get_object_or_404(
+            visible_internships_for_submissions(request.user), pk=pk
+        )
+        return Response(
+            {
+                "results": InternshipSubmissionSerializer(
+                    list_submissions(internship), many=True
+                ).data
+            }
+        )
+
+    def post(self, request, pk):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        serializer = SubmissionFileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        submission = create_submission(
+            internship,
+            upload=serializer.validated_data["file"],
+            submitted_by_user_id=request.user.user_id,
+        )
+        return Response(
+            InternshipSubmissionSerializer(submission).data,
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class InternshipSubmissionDownloadView(APIView):
+    """GET: authorised download of one stored submission file."""
+
+    def get(self, request, pk, submission_id):
+        internship = get_object_or_404(
+            visible_internships_for_submissions(request.user), pk=pk
+        )
+        submission = get_object_or_404(
+            internship.submissions.all(), pk=submission_id
+        )
+
+        try:
+            file_handle = submission.file.open("rb")
+        except FileNotFoundError as exc:
+            raise SubmissionNotFound(message="The stored file is missing.") from exc
+
+        response = FileResponse(
+            file_handle,
+            as_attachment=True,
+            filename=submission.original_filename or "submission",
+            content_type=submission.content_type or "application/octet-stream",
+        )
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
+
+
+class SubmissionReviewView(APIView):
+    """Base for approve and reject. Only the assigned supervisor may review."""
+
+    permission_classes = [IsAuthenticated, IsSupervisor]
+    approve = False
+
+    def post(self, request, pk, submission_id):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        submission = get_object_or_404(
+            internship.submissions.all(), pk=submission_id
+        )
+        serializer = SubmissionReviewSerializer(data=request.data or {})
+        serializer.is_valid(raise_exception=True)
+
+        updated = review_submission(
+            internship,
+            submission,
+            approve=self.approve,
+            actor_user_id=request.user.user_id,
+            reason=serializer.validated_data["reason"],
+        )
+        return Response(InternshipSubmissionSerializer(updated).data)
+
+
+class SubmissionApproveView(SubmissionReviewView):
+    approve = True
+
+
+class SubmissionRejectView(SubmissionReviewView):
+    approve = False
+
+
+class InternshipEvaluationView(APIView):
+    """
+    GET: read the evaluation (student, company, assigned supervisor, university admin).
+    POST: record it and complete the internship (assigned supervisor only).
+    """
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsAuthenticated(), IsSupervisor()]
+        return [IsAuthenticated()]
+
+    def get(self, request, pk):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        evaluation = get_evaluation(internship)
+        if evaluation is None:
+            raise EvaluationNotFound()
+        return Response(InternshipEvaluationSerializer(evaluation).data)
+
+    def post(self, request, pk):
+        internship = get_object_or_404(visible_internships_for(request.user), pk=pk)
+        serializer = EvaluationCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        evaluation = create_evaluation(
+            internship,
+            supervisor_user_id=request.user.user_id,
+            grade=serializer.validated_data["grade"],
+            comment=serializer.validated_data["comment"],
+        )
+        return Response(
+            InternshipEvaluationSerializer(evaluation).data,
+            status=http_status.HTTP_201_CREATED,
+        )

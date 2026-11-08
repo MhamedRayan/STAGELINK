@@ -6,10 +6,15 @@ from .views import (
     CancellationRequestListCreateView,
     InternshipCompleteView,
     InternshipDetailView,
+    InternshipEvaluationView,
     InternshipHistoryView,
     InternshipListView,
     InternshipStartView,
+    InternshipSubmissionDownloadView,
+    InternshipSubmissionListCreateView,
     InternshipSupervisorView,
+    SubmissionApproveView,
+    SubmissionRejectView,
 )
 
 urlpatterns = [
@@ -41,5 +46,30 @@ urlpatterns = [
         "internships/<uuid:pk>/cancellation-requests/<uuid:request_id>/reject/",
         CancellationRejectView.as_view(),
         name="internship-cancellation-reject",
+    ),
+    path(
+        "internships/<uuid:pk>/submissions/",
+        InternshipSubmissionListCreateView.as_view(),
+        name="internship-submissions",
+    ),
+    path(
+        "internships/<uuid:pk>/submissions/<uuid:submission_id>/download/",
+        InternshipSubmissionDownloadView.as_view(),
+        name="internship-submission-download",
+    ),
+    path(
+        "internships/<uuid:pk>/submissions/<uuid:submission_id>/approve/",
+        SubmissionApproveView.as_view(),
+        name="internship-submission-approve",
+    ),
+    path(
+        "internships/<uuid:pk>/submissions/<uuid:submission_id>/reject/",
+        SubmissionRejectView.as_view(),
+        name="internship-submission-reject",
+    ),
+    path(
+        "internships/<uuid:pk>/evaluation/",
+        InternshipEvaluationView.as_view(),
+        name="internship-evaluation",
     ),
 ]

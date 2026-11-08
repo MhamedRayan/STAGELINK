@@ -1,7 +1,9 @@
+import os
 import uuid
 
 from django.db import models
 from django.db.models import F, Q
+from django.utils.text import get_valid_filename
 
 
 class InternshipStatus(models.TextChoices):
@@ -39,6 +41,11 @@ class Internship(models.Model):
         choices=InternshipStatus.choices,
         default=InternshipStatus.CONFIRMED,
     )
+    # Set once the place reserved by the source application has been released
+    # back to the offer after an approved cancellation. Null means either that no
+    # release is needed (the internship was never cancelled) or that delivery to
+    # the Applications service has not succeeded yet.
+    place_released_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -70,6 +77,11 @@ class InternshipAuditAction(models.TextChoices):
     CANCELLATION_REQUESTED = "cancellation_requested", "Cancellation requested"
     CANCELLATION_APPROVED = "cancellation_approved", "Cancellation approved"
     CANCELLATION_REJECTED = "cancellation_rejected", "Cancellation rejected"
+    SUBMISSION_CREATED = "submission_created", "Submission created"
+    SUBMISSION_APPROVED = "submission_approved", "Submission approved"
+    SUBMISSION_REJECTED = "submission_rejected", "Submission rejected"
+    EVALUATION_PUBLISHED = "evaluation_published", "Evaluation published"
+    PLACE_RELEASED = "place_released", "Place released"
 
 
 class InternshipAudit(models.Model):
@@ -149,3 +161,99 @@ class CancellationRequest(models.Model):
 
     def __str__(self):
         return f"Cancellation {self.pk} ({self.status}) for {self.internship_id}"
+
+
+class SubmissionStatus(models.TextChoices):
+    SUBMITTED = "SUBMITTED", "Submitted"
+    APPROVED = "APPROVED", "Approved"
+    REJECTED = "REJECTED", "Rejected"
+
+
+def submission_upload_path(instance, filename):
+    """
+    Store each file under its internship and version, with a sanitised name.
+
+    The path never becomes a public URL: downloads go through an authorised
+    endpoint. The original filename is kept separately for the download header.
+    """
+    safe_name = get_valid_filename(os.path.basename(filename))[:120]
+    return f"submissions/{instance.internship_id}/v{instance.version}/{safe_name}"
+
+
+class InternshipSubmission(models.Model):
+    """
+    One version of the student's final submission. Versions are immutable once
+    reviewed; a rejected submission can be followed by a new version.
+
+    At most one version per internship may be pending, and versions are unique
+    per internship. Both rules are enforced by partial unique indexes so they
+    hold even when two uploads race each other.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    internship = models.ForeignKey(
+        Internship,
+        on_delete=models.PROTECT,
+        related_name="submissions",
+    )
+    version = models.PositiveIntegerField()
+    file = models.FileField(upload_to=submission_upload_path, max_length=255)
+    original_filename = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100, blank=True)
+    size_bytes = models.PositiveBigIntegerField()
+    submitted_by_user_id = models.UUIDField()
+    status = models.CharField(
+        max_length=20,
+        choices=SubmissionStatus.choices,
+        default=SubmissionStatus.SUBMITTED,
+    )
+    reviewed_by_user_id = models.UUIDField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_reason = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-version"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["internship", "version"],
+                name="one_submission_version_per_internship",
+            ),
+            models.UniqueConstraint(
+                fields=["internship"],
+                condition=Q(status=SubmissionStatus.SUBMITTED),
+                name="one_pending_submission_per_internship",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Submission v{self.version} for {self.internship_id} ({self.status})"
+
+
+class InternshipEvaluation(models.Model):
+    """
+    The final grade for an internship, recorded once by the assigned
+    supervisor. It is immutable: corrections are out of scope in v1.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    internship = models.OneToOneField(
+        Internship,
+        on_delete=models.PROTECT,
+        related_name="evaluation",
+    )
+    supervisor_user_id = models.UUIDField()
+    grade = models.DecimalField(max_digits=4, decimal_places=2)
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(grade__gte=0) & Q(grade__lte=20),
+                name="evaluation_grade_between_0_and_20",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Evaluation {self.grade}/20 for {self.internship_id}"

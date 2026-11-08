@@ -82,8 +82,45 @@ jobs:
       - name: Run Django checks
         run: python manage.py check
 
+      - name: Check for missing migrations
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Run tests
         run: python manage.py test
+
+  contract-validation:
+    name: Contract validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install OpenAPI validator
+        run: pip install openapi-spec-validator
+
+      - name: Validate every contract
+        run: |
+          python - <<'PY'
+          import glob
+
+          from openapi_spec_validator import validate
+          from openapi_spec_validator.readers import read_from_filename
+
+          paths = sorted(glob.glob("contracts/*.yaml"))
+          if not paths:
+              raise SystemExit("No contracts found")
+
+          for path in paths:
+              spec, _ = read_from_filename(path)
+              validate(spec)
+              print(f"{path}: OK")
+          PY
 
   integration-tests:
     name: Integration tests (applications -> internships)

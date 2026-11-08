@@ -31,6 +31,24 @@ def visible_internships_for(actor):
     return Internship.objects.none()
 
 
+# The company does not see the student's uploaded report: it is not part of the
+# company's responsibility in the brief. Everyone else taking part does.
+SUBMISSION_READER_ROLES = frozenset(
+    {
+        Role.STUDENT,
+        Role.SUPERVISOR,
+        Role.UNIVERSITY_ADMIN,
+    }
+)
+
+
+def visible_internships_for_submissions(actor):
+    """Internships whose submissions this caller may list or download."""
+    if actor.role not in SUBMISSION_READER_ROLES:
+        return Internship.objects.none()
+    return visible_internships_for(actor)
+
+
 def filter_internships(queryset, actor, filters):
     """
     Apply the caller's filters and ordering to an already visible queryset.
