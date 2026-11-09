@@ -120,6 +120,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 JWT_SIGNING_KEY = env("JWT_SIGNING_KEY", default=SECRET_KEY)
 JWT_ROLE_CLAIM = env("JWT_ROLE_CLAIM", default="role")
 
+# Shared secret that trusted services send in the X-Service-Token header.
+INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTStatelessUserAuthentication",

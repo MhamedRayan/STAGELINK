@@ -194,3 +194,86 @@ exactly-once in storage. A process that crashes after commit but before the
 callback runs can still lose an event; the same deterministic key lets a
 reconciliation job replay it safely. The shared service token remains the
 trust boundary for internal writes.
+
+## ADR-010: Internship submissions, review, evaluation and side effects
+
+**Status:** accepted
+**Date:** 2026-11-08
+
+**Context:** The internship record needs the rest of the academic workflow:
+the student's final report, the supervisor's review, the final grade, and the
+cross-service consequences of cancellation. These steps touch files, external
+services, and irreversible state, so their rules must be explicit.
+
+**Decision:**
+
+- The internship lifecycle remains `confirmed → in_progress → completed`.
+  `cancelled` is reached only through an approved cancellation request.
+- The student on the internship uploads versioned final submissions while the
+  internship is `in_progress`. At most one version is pending. A rejected
+  version allows a resubmission; an approved version ends the upload flow.
+- Submission status values are uppercase `SUBMITTED`, `APPROVED`, `REJECTED`.
+  Existing internship and cancellation values remain lowercase because they are
+  already shipped.
+- Files are validated by extension and size (maximum 10 MB), stored under
+  `MEDIA_ROOT` on a mounted volume, and never served directly. Every download
+  goes through an authorised endpoint. The student, the assigned supervisor and
+  university administration can read submissions; the company cannot.
+- The assigned supervisor reviews a pending version with a mandatory reason.
+  Approval or rejection stores the reviewer, time and reason and writes an audit
+  entry.
+- The assigned supervisor records exactly one evaluation, with a grade from 0 to
+  20. An approved submission is required. Creating the evaluation moves the
+  internship to `completed` in the same transaction.
+- The audit history is append-only. Every state change writes its entry in the
+  same transaction as the change it describes.
+- Notifications are best effort and scheduled with `transaction.on_commit`.
+  Failures are logged and never roll back the internship change. Recipient IDs
+  are UUIDs and deduplication keys are stable per event and recipient.
+  University-administrator recipients come from
+  `UNIVERSITY_ADMIN_USER_IDS` until Identity exposes a role directory.
+- Approving a cancellation queues a call to
+  `POST /api/internal/applications/{source_application_id}/release-place/` on
+  the Applications service. That endpoint is owned by Applications and is
+  expected to be idempotent. The `place_released_at` marker records success, and
+  the `release_cancelled_places` management command retries failures. The
+  cancellation itself is never blocked by an Applications outage.
+
+**Consequences:** Uploaded files require an operational backup in addition to
+the database; see [`media-storage.md`](media-storage.md). The release call and
+some notifications depend on contracts owned by other services, so integration
+tests for those seams stay gated until the endpoints and UUID recipient support
+land. Because evaluations are immutable in v1, a correction requires a
+deliberate administrative data change rather than a second API call.
+
+## ADR-008: Offers lifecycle rules (deadline, published edits, draft deletion, applications count)
+
+**Status:** accepted
+**Date:** 2026-11-05
+
+**Context:** The Offers service needs clear rules for what happens when a
+deadline passes, what a company may change after publishing, how drafts are
+removed, and where the applications count per offer comes from.
+
+**Decision:**
+
+- **Deadline:** published offers whose deadline has passed are closed by the
+  idempotent management command `close_expired_offers`, run by a scheduler. A
+  lazy check on read was rejected because list queries filter on status and
+  reads should not write. Between runs an expired offer may still appear as
+  published.
+- **Published edits:** while published, `title` and `location` cannot change
+  (409, code `field_locked_while_published`); capacity can only increase;
+  `description`, `requirements` and `deadline` stay editable. Drafts are fully
+  editable and closed offers are not editable.
+- **Draft deletion:** only drafts can be deleted, as a soft delete
+  (`deleted_at`). A deleted offer returns 404 on every route, including the
+  internal lookup.
+- **Applications count:** Applications exposes an internal count per offer and
+  Offers stores no counter, so there is one source of truth. This requires an
+  endpoint in Applications.
+
+**Consequences:** Offers needs a scheduler for the closing command. Editing
+rules can be relaxed later without a migration. The capacity-reduction block
+stays until Applications publishes its committed-places endpoint. Deleted
+drafts stay in the database.

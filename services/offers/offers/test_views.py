@@ -213,7 +213,7 @@ class OfferDetailTests(APITestCase):
         offer = create_offer(company_user_id=OWNER_ID, status=OfferStatus.PUBLISHED)
         client = build_client(OWNER_ID, UserRole.COMPANY)
 
-        for method in (client.put, client.delete):
+        for method in (client.put, client.post):
             with self.subTest(method=method.__name__):
                 response = method(self.detail_url(offer.id))
 
