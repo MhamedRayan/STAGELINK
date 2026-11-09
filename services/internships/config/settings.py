@@ -18,6 +18,7 @@ ALLOWED_HOSTS = env.list(
     "DJANGO_ALLOWED_HOSTS",
     default=env.list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]),
 )
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -97,6 +98,37 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Uploaded student submissions. These files must never be served directly:
+# every download goes through the authorised endpoint. The directory may live on
+# a mounted volume in Docker; see docs/media-storage.md.
+MEDIA_ROOT = env("MEDIA_ROOT", default=str(BASE_DIR / "media"))
+MEDIA_URL = "/media/"
+MAX_SUBMISSION_SIZE_BYTES = env.int(
+    "MAX_SUBMISSION_SIZE_BYTES", default=10 * 1024 * 1024
+)
+ALLOWED_SUBMISSION_EXTENSIONS = (
+    ".pdf",
+    ".docx",
+    ".pptx",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".csv",
+)
+ALLOWED_SUBMISSION_CONTENT_TYPES = (
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "image/jpeg",
+    "image/png",
+    "text/csv",
+    "application/csv",
+    "application/vnd.ms-excel",
+)
+# Never make uploaded files world-readable on disk.
+FILE_UPLOAD_PERMISSIONS = 0o640
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o750
+
 # WhiteNoise serves the admin and DRF static assets from STATIC_ROOT when the
 # services run under gunicorn (runserver handles them itself in DEBUG).
 STORAGES = {
@@ -110,6 +142,33 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Shared secret for service-to-service calls (X-Service-Token header).
 # Empty by default, so if it is not configured, nothing passes.
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
+
+# Identity & Profiles internal directory, used to verify supervisors before assignment.
+IDENTITY_BASE_URL = env("IDENTITY_BASE_URL", default="http://localhost:8001")
+IDENTITY_TIMEOUT_SECONDS = env.float("IDENTITY_TIMEOUT_SECONDS", default=5.0)
+
+# Notifications service. Calls are best-effort: a failure never rolls back the
+# internship change. Delivery happens after the database commit.
+NOTIFICATIONS_BASE_URL = env(
+    "NOTIFICATIONS_BASE_URL", default="http://localhost:8005"
+)
+NOTIFICATIONS_TIMEOUT_SECONDS = env.float(
+    "NOTIFICATIONS_TIMEOUT_SECONDS", default=5.0
+)
+NOTIFICATIONS_ENABLED = env.bool("NOTIFICATIONS_ENABLED", default=True)
+
+# Applications service, used to release a reserved place after an approved
+# cancellation. The call is retried by the release_cancelled_places command.
+APPLICATIONS_BASE_URL = env(
+    "APPLICATIONS_BASE_URL", default="http://localhost:8003"
+)
+APPLICATIONS_TIMEOUT_SECONDS = env.float(
+    "APPLICATIONS_TIMEOUT_SECONDS", default=5.0
+)
+
+# Until Identity exposes a role directory, university administrators who must
+# receive cancellation notifications are configured explicitly as UUIDs.
+UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
 
 # JWT issued by the Identity & Profiles service. The signing key must match theirs.
 # The algorithm is fixed in code on purpose, not read from the environment, so it
@@ -126,4 +185,21 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Every error uses the shared {code, message, details} envelope.
+    "EXCEPTION_HANDLER": "internships.exceptions.service_exception_handler",
 }
+
+# Transport security. Defaults are safe for local development; a deployment sets
+# SECURE_SSL_REDIRECT and SECURE_HSTS_SECONDS explicitly.
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+# Set only when running behind a TLS-terminating proxy that overwrites the header.
+if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

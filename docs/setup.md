@@ -64,6 +64,25 @@ Each response should be similar to:
 {"status": "ok", "service": "identity"}
 ```
 
+## Uploads and media
+
+The internships service stores student submissions on the `internships-media`
+Docker volume mounted at `/app/media`:
+
+```bash
+# The volume must be listed
+docker volume ls | grep internships-media
+
+# An upload created through the API must survive a recreate
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec internships find /app/media -type f
+```
+
+Files are never served from a public URL; downloads use the authorised endpoint.
+The 10 MB limit is controlled by `MAX_SUBMISSION_SIZE_BYTES`. If you add a
+reverse proxy, set `client_max_body_size` slightly above it. Backup and restore
+procedures are in [`media-storage.md`](media-storage.md).
+
 ## 5. Useful Compose commands
 
 ```bash

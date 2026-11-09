@@ -129,6 +129,20 @@ sent to the browser or included in a public contract example.
 Permissions are checked in the owning service. A gateway or frontend must not
 be the only place where authorization is enforced.
 
+## File uploads and downloads
+
+- Uploads use `multipart/form-data` with a single `file` field unless the
+  contract documents otherwise.
+- The owning service validates the file extension and size before storing it,
+  and documents the limit in its contract.
+- Uploaded files are stored outside any directly served web root. `MEDIA_URL`
+  must not be routed: a public URL would bypass the service's authorization.
+- Downloads use an authorised endpoint that checks visibility on every request
+  and returns the file as an attachment with its original filename. Storage
+  paths and internal filenames are never exposed in JSON responses.
+- Set `X-Content-Type-Options: nosniff` on downloads and never trust a
+  client-supplied content type.
+
 ## Idempotency
 
 Creating operations that may be retried accept an `Idempotency-Key` header.

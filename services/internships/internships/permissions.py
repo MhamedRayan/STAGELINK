@@ -3,6 +3,8 @@ import secrets
 from django.conf import settings
 from rest_framework.permissions import BasePermission
 
+from .roles import Role
+
 SERVICE_TOKEN_HEADER = "X-Service-Token"
 
 
@@ -21,3 +23,44 @@ class IsInternalService(BasePermission):
 
         # Constant-time comparison prevents timing attacks on the token.
         return secrets.compare_digest(provided.encode(), expected.encode())
+
+
+class IsUniversityAdmin(BasePermission):
+    message = "Only university administration can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == Role.UNIVERSITY_ADMIN
+
+
+class IsSupervisorOrUniversityAdmin(BasePermission):
+    """Supervisors may act on their assigned internships; the visibility rule limits which ones."""
+
+    message = "Only a supervisor or university administration can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) in {Role.SUPERVISOR, Role.UNIVERSITY_ADMIN}
+
+
+class IsStudentOrCompany(BasePermission):
+    """Only the student or the company on an internship may request its cancellation."""
+
+    message = "Only the student or the company can request a cancellation."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) in {Role.STUDENT, Role.COMPANY}
+
+
+class IsStudent(BasePermission):
+    message = "Only a student can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == Role.STUDENT
+
+
+class IsSupervisor(BasePermission):
+    """Role check only; assignment to the specific internship is checked in the service."""
+
+    message = "Only a supervisor can perform this action."
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) == Role.SUPERVISOR
