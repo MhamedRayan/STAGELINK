@@ -6,6 +6,8 @@ JWTAuthentication validates tokens issued by Identity & Profiles locally
 DevHeaderAuthentication is a development-only stub that trusts X-User-Id.
 It only works when DEV_AUTH_ENABLED is true (default: same as DEBUG).
 """
+import uuid
+
 import jwt
 from django.conf import settings
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
@@ -84,12 +86,10 @@ class JWTAuthentication(BaseAuthentication):
             raise AuthenticationFailed("Token has no valid user id.")
 
         try:
-            user_id = int(raw_user_id)
-        except (TypeError, ValueError):
+            user_id = uuid.UUID(str(raw_user_id))
+        except (AttributeError, TypeError, ValueError):
             raise AuthenticationFailed("Token has no valid user id.")
 
-        if user_id < 1:
-            raise AuthenticationFailed("Token has no valid user id.")
         return user_id
 
 
@@ -105,9 +105,9 @@ class DevHeaderAuthentication(BaseAuthentication):
             return None
 
         try:
-            user_id = int(raw_user_id)
-        except ValueError:
-            raise AuthenticationFailed("X-User-Id must be an integer.")
+            user_id = uuid.UUID(raw_user_id)
+        except (AttributeError, TypeError, ValueError):
+            raise AuthenticationFailed("X-User-Id must be a UUID.")
 
         return (StatelessUser(user_id), None)
 

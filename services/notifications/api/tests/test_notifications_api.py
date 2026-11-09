@@ -1,3 +1,5 @@
+import uuid
+
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
@@ -22,9 +24,11 @@ def _create_notification(recipient_user_id, deduplication_key, **overrides):
 class NotificationApiTests(TestCase):
     def setUp(self):
         self.api_client = APIClient()
-        self.first_own = _create_notification(42, "key-1")
-        self.second_own = _create_notification(42, "key-2")
-        self.other_users = _create_notification(77, "key-3")
+        self.recipient_id = uuid.uuid4()
+        self.other_user_id = uuid.uuid4()
+        self.first_own = _create_notification(self.recipient_id, "key-1")
+        self.second_own = _create_notification(self.recipient_id, "key-2")
+        self.other_users = _create_notification(self.other_user_id, "key-3")
 
     def _login_as(self, user_id):
         self.api_client.credentials(HTTP_X_USER_ID=str(user_id))
@@ -38,27 +42,27 @@ class NotificationApiTests(TestCase):
 
     @override_settings(DEV_AUTH_ENABLED=False)
     def test_dev_header_is_ignored_when_dev_auth_is_disabled(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         self.assertEqual(self.api_client.get("/api/notifications/").status_code, 401)
 
     def test_invalid_user_id_header_is_rejected(self):
-        self.api_client.credentials(HTTP_X_USER_ID="abc")
+        self.api_client.credentials(HTTP_X_USER_ID="not-a-uuid")
 
         self.assertEqual(self.api_client.get("/api/notifications/").status_code, 401)
 
     # --- list -----------------------------------------------------------
     def test_list_returns_only_own_notifications_newest_first(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         response = self.api_client.get("/api/notifications/")
 
         self.assertEqual(response.status_code, 200)
         ids = [item["id"] for item in response.json()["results"]]
-        self.assertEqual(ids, [self.second_own.id, self.first_own.id])
+        self.assertEqual(ids, [str(self.second_own.id), str(self.first_own.id)])
 
     def test_list_is_paginated(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         body = self.api_client.get("/api/notifications/").json()
 
@@ -66,7 +70,7 @@ class NotificationApiTests(TestCase):
         self.assertIn("results", body)
 
     def test_list_hides_internal_fields(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         item = self.api_client.get("/api/notifications/").json()["results"][0]
 
@@ -75,16 +79,16 @@ class NotificationApiTests(TestCase):
         self.assertFalse(item["is_read"])
 
     def test_list_can_filter_unread_only(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
         self.api_client.patch(f"/api/notifications/{self.first_own.id}/read/")
 
         body = self.api_client.get("/api/notifications/?unread=true").json()
 
-        self.assertEqual([item["id"] for item in body["results"]], [self.second_own.id])
+        self.assertEqual([item["id"] for item in body["results"]], [str(self.second_own.id)])
 
     # --- unread count ---------------------------------------------------
     def test_unread_count_counts_only_own_unread_notifications(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         self.assertEqual(self.api_client.get("/api/notifications/unread-count/").json(), {"unread_count": 2})
 
@@ -94,7 +98,7 @@ class NotificationApiTests(TestCase):
 
     # --- mark read ------------------------------------------------------
     def test_mark_read_sets_read_at_and_leaves_other_notifications_unread(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         response = self.api_client.patch(f"/api/notifications/{self.first_own.id}/read/")
 
@@ -106,7 +110,7 @@ class NotificationApiTests(TestCase):
         self.assertIsNone(self.second_own.read_at)
 
     def test_mark_read_twice_keeps_the_first_read_at(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
         self.api_client.patch(f"/api/notifications/{self.first_own.id}/read/")
         self.first_own.refresh_from_db()
         first_read_at = self.first_own.read_at
@@ -118,10 +122,17 @@ class NotificationApiTests(TestCase):
         self.assertEqual(self.first_own.read_at, first_read_at)
 
     def test_cannot_mark_another_users_notification_as_read(self):
-        self._login_as(42)
+        self._login_as(self.recipient_id)
 
         response = self.api_client.patch(f"/api/notifications/{self.other_users.id}/read/")
 
         self.assertEqual(response.status_code, 404)
         self.other_users.refresh_from_db()
         self.assertIsNone(self.other_users.read_at)
+
+    def test_non_uuid_notification_id_is_rejected(self):
+        self._login_as(self.recipient_id)
+
+        for notification_id in ["123", "not-a-uuid"]:
+            response = self.api_client.patch(f"/api/notifications/{notification_id}/read/")
+            self.assertEqual(response.status_code, 404, notification_id)

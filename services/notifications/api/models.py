@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -13,6 +15,7 @@ class Notification(models.Model):
         APPLICATION_VALIDATED = "application_validated"  # -> student
         APPLICATION_REJECTED_BY_UNIVERSITY = "application_rejected_by_university"  # -> student + company
         STUDENT_DECISION = "student_decision"  # -> company
+        APPLICATION_CONFIRMED = "application_confirmed"  # -> company + university admin
         APPLICATION_WITHDRAWN = "application_withdrawn"  # -> student / company
         INTERNSHIP_CREATED = "internship_created"
         SUPERVISOR_ASSIGNED = "supervisor_assigned"
@@ -22,7 +25,8 @@ class Notification(models.Model):
         EVALUATION_PUBLISHED = "evaluation_published"
         GENERIC = "generic"
 
-    recipient_user_id = models.BigIntegerField()
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient_user_id = models.UUIDField(db_index=True)
     type = models.CharField(max_length=64, choices=Type.choices)
     title = models.CharField(max_length=255)
     message = models.TextField()

@@ -21,6 +21,8 @@ Store in-app notifications, let each user see **only their own**, track read sta
 
 ```python
 # api/models.py
+import uuid
+
 from django.db import models
 
 class Notification(models.Model):
@@ -29,6 +31,7 @@ class Notification(models.Model):
         APPLICATION_VALIDATED          = "application_validated"            # → student
         APPLICATION_REJECTED_BY_UNIV   = "application_rejected_by_university"  # → student + company
         STUDENT_DECISION               = "student_decision"                 # → company
+        APPLICATION_CONFIRMED          = "application_confirmed"            # → company + university admin
         APPLICATION_WITHDRAWN          = "application_withdrawn"            # → student / company
         INTERNSHIP_CREATED             = "internship_created"
         SUPERVISOR_ASSIGNED            = "supervisor_assigned"
@@ -38,7 +41,8 @@ class Notification(models.Model):
         EVALUATION_PUBLISHED           = "evaluation_published"
         GENERIC                        = "generic"
 
-    recipient_user_id   = models.BigIntegerField(db_index=True)   # plain ID, NO foreign key
+    id                  = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient_user_id   = models.UUIDField(db_index=True)   # plain UUID, NO foreign key
     type                = models.CharField(max_length=64, choices=Type.choices)
     title               = models.CharField(max_length=255)
     message             = models.TextField()
@@ -57,7 +61,7 @@ class Notification(models.Model):
 ```
 
 Notes:
-- Confirm with Identity whether user IDs are integers or UUIDs; adjust `recipient_user_id` accordingly.
+- Identity & Profiles owns user IDs; they are UUIDs (ADR-007). `recipient_user_id` is stored as a plain UUID with no foreign key.
 - The Type list is a proposal derived from FR-13; share it with the other members and trim/extend.
 
 ## 3. API endpoints
@@ -68,7 +72,7 @@ Notes:
 | GET | `/api/notifications/` | user JWT | Caller's notifications, paginated, newest first. Optional `?unread=true` |
 | GET | `/api/notifications/unread-count/` | user JWT | `{"unread_count": N}` |
 | PATCH | `/api/notifications/{id}/read/` | user JWT | Mark read **only if caller is recipient**; otherwise 404. Idempotent (keeps first `read_at`) |
-| POST | `/api/notifications/read-all/` | user JWT | *(optional)* mark all caller's notifications read |
+| POST | `/api/notifications/read-all/` | user JWT | Mark all caller's notifications read |
 | POST | `/api/internal/notifications/` | service token | Create notification, deduplicated |
 
 ### Internal create contract (draft, to agree with other members)
@@ -76,30 +80,30 @@ Notes:
 Request:
 ```json
 {
-  "recipient_user_id": 42,
+  "recipient_user_id": "3f2c9a1e-7b4d-4c6a-9e2f-1a2b3c4d5e6f",
   "type": "application_validated",
   "title": "Application validated",
   "message": "The university validated your application. You can now accept or decline.",
   "related_object_type": "application",
-  "related_object_id": "1234",
-  "deduplication_key": "application:1234:validated:recipient:42"
+  "related_object_id": "b6a1f0c2-8d3e-4f5a-9b7c-0d1e2f3a4b5c",
+  "deduplication_key": "application:b6a1f0c2-8d3e-4f5a-9b7c-0d1e2f3a4b5c:validated:recipient:3f2c9a1e-7b4d-4c6a-9e2f-1a2b3c4d5e6f"
 }
 ```
 
 Responses:
 - `201 Created`: new notification created.
 - `200 OK`: same `deduplication_key` already exists → return the **existing** notification (no duplicate). This makes caller retries safe.
-- `400`: validation error · `401/403`: missing or invalid service token.
+- `400`: validation error · `403`: missing or invalid service token.
 
 **Deduplication key convention** (stable event ID **per recipient**):
-`{object_type}:{object_id}:{event}:recipient:{user_id}`: e.g. `application:1234:rejected_by_university:recipient:42`.
-One request = one recipient. If an event has two recipients (university rejection → student + company), the caller sends two requests (or we later add a bulk endpoint). Decide with the team.
+`{object_type}:{object_id}:{event}:recipient:{user_id}`: e.g. `application:1234:rejected_by_university:recipient:3f2c9a1e-7b4d-4c6a-9e2f-1a2b3c4d5e6f`.
+One request = one recipient. If an event has two recipients (university rejection → student + company), the caller sends two requests (or we later add a bulk endpoint).
 
 ## 4. Authentication and permissions
 
 **User endpoints**
-- Validate the JWT locally (signature + expiry) with `djangorestframework-simplejwt`. **Agree with the Identity & Profiles member on:** algorithm (HS256 shared secret vs RS256 public key), the claim holding the user ID (`user_id`?), and the role claim.
-- No local `User` table: write a small custom authentication class returning a lightweight stateless user object (`.id`, `.role`, `.is_authenticated = True`).
+- Validate the JWT locally (signature + expiry). The Identity & Profiles member issues tokens; this service is configured with the shared algorithm and key (`JWT_ALGORITHM`, `JWT_SIGNING_KEY`).
+- No local `User` table: write a small custom authentication class returning a lightweight stateless user object (`.id`, `.role`, `.is_authenticated = True`). The user ID claim (default `user_id`) must contain a UUID; any other value is rejected with `401`.
 - Every queryset is filtered by `recipient_user_id = request.user.id`. Accessing another user's notification returns **404** (don't leak existence).
 
 **Internal endpoint**
@@ -153,7 +157,8 @@ Then: `python manage.py makemigrations && python manage.py migrate`, `python man
 ## 7. Tests to write
 
 - **Model/unit:** unique `deduplication_key`; `read_at` set once.
-- **Permissions:** user A cannot list/read/mark user B's notifications (expect 404); anonymous → 401; user JWT cannot call the internal endpoint; invalid/missing service token → 401/403.
+- **Permissions:** user A cannot list/read/mark user B's notifications (expect 404); anonymous → 401; user JWT cannot call the internal endpoint; invalid/missing service token → 403.
+- **UUIDs:** a token with a non-UUID `user_id` → 401; `X-User-Id` with a non-UUID value → 401; a non-UUID notification route ID → 404; internal create with a non-UUID `recipient_user_id` → 400.
 - **Behavior:** unread-count correct; marking one notification leaves the others unread; marking twice is idempotent; mark-all-read affects only the caller.
 - **Dedup/retry:** same key twice → one row, second response 200 with same ID; concurrent duplicate requests → one row.
 - **Pagination:** page size, ordering newest first.
@@ -166,13 +171,13 @@ Source code, migrations, API documentation (OpenAPI + the contract in §3), READ
 ## 9. Open questions to settle with the team (this week)
 
 1. **Service count:** tech spec says 3 services with notifications owned by *Internship Management*; the team guide gives us a **standalone** Notifications service. Confirm with Dr. Yahiaten/the team. Either way, keep the REST contract above so it can be merged later.
-2. **JWT details:** algorithm, key sharing, claim names, ID type: ask the Identity member.
-3. **Recipient resolution:** who resolves "all university admins"? Proposed: the *caller* gets admin IDs from Identity and sends one request per recipient.
+2. **JWT details:** algorithm and key distribution are configured via `JWT_ALGORITHM` / `JWT_SIGNING_KEY`; confirm the final values with the Identity member. User IDs are UUIDs.
+3. **Recipient resolution:** the caller resolves concrete recipient UUIDs from its own records. Once Identity exposes role lookups, callers may resolve `university_admin` / `supervisor` groups dynamically. See `api_contract.md` §4.1.
 4. **Event/type catalogue and dedup-key format:** share §2 and §3 with Offers & Applications and Internship Management members.
 5. **Service-to-service auth:** one shared token or one per service; how it is distributed (env only).
 6. **Ports/hostnames** in Docker Compose (currently `notifications` on host port `8005`) and who writes the shared compose file/reverse proxy.
 7. **Frontend polling:** the frontend will poll `unread-count` (no websockets in v1). Agree on interval with the frontend member.
-8. **Retention/archiving:** none in v1 unless asked.
+8. **Retention/archiving:** decided in P1-4 — `purge_notifications` deletes read notifications after `NOTIFICATION_RETENTION_DAYS` (default 180) and all notifications after `NOTIFICATION_HARD_RETENTION_DAYS` (default 365). Delivery/reconciliation is recorded in ADR-009; the reference caller is `docs/examples/notifications_client.py`.
 
 ## 10. Suggested schedule
 

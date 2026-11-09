@@ -29,6 +29,18 @@ class OpenApiDocumentationTests(SimpleTestCase):
         self.assertIn("serviceToken", schemes)
         self.assertIn("bearerAuth", schemes)
 
+    def test_notification_id_path_parameter_is_a_uuid(self):
+        path_item = self._get_schema()["paths"]["/api/notifications/{id}/read/"]
+
+        parameters = list(path_item.get("parameters", []))
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                parameters.extend(operation.get("parameters", []))
+
+        id_parameter = next(item for item in parameters if item.get("in") == "path")
+        self.assertEqual(id_parameter["schema"]["type"], "string")
+        self.assertEqual(id_parameter["schema"]["format"], "uuid")
+
     def test_swagger_ui_page_is_served(self):
         response = APIClient().get("/api/docs/")
 

@@ -1,18 +1,20 @@
+import uuid
+
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from api.models import Notification
 
 
-def _build_notification(deduplication_key="application:1:validated:recipient:42", **overrides):
+def _build_notification(deduplication_key=None, **overrides):
     data = {
-        "recipient_user_id": 42,
+        "recipient_user_id": uuid.uuid4(),
         "type": Notification.Type.APPLICATION_VALIDATED,
         "title": "Application validated",
         "message": "You can now accept or decline.",
         "related_object_type": "application",
         "related_object_id": "1",
-        "deduplication_key": deduplication_key,
+        "deduplication_key": deduplication_key or f"key-{uuid.uuid4()}",
     }
     data.update(overrides)
     return Notification.objects.create(**data)
@@ -25,15 +27,31 @@ class NotificationModelTests(TestCase):
         self.assertIsNone(notification.read_at)
         self.assertIsNotNone(notification.created_at)
 
+    def test_id_is_a_uuid(self):
+        notification = _build_notification()
+
+        self.assertIsInstance(notification.id, uuid.UUID)
+
+    def test_recipient_user_id_is_a_uuid(self):
+        notification = _build_notification()
+
+        self.assertIsInstance(notification.recipient_user_id, uuid.UUID)
+
     def test_deduplication_key_must_be_unique(self):
-        _build_notification()
+        notification = _build_notification()
 
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                _build_notification()
+                _build_notification(deduplication_key=notification.deduplication_key)
 
     def test_same_event_for_different_recipients_is_allowed(self):
-        _build_notification("application:1:rejected:recipient:42", recipient_user_id=42)
-        _build_notification("application:1:rejected:recipient:77", recipient_user_id=77)
+        _build_notification(
+            "application:1:rejected:recipient:11111111-1111-1111-1111-111111111111",
+            recipient_user_id=uuid.uuid4(),
+        )
+        _build_notification(
+            "application:1:rejected:recipient:22222222-2222-2222-2222-222222222222",
+            recipient_user_id=uuid.uuid4(),
+        )
 
         self.assertEqual(Notification.objects.count(), 2)

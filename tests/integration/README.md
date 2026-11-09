@@ -11,13 +11,13 @@ Start the stack from the repository root:
 ```bash
 cp .env.example .env
 docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build \
-  identity offers applications internships
+  identity offers applications internships notifications
 ```
 
 Wait until the health endpoints respond:
 
 ```bash
-for port in 8001 8002 8003 8004; do
+for port in 8001 8002 8003 8004 8005; do
   curl --fail "http://localhost:$port/health/"
 done
 ```
@@ -48,6 +48,13 @@ provisioning; it still exercises the exact token claims the services validate.
 - Repeating the internal create is idempotent and returns `200`.
 - The internal endpoint rejects missing and incorrect service tokens.
 - A downstream conflict returns `502` and rolls back the application state.
+- `test_notifications.py`: internal creation is idempotent, the recipient sees
+  exactly one notification, mark-read is idempotent, and a user JWT cannot call
+  the internal endpoint.
+
+`test_notifications.py` also contains a skipped end-to-end confirmation test.
+It is enabled once Applications emits `application_confirmed` events
+(Applications P1-4).
 
 ## Pending internship scenarios
 

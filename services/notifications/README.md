@@ -2,7 +2,9 @@
 
 Django REST Framework microservice that stores in-app notifications, shows each user only their own, tracks read state, and accepts trusted internal requests from other services.
 
-Related documents: `project.md` (whole system), `service.md` (this service's plan), `api_contract.md` (how other services and the frontend use this API).
+All identifiers — notification IDs, recipient user IDs, and cross-service references — are UUIDs exposed as JSON strings. The service stores other services' IDs as plain fields and has no cross-service foreign keys.
+
+Related documents: `project.md` (whole system), `service.md` (this service's plan), `api_contract.md` (how other services and the frontend use this API), `contracts/notifications.yaml` (OpenAPI 3.0.3 contract).
 
 ## Requirements
 - Python 3.12 or newer
@@ -31,24 +33,46 @@ Check it works: open http://127.0.0.1:8005/health/ (or `/api/health/`) → `{"st
 | `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_HOST`, `DB_PORT` | This service's own PostgreSQL database |
 | `JWT_ALGORITHM` | `HS256` (shared secret) or `RS256` (public key). Must match Identity & Profiles |
 | `JWT_SIGNING_KEY` | HS256: shared secret. RS256: public key in PEM, newlines written as `\n` |
-| `JWT_USER_ID_CLAIM`, `JWT_ROLE_CLAIM` | Token claim names (defaults `user_id`, `role`) |
+| `JWT_USER_ID_CLAIM`, `JWT_ROLE_CLAIM` | Token claim names (defaults `user_id`, `role`); the user ID claim must contain a UUID |
 | `INTERNAL_SERVICE_TOKEN` | Secret sent by other services in `X-Service-Token`. Empty = internal endpoint closed |
 | `DEV_AUTH_ENABLED` | Development shortcut: trust the `X-User-Id` header. Defaults to the value of `DJANGO_DEBUG`. **Must be off in production** |
+| `NOTIFICATION_RETENTION_DAYS` | Delete read notifications older than this (default `180`) |
+| `NOTIFICATION_HARD_RETENTION_DAYS` | Delete every notification older than this (default `365`) |
 
 ## API
 
-Interactive documentation (Swagger UI): http://127.0.0.1:8000/api/docs/ · raw schema: `/api/schema/`.
+Interactive documentation (Swagger UI): http://127.0.0.1:8005/api/docs/ · raw schema: `/api/schema/`.
 
 | Method | URL | Auth | Purpose |
 |---|---|---|---|
 | GET | `/health/` or `/api/health/` | none | Health check |
 | GET | `/api/notifications/` | user JWT | My notifications, newest first, paginated (`?unread=true`, `?page=2`) |
 | GET | `/api/notifications/unread-count/` | user JWT | `{"unread_count": N}` |
-| PATCH | `/api/notifications/{id}/read/` | user JWT | Mark one notification as read (idempotent) |
+| PATCH | `/api/notifications/{id}/read/` | user JWT | Mark one notification as read (idempotent); `{id}` is a UUID |
 | POST | `/api/notifications/read-all/` | user JWT | Mark all my notifications as read |
 | POST | `/api/internal/notifications/` | `X-Service-Token` | Create a notification (service to service, deduplicated) |
 
 Details and examples for other services: `api_contract.md`.
+
+## Calling this service from another service (P1-1)
+
+Use the reference client in
+`docs/examples/notifications_client.py`. It sends after `transaction.on_commit`,
+retries only transient failures with exponential backoff, and builds the
+canonical deduplication key. Delivery is best effort: a notification failure is
+logged and never fails the business action. The retry/reconciliation policy is
+recorded in **ADR-009** (`docs/decisions.md`).
+
+## Retention and support (P1-4)
+
+```bash
+python manage.py purge_notifications --dry-run   # report only
+python manage.py purge_notifications             # delete expired rows
+```
+
+Read notifications older than `NOTIFICATION_RETENTION_DAYS` and all
+notifications older than `NOTIFICATION_HARD_RETENTION_DAYS` are removed. The
+Django admin at `/admin/` exposes a read-only notification list for support.
 
 ## Docker
 

@@ -153,6 +153,48 @@ authorization would need a signed service token or mutual TLS in the future.
 
 ---
 
+## ADR-009: Notification delivery, retry, and reconciliation
+
+**Status:** accepted
+**Date:** 2026-11-03
+
+**Context:** Business actions (application decisions, internship creation,
+supervisor assignment) must succeed even when the notifications service is
+slow or unavailable. A synchronous call inside the business transaction would
+hold row locks, couple two databases, and turn a notification outage into a
+failed decision. At the same time, callers must not silently lose events and
+must not create duplicates when they retry.
+
+**Decision:**
+
+- Producers send notifications **after** the business transaction commits,
+  using `transaction.on_commit`. The callback is best effort: its failure is
+  logged and never rolls back the business action.
+- Delivery uses bounded retries with exponential backoff and jitter. Only
+  timeouts, connection errors, and `5xx` responses are retried. `4xx` responses
+  are treated as permanent caller errors and are not retried.
+- Every request carries a deterministic deduplication key of the form
+  `{object_type}:{object_id}:{event}:recipient:{user_id}`. The notifications
+  service enforces it with a unique constraint, so replaying the same event
+  returns `200` with the existing row instead of creating a second one.
+- There is no caller-side outbox in v1. Deduplication makes replay safe, and
+  the reference client (`services/notifications/docs/examples/notifications_client.py`)
+  centralises the retry and `on_commit` rules.
+- Reconciliation: a producer that needs to confirm delivery can re-send the
+  same events with the same keys. The service is the source of truth for what
+  was stored. If bulk reconciliation becomes necessary, add a read-only
+  "recent events" endpoint rather than a second write path.
+- Retention is enforced by the `purge_notifications` command: read
+  notifications are deleted after `NOTIFICATION_RETENTION_DAYS` (default 180)
+  and every notification after `NOTIFICATION_HARD_RETENTION_DAYS` (default 365).
+
+**Consequences:** A notification outage degrades communication but never blocks
+the workflow. Delivery is at-least-once from the producer's perspective and
+exactly-once in storage. A process that crashes after commit but before the
+callback runs can still lose an event; the same deterministic key lets a
+reconciliation job replay it safely. The shared service token remains the
+trust boundary for internal writes.
+
 ## ADR-010: Internship submissions, review, evaluation and side effects
 
 **Status:** accepted

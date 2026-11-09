@@ -1,0 +1,93 @@
+import uuid
+
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+    """
+    Recreate the notifications table with UUID identifiers.
+
+    Existing integer notification and recipient identifiers cannot be mapped to
+    the UUIDs owned by identity, so this migration intentionally drops and
+    recreates the table. Notification rows in development databases are lost.
+    """
+
+    dependencies = [
+        ("api", "0001_initial"),
+    ]
+
+    operations = [
+        migrations.DeleteModel(
+            name="Notification",
+        ),
+        migrations.CreateModel(
+            name="Notification",
+            fields=[
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("recipient_user_id", models.UUIDField(db_index=True)),
+                (
+                    "type",
+                    models.CharField(
+                        choices=[
+                            (
+                                "application_pending_validation",
+                                "Application Pending Validation",
+                            ),
+                            ("application_validated", "Application Validated"),
+                            (
+                                "application_rejected_by_university",
+                                "Application Rejected By University",
+                            ),
+                            ("student_decision", "Student Decision"),
+                            ("application_withdrawn", "Application Withdrawn"),
+                            ("internship_created", "Internship Created"),
+                            ("supervisor_assigned", "Supervisor Assigned"),
+                            ("cancellation_requested", "Cancellation Requested"),
+                            ("cancellation_decided", "Cancellation Decided"),
+                            ("submission_reviewed", "Submission Reviewed"),
+                            ("evaluation_published", "Evaluation Published"),
+                            ("generic", "Generic"),
+                        ],
+                        max_length=64,
+                    ),
+                ),
+                ("title", models.CharField(max_length=255)),
+                ("message", models.TextField()),
+                (
+                    "related_object_type",
+                    models.CharField(blank=True, max_length=64),
+                ),
+                (
+                    "related_object_id",
+                    models.CharField(blank=True, max_length=64),
+                ),
+                (
+                    "deduplication_key",
+                    models.CharField(max_length=255, unique=True),
+                ),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("read_at", models.DateTimeField(blank=True, null=True)),
+            ],
+            options={
+                "ordering": ["-created_at", "-id"],
+                "indexes": [
+                    models.Index(
+                        fields=["recipient_user_id", "-created_at"],
+                        name="notif_recipient_created_idx",
+                    ),
+                    models.Index(
+                        fields=["recipient_user_id", "read_at"],
+                        name="notif_recipient_read_idx",
+                    ),
+                ],
+            },
+        ),
+    ]

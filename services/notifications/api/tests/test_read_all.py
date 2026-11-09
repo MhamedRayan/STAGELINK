@@ -1,3 +1,5 @@
+import uuid
+
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -22,7 +24,9 @@ def _create_notification(recipient_user_id, deduplication_key, read_at=None):
 class ReadAllTests(TestCase):
     def setUp(self):
         self.api_client = APIClient()
-        self.api_client.credentials(HTTP_X_USER_ID="42")
+        self.user_id = uuid.uuid4()
+        self.other_user_id = uuid.uuid4()
+        self.api_client.credentials(HTTP_X_USER_ID=str(self.user_id))
 
     def test_requires_authentication(self):
         response = APIClient().post(READ_ALL_URL)
@@ -30,20 +34,26 @@ class ReadAllTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_marks_only_the_callers_unread_notifications(self):
-        _create_notification(42, "own-1")
-        _create_notification(42, "own-2")
-        other = _create_notification(77, "other-1")
+        _create_notification(self.user_id, "own-1")
+        _create_notification(self.user_id, "own-2")
+        other = _create_notification(self.other_user_id, "other-1")
 
         response = self.api_client.post(READ_ALL_URL)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"marked_read": 2})
-        self.assertEqual(Notification.objects.filter(recipient_user_id=42, read_at__isnull=True).count(), 0)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient_user_id=self.user_id,
+                read_at__isnull=True,
+            ).count(),
+            0,
+        )
         other.refresh_from_db()
         self.assertIsNone(other.read_at)
 
     def test_second_call_changes_nothing(self):
-        _create_notification(42, "own-1")
+        _create_notification(self.user_id, "own-1")
         self.api_client.post(READ_ALL_URL)
 
         response = self.api_client.post(READ_ALL_URL)
@@ -52,8 +62,8 @@ class ReadAllTests(TestCase):
 
     def test_keeps_the_original_read_at_of_already_read_notifications(self):
         earlier = timezone.now() - timezone.timedelta(days=1)
-        already_read = _create_notification(42, "own-read", read_at=earlier)
-        _create_notification(42, "own-unread")
+        already_read = _create_notification(self.user_id, "own-read", read_at=earlier)
+        _create_notification(self.user_id, "own-unread")
 
         self.api_client.post(READ_ALL_URL)
 

@@ -117,6 +117,14 @@ JWT_ROLE_CLAIM = env("JWT_ROLE_CLAIM", default="role")
 # Empty means the internal endpoint rejects every request (fail closed).
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
 
+# Retention policy enforced by `manage.py purge_notifications`.
+# Read notifications older than this are deleted first; every notification
+# older than the hard limit is deleted regardless of read state.
+NOTIFICATION_RETENTION_DAYS = env.int("NOTIFICATION_RETENTION_DAYS", default=180)
+NOTIFICATION_HARD_RETENTION_DAYS = env.int(
+    "NOTIFICATION_HARD_RETENTION_DAYS", default=365
+)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "api.authentication.JWTAuthentication",
