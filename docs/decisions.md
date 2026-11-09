@@ -203,3 +203,35 @@ some notifications depend on contracts owned by other services, so integration
 tests for those seams stay gated until the endpoints and UUID recipient support
 land. Because evaluations are immutable in v1, a correction requires a
 deliberate administrative data change rather than a second API call.
+
+## ADR-008: Offers lifecycle rules (deadline, published edits, draft deletion, applications count)
+
+**Status:** accepted
+**Date:** 2026-11-05
+
+**Context:** The Offers service needs clear rules for what happens when a
+deadline passes, what a company may change after publishing, how drafts are
+removed, and where the applications count per offer comes from.
+
+**Decision:**
+
+- **Deadline:** published offers whose deadline has passed are closed by the
+  idempotent management command `close_expired_offers`, run by a scheduler. A
+  lazy check on read was rejected because list queries filter on status and
+  reads should not write. Between runs an expired offer may still appear as
+  published.
+- **Published edits:** while published, `title` and `location` cannot change
+  (409, code `field_locked_while_published`); capacity can only increase;
+  `description`, `requirements` and `deadline` stay editable. Drafts are fully
+  editable and closed offers are not editable.
+- **Draft deletion:** only drafts can be deleted, as a soft delete
+  (`deleted_at`). A deleted offer returns 404 on every route, including the
+  internal lookup.
+- **Applications count:** Applications exposes an internal count per offer and
+  Offers stores no counter, so there is one source of truth. This requires an
+  endpoint in Applications.
+
+**Consequences:** Offers needs a scheduler for the closing command. Editing
+rules can be relaxed later without a migration. The capacity-reduction block
+stays until Applications publishes its committed-places endpoint. Deleted
+drafts stay in the database.
