@@ -108,6 +108,7 @@ jobs:
       OFFERS_BASE_URL: http://localhost:8002
       APPLICATIONS_BASE_URL: http://localhost:8003
       INTERNSHIPS_BASE_URL: http://localhost:8004
+      NOTIFICATIONS_BASE_URL: http://localhost:8005
 
     steps:
       - name: Check out repository
@@ -126,7 +127,7 @@ jobs:
       - name: Start services
         run: >-
           docker compose -f infra/docker/docker-compose.yml up -d --build
-          identity offers applications internships
+          identity offers applications internships notifications
 
       - name: Wait for services
         run: |
@@ -135,7 +136,8 @@ jobs:
             http://localhost:8001 \
             http://localhost:8002 \
             http://localhost:8003 \
-            http://localhost:8004; do
+            http://localhost:8004 \
+            http://localhost:8005; do
             for attempt in $(seq 1 60); do
               if curl --fail --silent "$url/health/" > /dev/null 2>&1; then
                 echo "$url is ready"
