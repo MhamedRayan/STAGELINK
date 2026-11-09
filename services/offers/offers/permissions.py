@@ -1,10 +1,13 @@
+import secrets
 import uuid
-
 from django.conf import settings
 from django.db import models
 from rest_framework.permissions import BasePermission
 
 from offers.models import OfferStatus
+
+
+SERVICE_TOKEN_HEADER = "X-Service-Token"
 
 
 class UserRole(models.TextChoices):
@@ -72,3 +75,20 @@ class CanViewOffer(BasePermission):
         if obj.status == OfferStatus.PUBLISHED:
             return True
         return _is_offer_owner(request, obj)
+
+
+class IsInternalService(BasePermission):
+    """Allows only callers that present the shared internal service token."""
+
+    message = "Invalid or missing service token."
+
+    def has_permission(self, request, view):
+        expected = settings.INTERNAL_SERVICE_TOKEN
+        provided = request.headers.get(SERVICE_TOKEN_HEADER, "")
+
+        # Fail closed: no configured token, or no provided token, means deny.
+        if not expected or not provided:
+            return False
+
+        # Constant-time comparison prevents timing attacks on the token.
+        return secrets.compare_digest(provided.encode(), expected.encode())
