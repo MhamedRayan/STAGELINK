@@ -17,15 +17,15 @@ flowchart LR
     Applications -->|offer and candidate data| Offers
     Applications -->|candidate identity| Identity
     Applications -->|internship creation| Internships
+    Applications -->|application events| Notifications
     Internships -->|participant data| Identity
     Internships -->|place release after cancellation| Applications
     Internships -->|internship events| Notifications
     Notifications -->|delivery target data| Identity
 ```
 
-The diagram shows the intended direction of synchronous calls. Some arrows are
-not wired end to end yet: Applications does not expose the internal place-release
-endpoint, and Notifications still needs UUID recipient identifiers.
+The diagram shows the direction of calls. Applications and Internships also
+notify the Notifications service after their business transaction commits.
 
 ## Service boundaries
 

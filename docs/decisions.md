@@ -277,3 +277,80 @@ removed, and where the applications count per offer comes from.
 rules can be relaxed later without a migration. The capacity-reduction block
 stays until Applications publishes its committed-places endpoint. Deleted
 drafts stay in the database.
+
+---
+
+## ADR-011: Application reservations, capacity ownership, and confirmation flow
+
+**Status:** accepted
+**Date:** 2026-11-09
+
+**Context:** Applications orchestrates the application state machine but owns
+none of the offer, account, internship or notification data. The original
+implementation trusted the caller for the owning company and never checked the
+offer, so a student could apply to a draft, closed or nonexistent offer and
+choose which company could decide. Capacity was decorative and unlimited
+accepts were possible. The applications → internships call also ran inside the
+database transaction, so a downstream success could be lost if the local commit
+failed.
+
+**Decision:**
+
+- **Offer validation on intake.** `POST /api/applications/` calls Offers
+  `GET /api/internal/offers/<uuid>/` and requires an existing, `published`
+  offer with a future deadline. `company_user_id` is removed from the request
+  body and derived from the offer, so the owning company can never be spoofed.
+  A missing offer maps to `400 OFFER_NOT_FOUND`, an unavailable Offers service
+  to `503 OFFERS_UNAVAILABLE`, and a closed or expired offer to
+  `409 OFFER_UNAVAILABLE`.
+- **Reservations belong to Applications.** Applications keeps one
+  `OfferReservation(offer_id unique, capacity, reserved, occupied)` row per
+  offer, locked with `select_for_update()`. Offers stores no counter.
+  - Company `ACCEPT` reserves one place and fails with `409 CAPACITY_FULL` when
+    `reserved + occupied >= capacity`.
+  - University rejection, student decline, withdrawal and auto-withdrawal
+    release the provisional place.
+  - Confirmation moves one place from `reserved` to `occupied`.
+  - An approved internship cancellation calls
+    `POST /api/internal/applications/<uuid>/release-place/`, which frees one
+    `occupied` place and is idempotent through `place_released_at`.
+  - The cached `capacity` is refreshed from Offers when a reservation is
+    created and may increase, but is never silently lowered below committed
+    places.
+- **Capacity visibility for Offers.** `GET
+  /api/internal/offers/<uuid>/capacity/` returns `reserved`, `occupied`,
+  `committed` and `available`. When no reservation row exists, nothing is
+  committed and `capacity`/`available` are null. Offers can use this to allow
+  safe capacity reductions.
+- **Withdrawal.** The owning student may withdraw in `SUBMITTED`,
+  `COMPANY_ACCEPTED`, `UNIVERSITY_VALIDATED` or `STUDENT_ACCEPTED`. Terminal
+  states return `409 INVALID_STATE`. `withdrawal_reason` and `withdrawn_at` are
+  stored, and any provisional place is released.
+- **Auto-withdrawal.** Confirming one application withdraws the same student's
+  other open applications in the same transaction and releases their places.
+- **History.** Every transition writes an append-only
+  `ApplicationStatusHistory` row with the actor, role and reason in the same
+  transaction as the change.
+- **Confirmation is not called inside a transaction.** Student acceptance first
+  commits `STUDENT_ACCEPTED`, then calls Internships outside the transaction.
+  Success finalizes `CONFIRMED`; a permanent `409` reverts to
+  `UNIVERSITY_VALIDATED`; a transient failure leaves `STUDENT_ACCEPTED` and
+  returns `503 DOWNSTREAM_UNAVAILABLE`. The
+  `reconcile_confirmed_applications` command retries `STUDENT_ACCEPTED` rows
+  idempotently using the source application id.
+- **Errors and notifications.** Errors use the shared `{code, message,
+  details}` envelope. Notifications are best effort, scheduled with
+  `transaction.on_commit`, and use stable deduplication keys of the form
+  `application:<id>:<event>:recipient:<user_id>`. University-administrator
+  recipients come from `UNIVERSITY_ADMIN_USER_IDS` plus the recorded
+  `university_user_id` until Identity exposes a role directory.
+
+**Consequences:** Applications now depends on Offers for intake and acceptance
+and on Notifications for delivery; both are best effort except intake and
+capacity, which fail closed. Confirming requires the reconciliation command to
+be scheduled, otherwise a transient internships outage leaves applications in
+`STUDENT_ACCEPTED`. The reservation row is the single source of truth for
+committed places, so Offers must call the capacity endpoint before reducing
+capacity. The application contract changes incompatibly (`company_user_id` is no
+longer accepted and list responses are paginated); this is acceptable because
+the platform has no production clients yet.

@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Applications API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP contract for the STAGELINK applications service.
 
@@ -12,8 +12,13 @@ info:
 
     Application identifiers and all cross-service references are UUID strings.
     The owning company is identified by `company_user_id`, matching the offers
-    and internships services. All endpoints require a bearer access token
-    issued by identity. Role values are lowercase snake_case.
+    and internships services. All user endpoints require a bearer access token
+    issued by identity. Internal endpoints under `/api/internal/` accept only
+    the shared `X-Service-Token` header.
+
+    Errors use the shared envelope `{code, message, details}`. Conflict codes
+    include `OFFER_UNAVAILABLE`, `CAPACITY_FULL`, `INVALID_STATE`,
+    `INTERNSHIP_CONFLICT` and `DUPLICATE_APPLICATION`.
 
   contact:
     name: STAGELINK maintainers
@@ -28,7 +33,9 @@ tags:
   - name: System
     description: Operational endpoints used by infrastructure.
   - name: Applications
-    description: Application submission, decisions and confirmation.
+    description: Application submission, decisions, withdrawal and confirmation.
+  - name: Internal
+    description: Service-to-service endpoints guarded by X-Service-Token.
 
 paths:
   /health/:
@@ -46,8 +53,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
-        '503':
-          $ref: '#/components/responses/ServiceUnavailable'
 
   /api/applications/:
     get:
@@ -56,20 +61,31 @@ paths:
       operationId: listApplications
       summary: List applications visible to the caller
       description: |
-        Students see their own applications, companies see applications for
+        Students see their own applications, companies see applications owned by
         their company, and university or platform administrators see all
-        applications.
+        applications. Results are paginated and can be filtered. A university
+        administrator uses `?status=COMPANY_ACCEPTED` as the validation queue.
       security:
         - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/OfferIdFilter'
+        - $ref: '#/components/parameters/StudentIdFilter'
+        - $ref: '#/components/parameters/CompanyIdFilter'
+        - $ref: '#/components/parameters/CreatedAfterFilter'
+        - $ref: '#/components/parameters/CreatedBeforeFilter'
+        - $ref: '#/components/parameters/Ordering'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
       responses:
         '200':
-          description: Applications visible to the caller.
+          description: A page of applications visible to the caller.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Application'
+                $ref: '#/components/schemas/ApplicationList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -77,7 +93,12 @@ paths:
         - Applications
       operationId: createApplication
       summary: Submit an application
-      description: Only students can submit applications. Duplicate applications for the same offer are rejected.
+      description: |
+        Only students can submit applications. The offer is validated with the
+        offers service: it must exist, be `published`, and have a future
+        deadline. The owning `company_user_id` is derived from the offer and must
+        not be sent by the caller. Duplicate applications for the same offer are
+        rejected.
       security:
         - bearerAuth: []
       requestBody:
@@ -94,11 +115,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Application'
         '400':
-          $ref: '#/components/responses/BadRequest'
+          description: |
+            Invalid input, duplicate application, or the offer does not exist
+            (`OFFER_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '409':
+          description: The offer is not accepting applications (`OFFER_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: The offers service is unavailable (`OFFERS_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/applications/{id}/:
     parameters:
@@ -122,6 +161,34 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/applications/{id}/history/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      tags:
+        - Applications
+      operationId: listApplicationHistory
+      summary: Read the transition history of an application
+      description: |
+        Append-only audit trail. Visible to the student, the owning company,
+        university administrators and platform administrators.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of history entries, oldest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationHistoryList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/applications/{id}/company-decision/:
     parameters:
       - $ref: '#/components/parameters/ApplicationId'
@@ -130,6 +197,10 @@ paths:
         - Applications
       operationId: decideAsCompany
       summary: Accept or reject an application as the company
+      description: |
+        Only the owning company can decide, and only while the application is
+        `SUBMITTED`. Acceptance reserves one place on the offer and returns
+        `409 CAPACITY_FULL` when no place is available.
       security:
         - bearerAuth: []
       requestBody:
@@ -153,6 +224,21 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `INVALID_STATE` when the application is no longer `SUBMITTED`,
+            `CAPACITY_FULL` when the offer has no place left, or
+            `OFFER_UNAVAILABLE` when the offer is closed or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: The offers service is unavailable (`OFFERS_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/applications/{id}/university-decision/:
     parameters:
@@ -162,6 +248,9 @@ paths:
         - Applications
       operationId: decideAsUniversity
       summary: Validate or reject an application as a university administrator
+      description: |
+        Allowed only while the application is `COMPANY_ACCEPTED`. Rejection
+        releases the provisional reservation.
       security:
         - bearerAuth: []
       requestBody:
@@ -185,6 +274,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          description: The application is not `COMPANY_ACCEPTED` (`INVALID_STATE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 
   /api/applications/{id}/student-decision/:
     parameters:
@@ -195,8 +290,18 @@ paths:
       operationId: decideAsStudent
       summary: Accept or decline a validated application as the student
       description: |
-        Accepting triggers a synchronous call to the internships service. The
-        application is confirmed only after the internship record is created.
+        Allowed only while the application is `UNIVERSITY_VALIDATED`.
+
+        Declining releases the reservation. Accepting commits `STUDENT_ACCEPTED`
+        and then calls the internships service, outside the database
+        transaction. When the internship is created the application becomes
+        `CONFIRMED`, one place moves from `reserved` to `occupied`, and the
+        student's other open applications are withdrawn automatically.
+
+        A permanent internships conflict returns `409 INTERNSHIP_CONFLICT` and
+        restores `UNIVERSITY_VALIDATED`. A transient failure returns
+        `503 DOWNSTREAM_UNAVAILABLE` and leaves `STUDENT_ACCEPTED` so the
+        reconciliation command can retry safely.
       security:
         - bearerAuth: []
       requestBody:
@@ -220,8 +325,115 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
-        '502':
-          $ref: '#/components/responses/BadGateway'
+        '409':
+          description: |
+            `INVALID_STATE` when the application is not validated, or
+            `INTERNSHIP_CONFLICT` when the student already has an active
+            internship.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Internships is unavailable (`DOWNSTREAM_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/applications/{id}/withdraw/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags:
+        - Applications
+      operationId: withdrawApplication
+      summary: Withdraw an application as the student
+      description: |
+        The owning student can withdraw while the application is `SUBMITTED`,
+        `COMPANY_ACCEPTED`, `UNIVERSITY_VALIDATED` or `STUDENT_ACCEPTED`.
+        Withdrawal releases any provisional place. Terminal states return
+        `409 INVALID_STATE`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Withdrawal'
+      responses:
+        '200':
+          description: The withdrawn application.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Application'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The application cannot be withdrawn in its current state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/internal/applications/{id}/release-place/:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    post:
+      tags:
+        - Internal
+      operationId: releaseApplicationPlace
+      summary: Release the place held by an application
+      description: |
+        Called by the internships service after an approved cancellation.
+        Idempotent: the first call frees the place and stores `place_released_at`;
+        later calls return `released: false` without freeing anything again.
+      security:
+        - serviceToken: []
+      responses:
+        '200':
+          description: The release result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReleasePlaceResult'
+        '403':
+          $ref: '#/components/responses/InternalForbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/internal/offers/{offer_id}/capacity/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+        - Internal
+      operationId: getOfferCapacity
+      summary: Read the committed places on an offer
+      description: |
+        Called by the offers service before allowing a capacity reduction.
+        `committed` is `reserved + occupied`. `capacity` and `available` are null
+        when Applications has no reservation row yet, which means nothing is
+        committed.
+      security:
+        - serviceToken: []
+      responses:
+        '200':
+          description: The capacity snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferCapacity'
+        '403':
+          $ref: '#/components/responses/InternalForbidden'
 
 components:
   securitySchemes:
@@ -229,6 +441,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    serviceToken:
+      type: apiKey
+      in: header
+      name: X-Service-Token
 
   parameters:
     ApplicationId:
@@ -239,6 +455,100 @@ components:
       schema:
         type: string
         format: uuid
+
+    OfferId:
+      name: offer_id
+      in: path
+      required: true
+      description: Offer UUID owned by the offers service.
+      schema:
+        type: string
+        format: uuid
+
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      schema:
+        $ref: '#/components/schemas/ApplicationStatus'
+
+    OfferIdFilter:
+      name: offer_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+
+    StudentIdFilter:
+      name: student_user_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+
+    CompanyIdFilter:
+      name: company_user_id
+      in: query
+      required: false
+      schema:
+        type: string
+        format: uuid
+
+    CreatedAfterFilter:
+      name: created_after
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+
+    CreatedBeforeFilter:
+      name: created_before
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+
+    Ordering:
+      name: ordering
+      in: query
+      required: false
+      description: Prefix with `-` for descending order. Defaults to `-created_at`.
+      schema:
+        type: string
+        enum:
+          - created_at
+          - -created_at
+          - updated_at
+          - -updated_at
+          - status
+          - -status
+          - start_date
+          - -start_date
+          - end_date
+          - -end_date
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   schemas:
     Health:
@@ -284,14 +594,10 @@ components:
       type: object
       required:
         - offer_id
-        - company_user_id
         - start_date
         - end_date
       properties:
         offer_id:
-          type: string
-          format: uuid
-        company_user_id:
           type: string
           format: uuid
         start_date:
@@ -350,12 +656,95 @@ components:
           nullable: true
         student_decision:
           $ref: '#/components/schemas/StudentDecisionValue'
+        withdrawal_reason:
+          type: string
+          nullable: true
+        withdrawn_at:
+          type: string
+          format: date-time
+          nullable: true
+        place_released_at:
+          type: string
+          format: date-time
+          nullable: true
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+
+    Pagination:
+      type: object
+      required:
+        - limit
+        - offset
+        - total
+      properties:
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          example: 42
+
+    ApplicationList:
+      type: object
+      required:
+        - results
+        - pagination
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Application'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    ApplicationStatusHistory:
+      type: object
+      required:
+        - id
+        - from_status
+        - to_status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        from_status:
+          type: string
+          example: SUBMITTED
+        to_status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        actor_user_id:
+          type: string
+          format: uuid
+          nullable: true
+        actor_role:
+          type: string
+          example: student
+        reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ApplicationHistoryList:
+      type: object
+      required:
+        - results
+        - pagination
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ApplicationStatusHistory'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
 
     CompanyDecision:
       type: object
@@ -387,6 +776,58 @@ components:
         decision:
           $ref: '#/components/schemas/StudentDecisionValue'
 
+    Withdrawal:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 2000
+          description: Optional free-text reason stored on the application.
+
+    OfferCapacity:
+      type: object
+      required:
+        - offer_id
+        - reserved
+        - occupied
+        - committed
+      properties:
+        offer_id:
+          type: string
+          format: uuid
+        capacity:
+          type: integer
+          nullable: true
+        reserved:
+          type: integer
+        occupied:
+          type: integer
+        committed:
+          type: integer
+        available:
+          type: integer
+          nullable: true
+
+    ReleasePlaceResult:
+      type: object
+      required:
+        - id
+        - offer_id
+        - released
+      properties:
+        id:
+          type: string
+          format: uuid
+        offer_id:
+          type: string
+          format: uuid
+        released:
+          type: boolean
+        place_released_at:
+          type: string
+          format: date-time
+          nullable: true
+
     Error:
       type: object
       required:
@@ -395,7 +836,7 @@ components:
       properties:
         code:
           type: string
-          example: downstream_unavailable
+          example: CAPACITY_FULL
         message:
           type: string
         details:
@@ -421,14 +862,14 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    NotFound:
-      description: The resource does not exist.
+    InternalForbidden:
+      description: The internal service token is missing or invalid.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
-    BadGateway:
-      description: The internships service could not create the official record.
+    NotFound:
+      description: The resource does not exist.
       content:
         application/json:
           schema:

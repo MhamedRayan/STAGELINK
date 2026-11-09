@@ -1,6 +1,8 @@
 import uuid
+
 from django.db import models
 from django.db.models import F, Q
+
 
 class ApplicationStatus(models.TextChoices):
     SUBMITTED = 'SUBMITTED', 'Submitted'
@@ -13,13 +15,40 @@ class ApplicationStatus(models.TextChoices):
     CONFIRMED = 'CONFIRMED', 'Confirmed'
     WITHDRAWN = 'WITHDRAWN', 'Withdrawn'
 
+
+# States in which the student can still withdraw.
+WITHDRAWABLE_STATUSES = frozenset({
+    ApplicationStatus.SUBMITTED,
+    ApplicationStatus.COMPANY_ACCEPTED,
+    ApplicationStatus.UNIVERSITY_VALIDATED,
+    ApplicationStatus.STUDENT_ACCEPTED,
+})
+
+# States in which the application holds a provisional place reservation.
+RESERVED_STATUSES = frozenset({
+    ApplicationStatus.COMPANY_ACCEPTED,
+    ApplicationStatus.UNIVERSITY_VALIDATED,
+    ApplicationStatus.STUDENT_ACCEPTED,
+})
+
+# States that are still in flight for the purposes of auto-withdrawal.
+OPEN_STATUSES = frozenset({
+    ApplicationStatus.SUBMITTED,
+    ApplicationStatus.COMPANY_ACCEPTED,
+    ApplicationStatus.UNIVERSITY_VALIDATED,
+    ApplicationStatus.STUDENT_ACCEPTED,
+})
+
+
 class DecisionChoices(models.TextChoices):
     ACCEPT = 'ACCEPT', 'Accept'
     REJECT = 'REJECT', 'Reject'
 
+
 class StudentDecisionChoices(models.TextChoices):
     ACCEPT = 'ACCEPT', 'Accept'
     DECLINE = 'DECLINE', 'Decline'
+
 
 class Application(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -51,6 +80,11 @@ class Application(models.Model):
 
     student_decision = models.CharField(max_length=10, choices=StudentDecisionChoices.choices, null=True, blank=True)
 
+    # Withdrawal and place-release bookkeeping.
+    withdrawal_reason = models.TextField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    place_released_at = models.DateTimeField(null=True, blank=True)
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -67,6 +101,80 @@ class Application(models.Model):
                 name='application_end_not_before_start',
             ),
         ]
+        ordering = ['-created_at', '-id']
 
     def __str__(self):
         return f"App {self.id} | Offer {self.offer_id} | Student {self.student_user_id} [{self.status}]"
+
+
+class OfferReservation(models.Model):
+    """Local, lockable counter of the places held on one offer.
+
+    Applications owns the reservation lifecycle; Offers stores no counter.
+    ``reserved`` covers applications that hold a provisional place and
+    ``occupied`` covers confirmed internships. ``capacity`` is refreshed from
+    Offers when a reservation is first created and whenever it grows.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    offer_id = models.UUIDField(unique=True, db_index=True)
+    capacity = models.PositiveIntegerField(default=0)
+    reserved = models.PositiveIntegerField(default=0)
+    occupied = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(reserved__gte=0),
+                name='offer_reservation_reserved_gte_0',
+            ),
+            models.CheckConstraint(
+                condition=Q(occupied__gte=0),
+                name='offer_reservation_occupied_gte_0',
+            ),
+        ]
+
+    @property
+    def committed(self):
+        return self.reserved + self.occupied
+
+    @property
+    def available(self):
+        return max(0, self.capacity - self.committed)
+
+    def __str__(self):
+        return (
+            f"Reservation {self.offer_id}: "
+            f"{self.committed}/{self.capacity} committed"
+        )
+
+
+class ApplicationStatusHistory(models.Model):
+    """Append-only record of every application state transition."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    application = models.ForeignKey(
+        Application,
+        related_name='history',
+        on_delete=models.CASCADE,
+    )
+    from_status = models.CharField(max_length=30, blank=True)
+    to_status = models.CharField(max_length=30)
+    actor_user_id = models.UUIDField(null=True, blank=True)
+    actor_role = models.CharField(max_length=32, blank=True)
+    reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'id']
+        indexes = [
+            models.Index(
+                fields=['application', 'created_at'],
+                name='application_history_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.application_id}: {self.from_status or '-'} -> {self.to_status}"

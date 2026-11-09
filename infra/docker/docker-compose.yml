@@ -98,6 +98,11 @@ services:
       DB_NAME: applications
       DB_HOST: db-applications
       INTERNSHIP_SERVICE_URL: "${INTERNSHIP_SERVICE_URL:-http://internships:8000/api/internal/internships/}"
+      # Intake validation and capacity checks use the Offers internal lookup.
+      OFFERS_SERVICE_URL: "http://offers:8000/api/internal/offers/"
+      # Notifications are best effort and sent after commit.
+      NOTIFICATIONS_BASE_URL: "http://notifications:8000"
+      UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
     depends_on:
       db-applications:
         condition: service_healthy

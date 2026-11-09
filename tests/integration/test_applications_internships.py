@@ -169,10 +169,39 @@ class ApplicationsToInternshipsIntegrationTests(unittest.TestCase):
         self.assertEqual(published.json()["status"], "published")
         return published.json()
 
-    def create_application(self, offer):
+    def create_draft_offer(self, *, capacity=2):
+        payload = {
+            "title": f"Draft Offer {uuid.uuid4().hex[:12]}",
+            "description": "A draft offer used by the integration suite.",
+            "requirements": "Django",
+            "location": "Algiers",
+            "deadline": (
+                datetime.now(timezone.utc) + timedelta(days=30)
+            ).isoformat(),
+            "capacity": capacity,
+        }
+
+        created = self.post(
+            f"{OFFERS_BASE_URL}/api/offers/",
+            payload,
+            self.company_headers,
+        )
+        self.assert_status(created, 201)
+        return created.json()
+
+    def create_offer(self, *, capacity=2):
+        offer = self.create_draft_offer(capacity=capacity)
+        published = self.post(
+            f"{OFFERS_BASE_URL}/api/offers/{offer['id']}/publish/",
+            {},
+            self.company_headers,
+        )
+        self.assert_status(published, 200)
+        return published.json()
+
+    def create_application(self, offer, headers=None):
         payload = {
             "offer_id": offer["id"],
-            "company_user_id": str(self.company_id),
             "start_date": self.start_date,
             "end_date": self.end_date,
         }
@@ -180,7 +209,7 @@ class ApplicationsToInternshipsIntegrationTests(unittest.TestCase):
         response = self.post(
             f"{APPLICATIONS_BASE_URL}/api/applications/",
             payload,
-            self.student_headers,
+            headers or self.student_headers,
         )
         self.assert_status(response, 201)
         return response.json()
@@ -320,34 +349,150 @@ class ApplicationsToInternshipsIntegrationTests(unittest.TestCase):
         self.assert_status(valid, 201)
 
     def test_downstream_conflict_rolls_back_the_second_student_acceptance(self):
-        first_offer = self.create_published_offer()
-        first_application = self.create_application(first_offer)
-        self.approve_application(first_application)
+        offer = self.create_published_offer()
+        application = self.create_application(offer)
+        self.approve_application(application)
 
-        second_offer = self.create_published_offer()
+        # The student already has an active internship, as if they had confirmed
+        # a different application. Accepting this one must be rejected by
+        # Internships and reverted locally.
+        existing = self.post(
+            f"{INTERNSHIPS_BASE_URL}/api/internal/internships/",
+            {
+                "source_application_id": str(uuid.uuid4()),
+                "student_user_id": str(self.student_id),
+                "company_user_id": str(self.company_id),
+                "offer_id": offer["id"],
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+            },
+            {"X-Service-Token": INTERNAL_SERVICE_TOKEN},
+        )
+        self.assert_status(existing, 201)
+
+        acceptance = self.accept_application(application["id"])
+        self.assert_status(acceptance, 409)
+        self.assertEqual(acceptance.json()["code"], "INTERNSHIP_CONFLICT")
+
+        # Applications reverts a permanent downstream conflict, so the
+        # application stays validated rather than becoming confirmed without an
+        # internship.
+        state = self.get_application(application["id"])
+        self.assertEqual(state["status"], "UNIVERSITY_VALIDATED")
+        self.assertIsNone(state["student_decision"])
+        self.assertEqual(self.internships_for_application(application["id"]), [])
+
+    def test_student_cannot_apply_to_a_draft_offer(self):
+        offer = self.create_draft_offer()
+
+        response = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/",
+            {
+                "offer_id": offer["id"],
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+            },
+            self.student_headers,
+        )
+
+        self.assert_status(response, 409)
+        self.assertEqual(response.json()["code"], "OFFER_UNAVAILABLE")
+
+    def test_student_cannot_apply_to_a_missing_offer(self):
+        response = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/",
+            {
+                "offer_id": str(uuid.uuid4()),
+                "start_date": self.start_date,
+                "end_date": self.end_date,
+            },
+            self.student_headers,
+        )
+
+        self.assert_status(response, 400)
+        self.assertEqual(response.json()["code"], "OFFER_NOT_FOUND")
+
+    def test_student_can_withdraw_only_once(self):
+        offer = self.create_offer()
+        application = self.create_application(offer)
+
+        first = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/{application['id']}/withdraw/",
+            {"reason": "Found another placement"},
+            self.student_headers,
+        )
+        self.assert_status(first, 200)
+        self.assertEqual(first.json()["status"], "WITHDRAWN")
+        self.assertEqual(first.json()["withdrawal_reason"], "Found another placement")
+
+        second = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/{application['id']}/withdraw/",
+            {},
+            self.student_headers,
+        )
+        self.assert_status(second, 409)
+        self.assertEqual(second.json()["code"], "INVALID_STATE")
+
+    def test_confirmation_withdraws_the_students_other_applications(self):
+        first_offer = self.create_offer()
+        second_offer = self.create_offer()
+        first_application = self.create_application(first_offer)
         second_application = self.create_application(second_offer)
+        self.approve_application(first_application)
         self.approve_application(second_application)
 
-        first_acceptance = self.accept_application(first_application["id"])
-        self.assert_status(first_acceptance, 200)
-        self.assertEqual(first_acceptance.json()["status"], "CONFIRMED")
+        confirmed = self.accept_application(first_application["id"])
+        self.assert_status(confirmed, 200)
+        self.assertEqual(confirmed.json()["status"], "CONFIRMED")
 
-        second_acceptance = self.accept_application(second_application["id"])
-        self.assert_status(second_acceptance, 502)
+        other = self.get_application(second_application["id"])
+        self.assertEqual(other["status"], "WITHDRAWN")
 
-        # The applications service rolls the transaction back when internships
-        # rejects the call, so the second application stays validated rather
-        # than becoming confirmed without an internship.
-        second_state = self.get_application(second_application["id"])
-        self.assertEqual(second_state["status"], "UNIVERSITY_VALIDATED")
-        self.assertIsNone(second_state["student_decision"])
+    def test_capacity_limit_blocks_the_second_acceptance(self):
+        offer = self.create_offer(capacity=1)
+        first_application = self.create_application(offer)
 
-        self.assertEqual(
-            len(self.internships_for_application(first_application["id"])), 1
+        second_student_headers = auth_headers(
+            make_token(uuid.uuid4(), ROLE_STUDENT)
         )
-        self.assertEqual(
-            self.internships_for_application(second_application["id"]), []
+        second_application = self.create_application(
+            offer, headers=second_student_headers
         )
+
+        first = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/{first_application['id']}/company-decision/",
+            {"decision": "ACCEPT"},
+            self.company_headers,
+        )
+        self.assert_status(first, 200)
+
+        second = self.post(
+            f"{APPLICATIONS_BASE_URL}/api/applications/{second_application['id']}/company-decision/",
+            {"decision": "ACCEPT"},
+            self.company_headers,
+        )
+        self.assert_status(second, 409)
+        self.assertEqual(second.json()["code"], "CAPACITY_FULL")
+
+    def test_internal_place_release_is_idempotent(self):
+        offer = self.create_offer()
+        application = self.create_application(offer)
+        self.approve_application(application)
+        self.assert_status(self.accept_application(application["id"]), 200)
+
+        url = (
+            f"{APPLICATIONS_BASE_URL}/api/internal/applications/"
+            f"{application['id']}/release-place/"
+        )
+        headers = {"X-Service-Token": INTERNAL_SERVICE_TOKEN}
+
+        first = self.post(url, {}, headers)
+        self.assert_status(first, 200)
+        self.assertTrue(first.json()["released"])
+
+        second = self.post(url, {}, headers)
+        self.assert_status(second, 200)
+        self.assertFalse(second.json()["released"])
 
 
 if __name__ == "__main__":

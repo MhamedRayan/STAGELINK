@@ -109,6 +109,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "EXCEPTION_HANDLER": "applications.errors.api_exception_handler",
 }
 
 # JWT issued by the Identity & Profiles service. The signing key must match theirs.
@@ -122,7 +123,27 @@ INTERNSHIP_SERVICE_URL = env(
     "INTERNSHIP_SERVICE_URL",
     default="http://localhost:8004/api/internal/internships/",
 )
+INTERNSHIP_TIMEOUT_SECONDS = env.float("INTERNSHIP_TIMEOUT_SECONDS", default=5.0)
+INTERNSHIP_CREATION_ATTEMPTS = env.int("INTERNSHIP_CREATION_ATTEMPTS", default=3)
+OFFERS_SERVICE_URL = env(
+    "OFFERS_SERVICE_URL",
+    default="http://localhost:8002/api/internal/offers/",
+)
+OFFERS_TIMEOUT_SECONDS = env.float("OFFERS_TIMEOUT_SECONDS", default=5.0)
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
+
+# Notifications (best effort, after commit). See ADR-009.
+NOTIFICATIONS_ENABLED = env.bool("NOTIFICATIONS_ENABLED", default=True)
+NOTIFICATIONS_BASE_URL = env(
+    "NOTIFICATIONS_BASE_URL",
+    default="http://localhost:8005",
+)
+NOTIFICATIONS_TIMEOUT_SECONDS = env.float("NOTIFICATIONS_TIMEOUT_SECONDS", default=5.0)
+NOTIFICATIONS_MAX_ATTEMPTS = env.int("NOTIFICATIONS_MAX_ATTEMPTS", default=3)
+
+# University administrators who receive validation notifications, as a list of
+# UUIDs, until Identity exposes a role directory.
+UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

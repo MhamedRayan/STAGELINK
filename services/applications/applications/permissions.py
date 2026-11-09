@@ -1,6 +1,30 @@
+import secrets
+
+from django.conf import settings
 from rest_framework.permissions import BasePermission
 
 from .roles import Role
+
+SERVICE_TOKEN_HEADER = "X-Service-Token"
+
+
+class IsInternalService(BasePermission):
+    """Allows only callers that present the shared internal service token.
+
+    Internal endpoints never accept a user JWT. The check fails closed when
+    either side of the comparison is missing.
+    """
+
+    message = "Invalid or missing service token."
+
+    def has_permission(self, request, view):
+        expected = settings.INTERNAL_SERVICE_TOKEN
+        provided = request.headers.get(SERVICE_TOKEN_HEADER, "")
+
+        if not expected or not provided:
+            return False
+
+        return secrets.compare_digest(provided.encode(), expected.encode())
 
 
 class IsStudent(BasePermission):
