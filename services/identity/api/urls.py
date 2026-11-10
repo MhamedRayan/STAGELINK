@@ -2,10 +2,18 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.views import (
+    AdminCompanyListView,
+    AdminCompanyRejectView,
+    AdminCompanyVerifyView,
+    AdminUserDetailView,
+    AdminUserListCreateView,
+    InternalUserDirectoryView,
     InternalUserLookupView,
+    PublicCompanyProfileView,
     UserLoginView,
     UserProfileView,
     UserRegistrationView,
+    UserRoleProfileView,
 )
 
 
@@ -15,8 +23,48 @@ urlpatterns = [
     path("auth/refresh/", TokenRefreshView.as_view(), name="auth-refresh"),
     path("users/me/", UserProfileView.as_view(), name="user-profile"),
     path(
+        "users/me/profile/",
+        UserRoleProfileView.as_view(),
+        name="user-role-profile",
+    ),
+    path(
+        "companies/<uuid:company_id>/profile/",
+        PublicCompanyProfileView.as_view(),
+        name="public-company-profile",
+    ),
+    path(
+        "internal/users/",
+        InternalUserDirectoryView.as_view(),
+        name="internal-user-directory",
+    ),
+    path(
         "internal/users/<uuid:user_id>/",
         InternalUserLookupView.as_view(),
         name="internal-user-lookup",
+    ),
+    path(
+        "admin/companies/",
+        AdminCompanyListView.as_view(),
+        name="admin-company-list",
+    ),
+    path(
+        "admin/companies/<uuid:company_id>/verify/",
+        AdminCompanyVerifyView.as_view(),
+        name="admin-company-verify",
+    ),
+    path(
+        "admin/companies/<uuid:company_id>/reject/",
+        AdminCompanyRejectView.as_view(),
+        name="admin-company-reject",
+    ),
+    path(
+        "admin/users/",
+        AdminUserListCreateView.as_view(),
+        name="admin-user-list-create",
+    ),
+    path(
+        "admin/users/<uuid:user_id>/",
+        AdminUserDetailView.as_view(),
+        name="admin-user-detail",
     ),
 ]

@@ -114,3 +114,65 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class StudentProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="student_profile"
+    )
+    university = models.CharField(max_length=255, blank=True, default="")
+    department = models.CharField(max_length=255, blank=True, default="")
+    specialty = models.CharField(max_length=255, blank=True, default="")
+    academic_year = models.CharField(max_length=64, blank=True, default="")
+    matricule = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        db_table = "users_student_profile"
+
+
+class CompanyProfile(models.Model):
+    class VerificationStatus(models.TextChoices):
+        PENDING = "pending", "Pending"
+        ACTIVE = "active", "Active"
+        REJECTED = "rejected", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="company_profile"
+    )
+    legal_name = models.CharField(max_length=255, blank=True, default="")
+    address = models.TextField(blank=True, default="")
+    contact_person = models.CharField(max_length=255, blank=True, default="")
+    phone = models.CharField(max_length=64, blank=True, default="")
+    website = models.URLField(max_length=255, blank=True, default="")
+    description = models.TextField(blank=True, default="")
+    verification_status = models.CharField(
+        max_length=16,
+        choices=VerificationStatus.choices,
+        default=VerificationStatus.PENDING,
+    )
+    verified_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        related_name="verified_companies",
+        blank=True,
+        null=True,
+    )
+    verified_at = models.DateTimeField(blank=True, null=True)
+    rejection_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "users_company_profile"
+
+
+class SupervisorProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="supervisor_profile"
+    )
+    department = models.CharField(max_length=255, blank=True, default="")
+    grade = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "users_supervisor_profile"

@@ -34,9 +34,9 @@ internal endpoints.
 
 ## Roles and account activation
 
-The authoritative role values are `student`, `company`, `supervisor`, `university_admin`, and `platform_admin`. Public registration accepts only `student` and `company`, so clients cannot grant themselves administrative privileges. Company registration always creates an inactive account. A platform administrator can manually verify and activate company accounts through Django admin; superusers can be provisioned with `createsuperuser` and receive the `platform_admin` role.
+The authoritative role values are `student`, `company`, `supervisor`, `university_admin`, and `platform_admin`. Public registration accepts only `student` and `company`, so clients cannot grant themselves administrative privileges. Company registration always creates an inactive account. A platform administrator verifies and activates company accounts through the verification API; superusers can be provisioned with `createsuperuser` and receive the `platform_admin` role.
 
-The profile endpoint permits edits to a user's own `name` and `email`. Role, activation state, password hash, UUID, and join date are protected. Password changes should be handled through a separate authenticated flow before being exposed to users.
+The account endpoint permits edits to a user's own `name` and `email`. Role, activation state, password hash, UUID, and join date are protected. Role-specific student, company, and supervisor profiles are created idempotently whenever those users are created and are repaired on login if missing. Company accounts stay inactive until a platform administrator verifies them through the API.
 
 ## API
 
@@ -50,7 +50,27 @@ All routes are rooted at `/api/`.
 | `POST` | `/api/auth/refresh/` | Valid refresh token | Issue a new access token |
 | `GET` | `/api/users/me/` | User access token | Read caller's profile |
 | `PATCH` | `/api/users/me/` | User access token | Update caller's name or email |
+| `GET/PUT` | `/api/users/me/profile/` | User access token | Read or replace the caller's student, company, or supervisor profile |
+| `GET` | `/api/companies/{uuid}/profile/` | Public | Read non-sensitive fields for an active, verified company |
 | `GET` | `/api/internal/users/{uuid}/` | `X-Service-Token` | Return minimal user details to trusted services |
+| `GET` | `/api/internal/users/` | `X-Service-Token` | Filter and paginate users, or batch lookup up to 100 UUIDs |
+| `GET` | `/api/admin/companies/?status=pending\|active\|rejected` | Platform admin | List companies by verification status |
+| `POST` | `/api/admin/companies/{uuid}/verify/` | Platform admin | Verify and activate a company |
+| `POST` | `/api/admin/companies/{uuid}/reject/` | Platform admin | Reject a company with a required reason |
+| `GET/POST` | `/api/admin/users/` | Platform admin | List accounts or provision a company, university admin, or supervisor |
+| `PATCH` | `/api/admin/users/{uuid}/` | Platform admin | Update activation or company verification fields |
+
+Role profile fields:
+
+- Students: `university`, `department`, `specialty`, `academic_year`, `matricule`.
+- Companies: `legal_name`, `address`, `contact_person`, `phone`, `website`, `description`.
+- Supervisors: `department`, `grade`.
+
+Profile references are plain text in this release; reference-data IDs are planned for P1. Role profile `PUT` replaces the submitted profile fields and cannot change account role, email, or activation state. `university_admin` and `platform_admin` accounts do not have a role-specific profile endpoint.
+
+Internal directory filters accept `role`, `department`, and `page`. Batch lookup uses `ids` as a comma-separated list and cannot be combined with other filters; it returns only each matching user's `id` and `name`. Filtered directory results expose `id`, `name`, `email`, and `role`; the existing single-user endpoint is unchanged.
+
+Provisioning accepts either a validated `password` or `generate_password: true`. A generated value is returned as `one_time_password` in the creation response only; it is not included in later reads. Company accounts created by either public registration or provisioning start pending and inactive. Admin updates cannot change role, email, or password.
 
 Successful login response:
 
@@ -88,7 +108,7 @@ python manage.py migrate
 python manage.py test api
 ```
 
-Tests cover public role limits, password hashing, company activation defaults, JWT claims, login behavior, profile access and protected fields, and service-only internal lookups. A database must be configured through `DATABASE_URL` or `DB_*`; CI runs the suite against PostgreSQL, while SQLite is sufficient for a quick local run.
+Tests cover public role limits, password hashing, company activation and verification, JWT claims, login behavior, role-specific profiles and protected fields, admin provisioning and permission checks, and service-only directory lookups. A database must be configured through `DATABASE_URL` or `DB_*`; CI runs the suite against PostgreSQL, while SQLite is sufficient for a quick local run.
 
 ## Local console client
 
