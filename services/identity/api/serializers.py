@@ -82,6 +82,55 @@ class UserLoginSerializer(serializers.Serializer):
         return attrs
 
 
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(max_length=2048, trim_whitespace=False)
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    current_password = serializers.CharField(
+        max_length=128,
+        write_only=True,
+        trim_whitespace=False,
+    )
+    new_password = serializers.CharField(
+        max_length=128,
+        write_only=True,
+        trim_whitespace=False,
+    )
+
+    def validate_current_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("The current password is incorrect.")
+        return value
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if attrs["current_password"] == attrs["new_password"]:
+            raise serializers.ValidationError(
+                {"new_password": "The new password must be different."}
+            )
+        try:
+            validate_password(attrs["new_password"], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(
+                {"new_password": list(exc.messages)}
+            ) from exc
+        return attrs
+
+
+class DeactivateAccountSerializer(serializers.Serializer):
+    password = serializers.CharField(
+        max_length=128,
+        write_only=True,
+        trim_whitespace=False,
+    )
+
+    def validate_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("The password is incorrect.")
+        return value
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(required=False, max_length=254)
 

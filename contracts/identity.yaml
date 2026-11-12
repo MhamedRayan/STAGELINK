@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Identity API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     HTTP contract for the STAGELINK identity service.
 
@@ -12,7 +12,14 @@ info:
 
     Identifiers are UUID strings. Role values are lowercase snake_case.
     User endpoints require a bearer access token. Internal endpoints require
-    the shared X-Service-Token header.
+    the shared X-Service-Token header. Administrator endpoints require a
+    bearer token belonging to a `platform_admin`.
+
+    Error responses follow Django REST Framework conventions, not the shared
+    `{code, message, details}` envelope used by the other services. Detail
+    failures return `{"detail": "..."}`; validation failures return an object
+    mapping field names (or `non_field_errors`) to one message or a list of
+    messages.
 
   contact:
     name: STAGELINK maintainers
@@ -29,9 +36,13 @@ tags:
   - name: Authentication
     description: Registration, login and token refresh.
   - name: Profiles
-    description: Authenticated user profile operations.
+    description: Authenticated user profile and role profile operations.
+  - name: Companies
+    description: Public company profile endpoints.
   - name: Internal
     description: Trusted service-to-service endpoints.
+  - name: Admin
+    description: Platform-administrator account and company management.
 
 paths:
   /health/:
@@ -60,8 +71,8 @@ paths:
       summary: Register a student or company account
       description: |
         Public registration is limited to the `student` and `company` roles.
-        Company accounts are created inactive until an administrator activates
-        them. Other roles must be provisioned by an administrator.
+        Company accounts are created inactive until an administrator verifies
+        and activates them. Other roles must be provisioned by an administrator.
       security: []
       requestBody:
         required: true
@@ -87,6 +98,9 @@ paths:
         - Authentication
       operationId: loginUser
       summary: Authenticate and issue a token pair
+      description: |
+        Inactive accounts cannot log in. Company accounts stay inactive until a
+        platform administrator verifies them.
       security: []
       requestBody:
         required: true
@@ -112,6 +126,9 @@ paths:
         - Authentication
       operationId: refreshAccessToken
       summary: Exchange a refresh token for a new access token
+      description: |
+        Refresh tokens rotate: the response also contains a new refresh token,
+        and the submitted token is blacklisted. Reusing it returns `401`.
       security: []
       requestBody:
         required: true
@@ -121,11 +138,103 @@ paths:
               $ref: '#/components/schemas/RefreshRequest'
       responses:
         '200':
-          description: A new access token was issued.
+          description: A new access token and a rotated refresh token were issued.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RefreshResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/logout/:
+    post:
+      tags:
+        - Authentication
+      operationId: logout
+      summary: Revoke a refresh token
+      description: |
+        Blacklists the supplied refresh token so it can no longer be exchanged.
+        Logging out twice is harmless. The token must belong to the caller.
+        Access tokens are stateless and remain valid until they expire.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '200':
+          description: The token is revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/users/me/password/:
+    post:
+      tags:
+        - Profiles
+      operationId: changePassword
+      summary: Change the authenticated user's password
+      description: |
+        Requires the current password. All refresh tokens issued to the account
+        are revoked, so the client must sign in again. The current access token
+        stays valid until it expires.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: The password was changed and refresh tokens were revoked.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/me/deactivate/:
+    post:
+      tags:
+        - Profiles
+      operationId: deactivateAccount
+      summary: Deactivate the authenticated user's account
+      description: |
+        Requires the current password. The account can no longer sign in and all
+        refresh tokens are revoked. Accounts are not deleted; a platform admin
+        can reactivate one through the admin user API.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeactivateAccountRequest'
+      responses:
+        '200':
+          description: The account was deactivated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -151,6 +260,9 @@ paths:
         - Profiles
       operationId: updateCurrentUser
       summary: Update the authenticated user's name or email
+      description: |
+        Protected fields such as `role`, `is_active` and `date_joined` are
+        rejected with a field error when supplied.
       security:
         - bearerAuth: []
       requestBody:
@@ -170,6 +282,160 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+
+  /api/users/me/profile/:
+    get:
+      tags:
+        - Profiles
+      operationId: getCurrentRoleProfile
+      summary: Read the authenticated user's role-specific profile
+      description: |
+        Returns the profile matching the caller's role. Student, company and
+        supervisor accounts have a role-specific profile; university and
+        platform administrators do not.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's role-specific profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    put:
+      tags:
+        - Profiles
+      operationId: updateCurrentRoleProfile
+      summary: Replace the authenticated user's role-specific profile
+      description: |
+        Full replacement: every field for the caller's role is required. Unknown
+        fields and protected fields are rejected with a field error.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleProfileUpdate'
+      responses:
+        '200':
+          description: The updated role-specific profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/companies/{company_id}/profile/:
+    get:
+      tags:
+        - Companies
+      operationId: getPublicCompanyProfile
+      summary: Read the public profile of a verified company
+      description: |
+        Public and unauthenticated. `company_id` is the company user's UUID.
+        Only active, verified company accounts are returned; every other state
+        returns `404` so unverified accounts are not exposed.
+      security: []
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          description: UUID of the company user account.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The public company profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicCompanyProfile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/internal/users/:
+    get:
+      tags:
+        - Internal
+      operationId: listInternalUsers
+      summary: List or batch-look up users for trusted services
+      description: |
+        Two mutually exclusive modes:
+
+        * Directory mode (`role`, `department`, `page`): paginated list of
+          **active** accounts only. Used to resolve recipients such as
+          university administrators.
+        * Batch mode (`ids`): resolves up to 100 comma-separated UUIDs in the
+          requested order. Accounts are returned regardless of `is_active`, so
+          display names keep working for historical records. Unknown IDs are
+          omitted.
+
+        Pairing `ids` with any other query parameter is a validation error.
+        This endpoint is only available with the shared service token; user
+        access tokens are rejected.
+      security:
+        - serviceToken: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          description: Directory mode only. Filter by authoritative role.
+          schema:
+            $ref: '#/components/schemas/Role'
+        - name: department
+          in: query
+          required: false
+          description: |
+            Directory mode only. Matches the student or supervisor profile
+            department.
+          schema:
+            type: string
+            minLength: 1
+        - name: page
+          in: query
+          required: false
+          description: Directory mode only. Page number, 20 results per page.
+          schema:
+            type: integer
+            minimum: 1
+        - name: ids
+          in: query
+          required: false
+          description: |
+            Batch mode only. Comma-separated UUIDs, at most 100. Cannot be
+            combined with `role`, `department` or `page`.
+          schema:
+            type: string
+          example: 1c2d3e4f-0000-0000-0000-000000000001,1c2d3e4f-0000-0000-0000-000000000002
+      responses:
+        '200':
+          description: |
+            A paginated directory page (directory mode) or a batch result
+            (batch mode).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/DirectoryUserPage'
+                  - $ref: '#/components/schemas/DirectoryBatchResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /api/internal/users/{user_id}/:
     get:
@@ -197,6 +463,258 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/InternalUser'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/companies/:
+    get:
+      tags:
+        - Admin
+      operationId: listAdminCompanies
+      summary: List company accounts by verification status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: true
+          description: Verification status to list.
+          schema:
+            $ref: '#/components/schemas/VerificationStatus'
+        - name: page
+          in: query
+          required: false
+          description: Page number, 20 results per page.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: A page of company accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCompanyPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/companies/{company_id}/verify/:
+    post:
+      tags:
+        - Admin
+      operationId: verifyAdminCompany
+      summary: Verify and activate a company account
+      description: |
+        Marks the company as verified, records the verifying administrator and
+        timestamp, clears any rejection reason, and activates the account.
+        Repeating the call is idempotent.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          description: UUID of the company user account.
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The updated company account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCompanySummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/companies/{company_id}/reject/:
+    post:
+      tags:
+        - Admin
+      operationId: rejectAdminCompany
+      summary: Reject a company account
+      description: |
+        Marks the company as rejected, stores the reason and deactivates the
+        account.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          description: UUID of the company user account.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompanyRejectRequest'
+      responses:
+        '200':
+          description: The updated company account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCompanySummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/users/:
+    get:
+      tags:
+        - Admin
+      operationId: listAdminUsers
+      summary: List user accounts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          description: Filter by authoritative role.
+          schema:
+            $ref: '#/components/schemas/Role'
+        - name: page
+          in: query
+          required: false
+          description: Page number, 20 results per page.
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: A page of user accounts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      tags:
+        - Admin
+      operationId: createAdminUser
+      summary: Provision a privileged user account
+      description: |
+        Creates a `company`, `university_admin` or `supervisor` account. Provide
+        either a password or `generate_password: true`, but not both. The
+        generated password is returned once as `one_time_password`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserCreateRequest'
+      responses:
+        '201':
+          description: The provisioned account.
+          headers:
+            Location:
+              description: Absolute URL of the created user.
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/users/{user_id}/:
+    get:
+      tags:
+        - Admin
+      operationId: getAdminUser
+      summary: Read a user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The user account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+        - Admin
+      operationId: updateAdminUser
+      summary: Activate, deactivate or verify a user account
+      description: |
+        Only `is_active` may be changed for non-company accounts. For company
+        accounts, `verification_status` and `rejection_reason` are also
+        accepted. A company must be verified before it can be activated, and a
+        rejection requires a reason.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUserUpdateRequest'
+      responses:
+        '200':
+          description: The updated account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserSummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -245,6 +763,20 @@ components:
         - student
         - company
 
+    ProvisionableRole:
+      type: string
+      enum:
+        - company
+        - university_admin
+        - supervisor
+
+    VerificationStatus:
+      type: string
+      enum:
+        - pending
+        - active
+        - rejected
+
     UserProfile:
       type: object
       required:
@@ -278,8 +810,10 @@ components:
         email:
           type: string
           format: email
+          maxLength: 254
         name:
           type: string
+          maxLength: 255
 
     UserRegistration:
       type: object
@@ -351,8 +885,246 @@ components:
       type: object
       required:
         - access
+        - refresh
       properties:
         access:
+          type: string
+        refresh:
+          type: string
+          description: The rotated refresh token. The submitted token is blacklisted.
+
+    LogoutRequest:
+      type: object
+      required:
+        - refresh
+      properties:
+        refresh:
+          type: string
+
+    PasswordChangeRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          writeOnly: true
+        new_password:
+          type: string
+          writeOnly: true
+          minLength: 12
+
+    DeactivateAccountRequest:
+      type: object
+      required:
+        - password
+      properties:
+        password:
+          type: string
+          writeOnly: true
+
+    MessageResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+
+    StudentRoleProfile:
+      type: object
+      required:
+        - id
+        - university
+        - department
+        - specialty
+        - academic_year
+        - matricule
+      properties:
+        id:
+          type: string
+          format: uuid
+        university:
+          type: string
+          maxLength: 255
+        department:
+          type: string
+          maxLength: 255
+        specialty:
+          type: string
+          maxLength: 255
+        academic_year:
+          type: string
+          maxLength: 64
+        matricule:
+          type: string
+          maxLength: 128
+
+    CompanyRoleProfile:
+      type: object
+      required:
+        - id
+        - legal_name
+        - address
+        - contact_person
+        - phone
+        - website
+        - description
+        - verification_status
+        - verified_by
+        - verified_at
+        - rejection_reason
+      properties:
+        id:
+          type: string
+          format: uuid
+        legal_name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+        contact_person:
+          type: string
+          maxLength: 255
+        phone:
+          type: string
+          maxLength: 64
+        website:
+          type: string
+          maxLength: 255
+          description: May be empty or a valid URL.
+        description:
+          type: string
+        verification_status:
+          $ref: '#/components/schemas/VerificationStatus'
+        verified_by:
+          type: string
+          format: uuid
+          nullable: true
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+
+    SupervisorRoleProfile:
+      type: object
+      required:
+        - id
+        - department
+        - grade
+      properties:
+        id:
+          type: string
+          format: uuid
+        department:
+          type: string
+          maxLength: 255
+        grade:
+          type: string
+          maxLength: 255
+
+    RoleProfile:
+      oneOf:
+        - $ref: '#/components/schemas/StudentRoleProfile'
+        - $ref: '#/components/schemas/CompanyRoleProfile'
+        - $ref: '#/components/schemas/SupervisorRoleProfile'
+
+    StudentProfileUpdate:
+      type: object
+      required:
+        - university
+        - department
+        - specialty
+        - academic_year
+        - matricule
+      properties:
+        university:
+          type: string
+          maxLength: 255
+        department:
+          type: string
+          maxLength: 255
+        specialty:
+          type: string
+          maxLength: 255
+        academic_year:
+          type: string
+          maxLength: 64
+        matricule:
+          type: string
+          maxLength: 128
+
+    CompanyProfileUpdate:
+      type: object
+      required:
+        - legal_name
+        - address
+        - contact_person
+        - phone
+        - website
+        - description
+      properties:
+        legal_name:
+          type: string
+          maxLength: 255
+        address:
+          type: string
+        contact_person:
+          type: string
+          maxLength: 255
+        phone:
+          type: string
+          maxLength: 64
+        website:
+          type: string
+          maxLength: 255
+          description: May be empty or a valid URL.
+        description:
+          type: string
+
+    SupervisorProfileUpdate:
+      type: object
+      required:
+        - department
+        - grade
+      properties:
+        department:
+          type: string
+          maxLength: 255
+        grade:
+          type: string
+          maxLength: 255
+
+    RoleProfileUpdate:
+      oneOf:
+        - $ref: '#/components/schemas/StudentProfileUpdate'
+        - $ref: '#/components/schemas/CompanyProfileUpdate'
+        - $ref: '#/components/schemas/SupervisorProfileUpdate'
+
+    PublicCompanyProfile:
+      type: object
+      required:
+        - id
+        - legal_name
+        - address
+        - website
+        - description
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID of the company profile record.
+        legal_name:
+          type: string
+        address:
+          type: string
+        website:
+          type: string
+          description: May be empty or a valid URL.
+        description:
           type: string
 
     InternalUser:
@@ -377,28 +1149,288 @@ components:
         is_active:
           type: boolean
 
+    DirectoryUser:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+
+    DirectoryUserPage:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/DirectoryUser'
+
+    DirectoryBatchUser:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    DirectoryBatchResult:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          description: Requested IDs that exist, in the requested order.
+          items:
+            $ref: '#/components/schemas/DirectoryBatchUser'
+
+    AdminCompanySummary:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - role
+        - is_active
+        - verification_status
+        - verified_by
+        - verified_at
+        - rejection_reason
+        - legal_name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - company
+        is_active:
+          type: boolean
+        verification_status:
+          $ref: '#/components/schemas/VerificationStatus'
+        verified_by:
+          type: string
+          format: uuid
+          nullable: true
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejection_reason:
+          type: string
+        legal_name:
+          type: string
+
+    AdminCompanyPage:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminCompanySummary'
+
+    CompanyRejectRequest:
+      type: object
+      required:
+        - reason
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+
+    AdminUserSummary:
+      type: object
+      required:
+        - id
+        - name
+        - email
+        - role
+        - is_active
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          $ref: '#/components/schemas/Role'
+        is_active:
+          type: boolean
+        verification_status:
+          allOf:
+            - $ref: '#/components/schemas/VerificationStatus'
+          description: Present only for company accounts.
+        verified_by:
+          type: string
+          format: uuid
+          nullable: true
+          description: Present only for company accounts.
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Present only for company accounts.
+        rejection_reason:
+          type: string
+          description: Present only for company accounts.
+
+    AdminUserPage:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserSummary'
+
+    AdminUserCreateRequest:
+      type: object
+      required:
+        - email
+        - name
+        - role
+      additionalProperties: false
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        name:
+          type: string
+          maxLength: 255
+        role:
+          $ref: '#/components/schemas/ProvisionableRole'
+        password:
+          type: string
+          writeOnly: true
+          maxLength: 128
+          description: Required unless `generate_password` is true.
+        generate_password:
+          type: boolean
+          default: false
+          description: Generate a one-time password instead of supplying one.
+
+    AdminUserCreateResponse:
+      allOf:
+        - $ref: '#/components/schemas/AdminUserSummary'
+        - type: object
+          properties:
+            one_time_password:
+              type: string
+              description: Returned once when `generate_password` is true.
+
+    AdminUserUpdateRequest:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        is_active:
+          type: boolean
+        verification_status:
+          allOf:
+            - $ref: '#/components/schemas/VerificationStatus'
+          description: Company accounts only.
+        rejection_reason:
+          type: string
+          minLength: 1
+          description: Company accounts only. Required when rejecting.
+
     Error:
       type: object
       required:
-        - code
-        - message
+        - detail
       properties:
-        code:
+        detail:
           type: string
-          example: unauthorized
-        message:
-          type: string
-        details:
-          type: object
-          additionalProperties: true
+
+    ValidationError:
+      type: object
+      additionalProperties:
+        oneOf:
+          - type: string
+          - type: array
+            items:
+              type: string
+      example:
+        email:
+          - An account with this email address already exists.
 
   responses:
     BadRequest:
-      description: The request body is invalid.
+      description: The request body or query parameters are invalid.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/Error'
+            $ref: '#/components/schemas/ValidationError'
     Unauthorized:
       description: Authentication is missing or invalid.
       content:

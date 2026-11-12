@@ -5,8 +5,10 @@ x-service-environment: &service-environment
   DJANGO_SECRET_KEY: "${DJANGO_SECRET_KEY:-dev-only-django-secret-key-change-before-production-0123456789}"
   DJANGO_ALLOWED_HOSTS: "${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,identity,offers,applications,internships,notifications}"
   DJANGO_CSRF_TRUSTED_ORIGINS: "${DJANGO_CSRF_TRUSTED_ORIGINS:-}"
+  CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}"
   SECURE_SSL_REDIRECT: "${SECURE_SSL_REDIRECT:-false}"
   SECURE_HSTS_SECONDS: "${SECURE_HSTS_SECONDS:-0}"
+  SECURE_PROXY_SSL_HEADER: "${SECURE_PROXY_SSL_HEADER:-false}"
   DATABASE_CONN_MAX_AGE: "60"
 
   # Shared JWT and service-to-service authentication.
@@ -47,6 +49,12 @@ services:
       <<: *service-environment
       DB_NAME: identity
       DB_HOST: db-identity
+      # Used only by `manage.py seed_demo` to create the demo offer.
+      OFFERS_BASE_URL: "http://offers:8000"
+      # Generous local limits so demos and integration tests are not throttled.
+      # Use 10/hour and 10/minute in production.
+      LOGIN_THROTTLE_RATE: "${LOGIN_THROTTLE_RATE:-1000/minute}"
+      REGISTER_THROTTLE_RATE: "${REGISTER_THROTTLE_RATE:-1000/hour}"
     depends_on:
       db-identity:
         condition: service_healthy
@@ -72,6 +80,8 @@ services:
       <<: *service-environment
       DB_NAME: offers
       DB_HOST: db-offers
+      # Committed-places snapshot before a published capacity reduction.
+      APPLICATIONS_BASE_URL: "http://applications:8000"
     depends_on:
       db-offers:
         condition: service_healthy
@@ -88,6 +98,31 @@ services:
     healthcheck: *postgres-healthcheck
     restart: unless-stopped
 
+  # Closes published offers whose deadline passed. The command is idempotent,
+  # so a failed run is simply retried on the next interval.
+  scheduler-offers:
+    build:
+      context: ../../services/offers
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          python manage.py close_expired_offers || true
+          sleep 300
+        done
+    environment:
+      <<: *service-environment
+      DB_NAME: offers
+      DB_HOST: db-offers
+      APPLICATIONS_BASE_URL: "http://applications:8000"
+    depends_on:
+      db-offers:
+        condition: service_healthy
+      offers:
+        condition: service_healthy
+    restart: unless-stopped
+
   applications:
     build:
       context: ../../services/applications
@@ -102,6 +137,9 @@ services:
       OFFERS_SERVICE_URL: "http://offers:8000/api/internal/offers/"
       # Notifications are best effort and sent after commit.
       NOTIFICATIONS_BASE_URL: "http://notifications:8000"
+      # University-administrator recipients are resolved from the Identity
+      # directory after commit; the env list is only an outage fallback.
+      IDENTITY_BASE_URL: "http://identity:8000"
       UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
     depends_on:
       db-applications:
@@ -117,6 +155,35 @@ services:
     volumes:
       - applications-data:/var/lib/postgresql/data
     healthcheck: *postgres-healthcheck
+    restart: unless-stopped
+
+  # Retries applications stuck in STUDENT_ACCEPTED because the Internships call
+  # failed. The internship endpoint is idempotent, so retries are safe.
+  scheduler-applications:
+    build:
+      context: ../../services/applications
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          python manage.py reconcile_confirmed_applications --limit 100 --older-than 60 || true
+          sleep 300
+        done
+    environment:
+      <<: *service-environment
+      DB_NAME: applications
+      DB_HOST: db-applications
+      INTERNSHIP_SERVICE_URL: "${INTERNSHIP_SERVICE_URL:-http://internships:8000/api/internal/internships/}"
+      OFFERS_SERVICE_URL: "http://offers:8000/api/internal/offers/"
+      NOTIFICATIONS_BASE_URL: "http://notifications:8000"
+      IDENTITY_BASE_URL: "http://identity:8000"
+      UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
+    depends_on:
+      db-applications:
+        condition: service_healthy
+      applications:
+        condition: service_healthy
     restart: unless-stopped
 
   internships:
@@ -135,6 +202,8 @@ services:
       MAX_SUBMISSION_SIZE_BYTES: "${MAX_SUBMISSION_SIZE_BYTES:-10485760}"
       NOTIFICATIONS_BASE_URL: "http://notifications:8000"
       APPLICATIONS_BASE_URL: "http://applications:8000"
+      # Recipients are resolved from Identity after commit; the env list is
+      # only an outage fallback.
       UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
     volumes:
       - internships-media:/app/media

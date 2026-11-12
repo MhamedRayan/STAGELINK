@@ -185,8 +185,10 @@ paths:
       summary: Partially update an offer
       description: >-
         Only the owning company can update an offer. Closed offers cannot be edited.
-        While published, title and location cannot change and capacity cannot be
-        reduced (409).
+        While published, title and location cannot change. Capacity may increase,
+        and may decrease only down to the number of committed places reported by
+        Applications. A reduction below that number returns 409; if Applications
+        cannot be reached the reduction fails closed with 503.
       security:
         - bearerAuth: []
       requestBody:
@@ -212,6 +214,8 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
     delete:
       tags:
         - Offers

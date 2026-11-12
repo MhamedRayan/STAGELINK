@@ -5,6 +5,7 @@ from .views import (
     ApplicationHistoryView,
     ApplicationListCreateView,
     CompanyDecisionView,
+    InternalOfferApplicationCountsView,
     InternalOfferCapacityView,
     InternalReleasePlaceView,
     StudentDecisionView,
@@ -30,5 +31,10 @@ urlpatterns = [
         'internal/offers/<uuid:offer_id>/capacity/',
         InternalOfferCapacityView.as_view(),
         name='internal-offer-capacity',
+    ),
+    path(
+        'internal/offers/<uuid:offer_id>/applications-count/',
+        InternalOfferApplicationCountsView.as_view(),
+        name='internal-offer-application-counts',
     ),
 ]

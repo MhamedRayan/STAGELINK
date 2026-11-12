@@ -16,6 +16,8 @@ env = environ.Env(
     DATABASE_CONN_MAX_AGE=(int, 60),
     JWT_ACCESS_TOKEN_MINUTES=(int, 15),
     JWT_REFRESH_TOKEN_DAYS=(int, 7),
+    LOGIN_THROTTLE_RATE=(str, "10/minute"),
+    REGISTER_THROTTLE_RATE=(str, "10/hour"),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -26,6 +28,11 @@ CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS")
 DATABASE_URL = env.str("DATABASE_URL", default="")
 JWT_SIGNING_KEY = env.str("JWT_SIGNING_KEY")
 INTERNAL_SERVICE_TOKEN = env.str("INTERNAL_SERVICE_TOKEN", default="")
+
+# Base URL used only by the seed_demo command to create and publish the demo
+# offer through the Offers service. Identity never calls Offers at request time.
+OFFERS_BASE_URL = env.str("OFFERS_BASE_URL", default="http://localhost:8002")
+OFFERS_TIMEOUT_SECONDS = env.float("OFFERS_TIMEOUT_SECONDS", default=5.0)
 
 if not DEBUG and (len(SECRET_KEY) < 50 or "replace-with" in SECRET_KEY):
     raise ImproperlyConfigured(
@@ -48,12 +55,15 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "api.apps.ApiConfig",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -152,16 +162,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_CLASSES": ["rest_framework.throttling.ScopedRateThrottle"],
     "DEFAULT_THROTTLE_RATES": {
-        "register": "10/hour",
-        "login": "10/minute",
+        "register": env.str("REGISTER_THROTTLE_RATE"),
+        "login": env.str("LOGIN_THROTTLE_RATE"),
     },
 }
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int("JWT_ACCESS_TOKEN_MINUTES")),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int("JWT_REFRESH_TOKEN_DAYS")),
-    "ROTATE_REFRESH_TOKENS": False,
-    "BLACKLIST_AFTER_ROTATION": False,
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
     "UPDATE_LAST_LOGIN": False,
     "ALGORITHM": "HS256",
     "SIGNING_KEY": JWT_SIGNING_KEY,
@@ -182,3 +192,12 @@ CSRF_COOKIE_SECURE = not DEBUG
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "same-origin"
+
+if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Browser clients call the APIs from a different origin. Only explicitly
+# allowed origins are accepted; authentication uses the Bearer header, not
+# cookies, so credentials are not shared.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = False

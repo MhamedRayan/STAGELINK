@@ -29,11 +29,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "offers",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -123,6 +125,11 @@ JWT_ROLE_CLAIM = env("JWT_ROLE_CLAIM", default="role")
 # Shared secret that trusted services send in the X-Service-Token header.
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
 
+# Applications owns reservations. Offers asks it for committed places before
+# allowing a published offer's capacity to be reduced.
+APPLICATIONS_BASE_URL = env("APPLICATIONS_BASE_URL", default="http://localhost:8003")
+APPLICATIONS_TIMEOUT_SECONDS = env.float("APPLICATIONS_TIMEOUT_SECONDS", default=5.0)
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTStatelessUserAuthentication",
@@ -138,3 +145,22 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
 }
+
+# Browser clients call the APIs from a different origin. Only explicitly
+# allowed origins are accepted; authentication uses the Bearer header, not
+# cookies, so credentials are not shared.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = False
+
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

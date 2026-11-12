@@ -29,6 +29,7 @@ from .services import (
     decide_as_company,
     decide_as_student,
     decide_as_university,
+    offer_application_counts,
     offer_capacity_snapshot,
     release_place_for_application,
     submit_application,
@@ -264,3 +265,17 @@ class InternalOfferCapacityView(APIView):
 
     def get(self, request, offer_id):
         return Response(offer_capacity_snapshot(offer_id))
+
+
+class InternalOfferApplicationCountsView(APIView):
+    """GET /api/internal/offers/<uuid>/applications-count/ (service only).
+
+    Offers has no application counter; this endpoint is the dashboard's single
+    source of truth for per-offer application counts.
+    """
+
+    authentication_classes = []
+    permission_classes = [IsInternalService]
+
+    def get(self, request, offer_id):
+        return Response(offer_application_counts(offer_id))

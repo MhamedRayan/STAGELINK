@@ -22,6 +22,13 @@ for port in 8001 8002 8003 8004 8005; do
 done
 ```
 
+The real-account flow uses the demo platform administrator. Seed it once:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec -T identity python manage.py seed_demo
+```
+
 ## Run the suite
 
 ```bash
@@ -36,39 +43,45 @@ environment. Their defaults match `.env.example`, so they work with an unmodifie
 local stack. If you changed those values, export the same values before running
 the suite.
 
-The suite mints its own user tokens with the shared signing key. That keeps it
-independent of Identity registration throttles and of privileged account
-provisioning; it still exercises the exact token claims the services validate.
+`test_applications_internships.py` and `test_notifications.py` mint user tokens
+with the shared signing key. That keeps them independent of registration
+throttles while still exercising the exact claims the services validate.
+
+`test_identity.py` does not mint tokens. It registers real accounts through the
+API, signs in with real passwords, and uses the issued access tokens for the
+whole journey. The platform administrator is the only bootstrap account; the
+full-flow test skips with instructions if `seed_demo` has not been run.
 
 ## What is covered
 
-- A fully approved application is confirmed after `internships` accepts the
-  internal create call.
-- The internship carries the application's UUIDs and dates.
-- Repeating the internal create is idempotent and returns `200`.
-- The internal endpoint rejects missing and incorrect service tokens.
-- A downstream conflict returns `502` and rolls back the application state.
-- `test_notifications.py`: internal creation is idempotent, the recipient sees
-  exactly one notification, mark-read is idempotent, and a user JWT cannot call
-  the internal endpoint.
+- **Applications → Internships:** a fully approved application is confirmed
+  after `internships` accepts the internal create call; the internship carries
+  the application's UUIDs and dates; repeating the internal create is
+  idempotent; missing or incorrect service tokens are rejected; a downstream
+  conflict rolls back the application state.
+- **Capacity:** the reservation model blocks a second acceptance when the offer
+  is full, and confirmation withdraws the student's other open applications.
+- **Notifications:** internal creation is idempotent, the recipient sees exactly
+  one notification, mark-read is idempotent, a user JWT cannot call the internal
+  endpoint, and a student confirmation notifies the company and the university
+  administrator exactly once.
+- **Identity lifecycle:** register → login → read profile → change password →
+  old refresh token rejected → new login → logout → refresh rejected →
+  deactivate → login rejected.
+- **Identity company verification:** registration creates an inactive company;
+  it stays unable to log in until a platform administrator verifies it.
+- **Full real-account flow:** a registered company is verified, creates and
+  publishes an offer; a registered student applies; the company accepts; a
+  provisioned university administrator validates; the student accepts and an
+  internship is created; the university administrator assigns a provisioned
+  supervisor; the supervisor sees the internship; the internal application-count
+  endpoint reports the confirmed application.
 
-`test_notifications.py` also contains a skipped end-to-end confirmation test.
-It is enabled once Applications emits `application_confirmed` events
-(Applications P1-4).
+## Conventions
 
-## Pending internship scenarios
-
-These are part of the internship delivery but stay gated on other services:
-
-| Scenario | Blocked on |
-| --- | --- |
-| Supervisor assignment visible to the supervisor | Identity provisioning of a real supervisor account (Identity P0-4), or a seed command |
-| Cancellation approval releases the place | `POST /api/internal/applications/{id}/release-place/` in Applications |
-| Exactly one notification on confirmation | Notifications UUID recipient support (Notifications P0-1) |
-
-The service-level tests in `services/internships` cover the same rules with the
-external clients mocked, so the internship behaviour is verified while the seams
-are unavailable.
+Integration tests use unique emails, offer titles and application IDs, so the
+suite can run repeatedly against the same database. They leave their data in
+place; use `down -v` only when you want a clean local environment.
 
 ## Stop the stack
 

@@ -115,3 +115,67 @@ class InternalEndpointTests(TestCase):
         self.assertEqual(response.data['occupied'], 1)
         self.assertEqual(response.data['committed'], 2)
         self.assertEqual(response.data['available'], 2)
+
+    # --- application counts ------------------------------------------------
+
+    def test_application_counts_require_the_service_token(self):
+        url = reverse(
+            'internal-offer-application-counts',
+            kwargs={'offer_id': self.offer_id},
+        )
+        self.assertEqual(self.service_client(None).get(url).status_code, 403)
+
+    def test_application_counts_are_zero_without_applications(self):
+        url = reverse(
+            'internal-offer-application-counts',
+            kwargs={'offer_id': uuid.uuid4()},
+        )
+
+        response = self.service_client().get(url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['total'], 0)
+        self.assertEqual(response.data['active'], 0)
+        self.assertEqual(response.data['confirmed'], 0)
+
+    def test_application_counts_group_by_status(self):
+        make_application(
+            offer_id=self.offer_id,
+            student_user_id=uuid.uuid4(),
+            status=ApplicationStatus.SUBMITTED,
+        )
+        make_application(
+            offer_id=self.offer_id,
+            student_user_id=uuid.uuid4(),
+            status=ApplicationStatus.UNIVERSITY_VALIDATED,
+        )
+        make_application(
+            offer_id=self.offer_id,
+            student_user_id=uuid.uuid4(),
+            status=ApplicationStatus.CONFIRMED,
+        )
+        make_application(
+            offer_id=self.offer_id,
+            student_user_id=uuid.uuid4(),
+            status=ApplicationStatus.WITHDRAWN,
+        )
+        make_application(
+            offer_id=self.offer_id,
+            student_user_id=uuid.uuid4(),
+            status=ApplicationStatus.COMPANY_REJECTED,
+        )
+        make_application(offer_id=uuid.uuid4(), status=ApplicationStatus.SUBMITTED)
+        url = reverse(
+            'internal-offer-application-counts',
+            kwargs={'offer_id': self.offer_id},
+        )
+
+        response = self.service_client().get(url)
+
+        self.assertEqual(response.data['total'], 6)
+        self.assertEqual(response.data['active'], 2)
+        self.assertEqual(response.data['confirmed'], 2)
+        self.assertEqual(response.data['withdrawn'], 1)
+        self.assertEqual(response.data['rejected'], 1)
+        self.assertEqual(response.data['by_status'][ApplicationStatus.SUBMITTED], 1)
+        self.assertEqual(response.data['by_status'][ApplicationStatus.CONFIRMED], 2)

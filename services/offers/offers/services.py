@@ -2,7 +2,8 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from offers.exceptions import OfferStateConflict
+from offers.applications_client import ApplicationsUnavailable, get_offer_capacity
+from offers.exceptions import CapacityLookupUnavailable, OfferStateConflict
 from offers.models import Offer, OfferStatus
 
 REQUIRED_TEXT_FIELDS = ("title", "description", "requirements", "location")
@@ -35,17 +36,27 @@ def ensure_offer_is_editable(offer):
 
 
 def ensure_capacity_change_allowed(offer, new_capacity):
-    """Block capacity reductions while an offer is published.
+    """Allow increases and safe reductions; never drop below committed places.
 
-    Applications owns reservations and has not published its committed-places
-    endpoint yet, so every reduction is refused. Increases are always allowed.
+    Applications owns reservations and exposes the committed-places snapshot.
+    If that snapshot cannot be read, the reduction fails closed with 503 instead
+    of risking overbooking.
     """
     if new_capacity is None or offer.status != OfferStatus.PUBLISHED:
         return
-    if new_capacity < offer.capacity:
+    if new_capacity >= offer.capacity:
+        return
+
+    try:
+        snapshot = get_offer_capacity(offer.pk)
+    except ApplicationsUnavailable as exc:
+        raise CapacityLookupUnavailable() from exc
+
+    committed = snapshot["committed"]
+    if new_capacity < committed:
         raise OfferStateConflict(
-            "Capacity cannot be reduced while the offer is published.",
-            code="capacity_reduction_blocked",
+            f"Capacity cannot be reduced below {committed} committed place(s).",
+            code="capacity_below_committed",
         )
 
 

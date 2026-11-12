@@ -435,6 +435,31 @@ paths:
         '403':
           $ref: '#/components/responses/InternalForbidden'
 
+  /api/internal/offers/{offer_id}/applications-count/:
+    parameters:
+      - $ref: '#/components/parameters/OfferId'
+    get:
+      tags:
+        - Internal
+      operationId: getOfferApplicationCounts
+      summary: Read per-offer application counts
+      description: |
+        Applications is the single source of truth for application counts; the
+        offers service stores no counter. `active` covers every application
+        still in flight, `rejected` combines company, university and student
+        rejections, and `by_status` breaks the total down by state.
+      security:
+        - serviceToken: []
+      responses:
+        '200':
+          description: The application counts.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfferApplicationCounts'
+        '403':
+          $ref: '#/components/responses/InternalForbidden'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -807,6 +832,35 @@ components:
         available:
           type: integer
           nullable: true
+
+    OfferApplicationCounts:
+      type: object
+      required:
+        - offer_id
+        - total
+        - active
+        - confirmed
+        - withdrawn
+        - rejected
+        - by_status
+      properties:
+        offer_id:
+          type: string
+          format: uuid
+        total:
+          type: integer
+        active:
+          type: integer
+        confirmed:
+          type: integer
+        withdrawn:
+          type: integer
+        rejected:
+          type: integer
+        by_status:
+          type: object
+          additionalProperties:
+            type: integer
 
     ReleasePlaceResult:
       type: object

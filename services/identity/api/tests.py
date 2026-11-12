@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from rest_framework import status
@@ -18,6 +19,8 @@ TEST_SERVICE_TOKEN = "test-service-token"
 @override_settings(INTERNAL_SERVICE_TOKEN=TEST_SERVICE_TOKEN)
 class IdentityApiTests(APITestCase):
     def setUp(self):
+        # Throttle counters live in the shared cache; each test starts clean.
+        cache.clear()
         self.student = User.objects.create_user(
             email="student@example.edu",
             password="StudentStrongPassword!2026",
@@ -768,6 +771,33 @@ class IdentityApiTests(APITestCase):
         )
         self.assertEqual(unknown_role.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_internal_directory_excludes_inactive_but_batch_lookup_returns_them(self):
+        inactive = User.objects.create_user(
+            email="inactive-admin@example.edu",
+            password="InactiveAdminStrongPassword!2026",
+            name="Inactive Admin",
+            role=UserRole.UNIVERSITY_ADMIN,
+        )
+        User.objects.filter(pk=inactive.pk).update(is_active=False)
+        self.client.credentials(HTTP_X_SERVICE_TOKEN=TEST_SERVICE_TOKEN)
+
+        filtered = self.client.get(
+            reverse("internal-user-directory"),
+            {"role": UserRole.UNIVERSITY_ADMIN},
+        )
+        batch = self.client.get(
+            reverse("internal-user-directory"), {"ids": str(inactive.id)}
+        )
+
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["count"], 0)
+        self.assertEqual(filtered.data["results"], [])
+        self.assertEqual(batch.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            batch.data["results"],
+            [{"id": str(inactive.id), "name": "Inactive Admin"}],
+        )
+
     def test_internal_directory_rejects_bad_token_and_more_than_100_ids(self):
         self.client.credentials(HTTP_X_SERVICE_TOKEN="wrong-token")
         unauthorized = self.client.get(reverse("internal-user-directory"))
@@ -818,3 +848,196 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(len(first_ids), 20)
         self.assertEqual(len(second_ids), 3)
         self.assertFalse(first_ids & second_ids)
+
+    # ------------------------------------------------------------------
+    # Account lifecycle
+    # ------------------------------------------------------------------
+
+    def _login(self, user=None, password="StudentStrongPassword!2026"):
+        user = user or self.student
+        response = self.client.post(
+            reverse("auth-login"),
+            {"email": user.email, "password": password},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return response.data
+
+    def _authenticate(self, access):
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+
+    def test_logout_requires_authentication(self):
+        tokens = self._login()
+
+        response = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_blacklists_the_refresh_token(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        refresh = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+        self.assertEqual(refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Logging out twice is harmless.
+        second = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+
+    def test_logout_rejects_a_refresh_token_for_another_account(self):
+        other_tokens = self._login(
+            user=self.other_student, password="OtherStrongPassword!2026"
+        )
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": other_tokens["refresh"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        still_valid = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": other_tokens["refresh"]},
+            format="json",
+        )
+        self.assertEqual(still_valid.status_code, status.HTTP_200_OK)
+
+    def test_logout_rejects_a_malformed_refresh_token(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": "not-a-token"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_password_change_requires_the_current_password(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("user-password-change"),
+            {
+                "current_password": "WrongPassword!2026",
+                "new_password": "NewStrongPassword!2026",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("current_password", response.data)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_password("StudentStrongPassword!2026"))
+
+    def test_password_change_rejects_a_weak_new_password(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("user-password-change"),
+            {
+                "current_password": "StudentStrongPassword!2026",
+                "new_password": "12345678",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("new_password", response.data)
+
+    def test_password_change_updates_the_password_and_revokes_refresh_tokens(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("user-password-change"),
+            {
+                "current_password": "StudentStrongPassword!2026",
+                "new_password": "NewStrongPassword!2026",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.check_password("NewStrongPassword!2026"))
+        refresh = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+        self.assertEqual(refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.credentials()
+        self._login(password="NewStrongPassword!2026")
+
+    def test_deactivate_requires_the_password(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("user-deactivate"),
+            {"password": "WrongPassword!2026"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+
+    def test_deactivate_blocks_login_and_revokes_refresh_tokens(self):
+        tokens = self._login()
+        self._authenticate(tokens["access"])
+
+        response = self.client.post(
+            reverse("user-deactivate"),
+            {"password": "StudentStrongPassword!2026"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+
+        refresh = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": tokens["refresh"]},
+            format="json",
+        )
+        self.assertEqual(refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.client.credentials()
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        self.assertEqual(login.status_code, status.HTTP_401_UNAUTHORIZED)

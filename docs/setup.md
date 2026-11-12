@@ -35,12 +35,32 @@ gets its own database from Compose; the shared `JWT_SIGNING_KEY` and
 docker compose --env-file .env -f infra/docker/docker-compose.yml up --build
 ```
 
-The first run builds five images and initialises five PostgreSQL databases.
-Use `-d` to run in the background:
+The first run builds five images and initialises five PostgreSQL databases. Use
+`-d` to run in the background:
 
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml up --build -d
 ```
+
+The stack also starts two scheduler sidecars, `scheduler-offers` and
+`scheduler-applications`, which run the idempotent maintenance commands every
+five minutes. Failed runs are retried on the next interval; stop them with the
+rest of the stack.
+
+## Account lifecycle
+
+Registration, login and refresh are not the whole account API. The front end
+should use these routes:
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/auth/logout/` | Blacklist one refresh token. Idempotent. |
+| `POST /api/users/me/password/` | Change password with `current_password` + `new_password`; revokes every refresh token. |
+| `POST /api/users/me/deactivate/` | Deactivate the account with `password`; revokes every refresh token. |
+
+Refresh tokens rotate on use: always store the new `refresh` value returned by
+`POST /api/auth/refresh/`. Access tokens last 15 minutes by default and are not
+individually revocable.
 
 ## 4. Verify the services
 
@@ -63,6 +83,55 @@ Each response should be similar to:
 ```json
 {"status": "ok", "service": "identity"}
 ```
+
+## Seed demo data
+
+One command creates every account needed to demonstrate the full workflow,
+including a verified company and a published offer:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec identity python manage.py seed_demo
+```
+
+| Role             | Email                         | Password              |
+| ---------------- | ----------------------------- | --------------------- |
+| Platform admin   | `admin@stagelink.demo`        | `StagelinkDemo!2026`  |
+| Company          | `company@stagelink.demo`      | `StagelinkDemo!2026`  |
+| Student          | `student@stagelink.demo`      | `StagelinkDemo!2026`  |
+| University admin | `university@stagelink.demo`   | `StagelinkDemo!2026`  |
+| Supervisor       | `supervisor@stagelink.demo`   | `StagelinkDemo!2026`  |
+
+The company account is active and verified, the student and supervisor have
+complete role profiles, and the company owns a published
+`Software Engineering Internship` offer with capacity 3. Every account can log
+in immediately through `POST /api/auth/login/`.
+
+The command is idempotent. Rerunning it resets the demo account passwords,
+converges the profile and verification state, and leaves an already-published
+offer untouched. It refuses to run while `DJANGO_DEBUG` is false unless you pass
+`--force`, which prevents accidental seeding of a production database.
+
+Useful options:
+
+```bash
+# Identity only (Offers is not running yet)
+... exec identity python manage.py seed_demo --skip-offer
+
+# Machine-readable output
+... exec identity python manage.py seed_demo --json
+
+# Point at a different Offers instance or change the offer
+... exec identity python manage.py seed_demo \
+  --offers-url http://localhost:8002 \
+  --offer-title "Data Engineering Internship" \
+  --offer-capacity 5 \
+  --offer-deadline-days 60
+```
+
+`--password` and `--domain` change the shared demo password and email domain.
+Identity writes its own accounts directly through the ORM and creates the offer
+through the Offers HTTP API; it never reads the Offers database.
 
 ## Uploads and media
 
@@ -151,6 +220,10 @@ stack over real HTTP:
 docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build \
   identity offers applications internships
 
+# The real-account flow test uses the demo platform administrator.
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec -T identity python manage.py seed_demo
+
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r tests/integration/requirements.txt
@@ -158,7 +231,10 @@ python -m unittest discover -s tests/integration -v
 ```
 
 The suite reads `JWT_SIGNING_KEY` and `INTERNAL_SERVICE_TOKEN` from the
-environment; its defaults match `.env.example`. See
+environment; its defaults match `.env.example`. `tests/integration/test_identity.py`
+creates real accounts through the API and signs them in, rather than minting
+tokens. If the platform administrator has not been seeded, the full-flow test
+skips with instructions. See
 [`tests/integration/README.md`](../tests/integration/README.md) for the covered
 scenarios and cleanup commands.
 
@@ -175,6 +251,15 @@ This permanently removes the local databases.
 
 The web client is not implemented yet. `frontend/README.md` records the
 intended stack and will be replaced when the application is scaffolded.
+
+The APIs accept browser requests from the origins in `CORS_ALLOWED_ORIGINS`.
+The Compose default allows `http://localhost:3000` and
+`http://127.0.0.1:3000`. Update the root `.env` if the front end uses another
+port. Authentication uses the `Authorization: Bearer <access>` header, not
+cookies.
+
+For production deployment, TLS, backups, schedulers and the security checklist,
+see [deployment.md](deployment.md).
 
 ## Troubleshooting
 

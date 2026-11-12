@@ -141,3 +141,53 @@ def notify_on_commit(
         ),
     )
     transaction.on_commit(lambda: send(payload), robust=True)
+
+
+def notify_recipients_on_commit(
+    *,
+    resolve_recipients,
+    notification_type,
+    title,
+    message,
+    related_object_id,
+    event,
+    related_object_type="application",
+):
+    """Resolve recipients and send after the current transaction commits.
+
+    ``resolve_recipients`` runs inside the on-commit callback, never inside the
+    caller's transaction. This keeps a slow directory or Notifications call from
+    extending database lock time. Recipient resolution failures are logged and
+    never break the business action.
+    """
+
+    if not settings.NOTIFICATIONS_ENABLED:
+        return
+
+    def deliver():
+        try:
+            recipients = resolve_recipients() or ()
+        except Exception as exc:  # noqa: BLE001 - best effort by design
+            logger.warning(
+                "Recipient resolution failed for application %s: %s",
+                related_object_id,
+                exc,
+            )
+            return
+
+        for recipient_user_id in dict.fromkeys(recipients):
+            if not recipient_user_id:
+                continue
+            payload = _payload(
+                recipient_user_id=recipient_user_id,
+                notification_type=notification_type,
+                title=title,
+                message=message,
+                related_object_id=related_object_id,
+                deduplication_key=build_deduplication_key(
+                    related_object_id, event, recipient_user_id
+                ),
+            )
+            send(payload)
+
+    transaction.on_commit(deliver, robust=True)

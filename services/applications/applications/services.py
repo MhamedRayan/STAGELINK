@@ -11,10 +11,11 @@ from datetime import timezone as dt_timezone
 import requests
 from django.conf import settings
 from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from . import notifications_client
+from . import identity_client, notifications_client
 from .errors import (
     CAPACITY_FULL,
     DOWNSTREAM_UNAVAILABLE,
@@ -224,15 +225,66 @@ def offer_capacity_snapshot(offer_id):
     }
 
 
+def offer_application_counts(offer_id):
+    """Per-offer application counts for the company dashboard.
+
+    Offers stores no counter; Applications is the single source of truth.
+    """
+
+    counts = dict(
+        Application.objects.filter(offer_id=offer_id)
+        .values_list("status")
+        .annotate(total=Count("id"))
+    )
+
+    def total_for(statuses):
+        return sum(counts.get(status, 0) for status in statuses)
+
+    return {
+        "offer_id": str(offer_id),
+        "total": sum(counts.values()),
+        "active": total_for(OPEN_STATUSES),
+        "confirmed": counts.get(ApplicationStatus.CONFIRMED, 0),
+        "withdrawn": counts.get(ApplicationStatus.WITHDRAWN, 0),
+        "rejected": total_for(
+            (
+                ApplicationStatus.COMPANY_REJECTED,
+                ApplicationStatus.UNIVERSITY_REJECTED,
+                ApplicationStatus.STUDENT_DECLINED,
+            )
+        ),
+        "by_status": {
+            status: counts.get(status, 0) for status in ApplicationStatus.values
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Notifications (P1-4)
 # ---------------------------------------------------------------------------
 
-def _university_admins(application):
-    recipients = set(settings.UNIVERSITY_ADMIN_USER_IDS or [])
+def _resolve_university_admins(application):
+    """Resolve university-administrator recipients after commit.
+
+    The Identity directory is authoritative. When it is unavailable, fall back
+    to the configured UUID list so notifications keep flowing during an outage.
+    The administrator recorded on the application is always included.
+    """
+
+    recorded = set()
     if application.university_user_id:
-        recipients.add(str(application.university_user_id))
-    return sorted(recipients)
+        recorded.add(str(application.university_user_id))
+
+    try:
+        directory = set(identity_client.list_university_admin_ids())
+    except identity_client.IdentityUnavailable as exc:
+        logger.warning(
+            "Identity directory unavailable; using configured university admins: %s",
+            exc,
+        )
+        directory = {str(value) for value in settings.UNIVERSITY_ADMIN_USER_IDS or []}
+
+    return sorted(directory | recorded)
 
 
 def _notify(*, app, recipient_user_id, notification_type, title, message, event):
@@ -247,15 +299,14 @@ def _notify(*, app, recipient_user_id, notification_type, title, message, event)
 
 
 def _notify_pending_validation(app):
-    for recipient in _university_admins(app):
-        _notify(
-            app=app,
-            recipient_user_id=recipient,
-            notification_type="application_pending_validation",
-            title="Application waiting for validation",
-            message=f"An application for {app.offer_id} needs university validation.",
-            event=NotificationEvent.PENDING_VALIDATION,
-        )
+    notifications_client.notify_recipients_on_commit(
+        resolve_recipients=lambda: _resolve_university_admins(app),
+        notification_type="application_pending_validation",
+        title="Application waiting for validation",
+        message=f"An application for {app.offer_id} needs university validation.",
+        related_object_id=app.id,
+        event=NotificationEvent.PENDING_VALIDATION,
+    )
 
 
 def _notify_validated(app):
@@ -293,17 +344,24 @@ def _notify_student_decision(app):
 
 
 def _notify_confirmed(app):
-    recipients = {str(app.company_user_id)}
-    recipients.update(_university_admins(app))
-    for recipient in sorted(recipients):
-        _notify(
-            app=app,
-            recipient_user_id=recipient,
-            notification_type="application_confirmed",
-            title="Application confirmed",
-            message="The student accepted the application and the internship was created.",
-            event=NotificationEvent.CONFIRMED,
-        )
+    # The company recipient is known locally: keep it independent so an
+    # unexpected directory failure cannot suppress it.
+    _notify(
+        app=app,
+        recipient_user_id=app.company_user_id,
+        notification_type="application_confirmed",
+        title="Application confirmed",
+        message="The student accepted the application and the internship was created.",
+        event=NotificationEvent.CONFIRMED,
+    )
+    notifications_client.notify_recipients_on_commit(
+        resolve_recipients=lambda: _resolve_university_admins(app),
+        notification_type="application_confirmed",
+        title="Application confirmed",
+        message="The student accepted the application and the internship was created.",
+        related_object_id=app.id,
+        event=NotificationEvent.CONFIRMED,
+    )
 
 
 def _notify_withdrawn(app):

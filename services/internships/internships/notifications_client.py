@@ -74,3 +74,51 @@ def notify(
 def schedule_notification(**kwargs):
     """Queue a notification to be sent only if the current transaction commits."""
     transaction.on_commit(lambda: notify(**kwargs))
+
+
+def schedule_notifications(
+    *,
+    resolve_recipients,
+    deduplication_key_for,
+    notification_type,
+    title,
+    message,
+    related_object_type="internship",
+    related_object_id,
+):
+    """Resolve recipients and send only after the current transaction commits.
+
+    ``resolve_recipients`` runs inside the on-commit callback, never inside the
+    caller's transaction, so a slow directory lookup cannot extend database lock
+    time. Resolution failures are logged and never break the business action.
+    """
+
+    if not settings.NOTIFICATIONS_ENABLED:
+        return
+
+    def deliver():
+        try:
+            recipients = resolve_recipients() or ()
+        except Exception as exc:  # noqa: BLE001 - best effort by design
+            logger.warning(
+                "Recipient resolution failed for %s %s: %s",
+                related_object_type,
+                related_object_id,
+                exc,
+            )
+            return
+
+        for recipient_user_id in dict.fromkeys(recipients):
+            if not recipient_user_id:
+                continue
+            notify(
+                recipient_user_id=recipient_user_id,
+                notification_type=notification_type,
+                title=title,
+                message=message,
+                related_object_type=related_object_type,
+                related_object_id=related_object_id,
+                deduplication_key=deduplication_key_for(recipient_user_id),
+            )
+
+    transaction.on_commit(deliver, robust=True)

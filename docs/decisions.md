@@ -263,20 +263,22 @@ removed, and where the applications count per offer comes from.
   reads should not write. Between runs an expired offer may still appear as
   published.
 - **Published edits:** while published, `title` and `location` cannot change
-  (409, code `field_locked_while_published`); capacity can only increase;
-  `description`, `requirements` and `deadline` stay editable. Drafts are fully
-  editable and closed offers are not editable.
+  (409, code `field_locked_while_published`); capacity may increase, and may
+  decrease only down to the committed places reported by Applications (409,
+  code `capacity_below_committed`). If Applications is unavailable the
+  reduction fails closed with 503. `description`, `requirements` and `deadline`
+  stay editable. Drafts are fully editable and closed offers are not editable.
 - **Draft deletion:** only drafts can be deleted, as a soft delete
   (`deleted_at`). A deleted offer returns 404 on every route, including the
   internal lookup.
-- **Applications count:** Applications exposes an internal count per offer and
-  Offers stores no counter, so there is one source of truth. This requires an
-  endpoint in Applications.
+- **Applications count:** Applications exposes
+  `GET /api/internal/offers/<uuid>/applications-count/` and Offers stores no
+  counter, so there is one source of truth.
 
 **Consequences:** Offers needs a scheduler for the closing command. Editing
-rules can be relaxed later without a migration. The capacity-reduction block
-stays until Applications publishes its committed-places endpoint. Deleted
-drafts stay in the database.
+rules can be relaxed later without a migration. Capacity reductions depend on
+Applications at edit time but fail closed rather than risk overbooking.
+Deleted drafts stay in the database.
 
 ---
 
@@ -342,8 +344,15 @@ failed.
   details}` envelope. Notifications are best effort, scheduled with
   `transaction.on_commit`, and use stable deduplication keys of the form
   `application:<id>:<event>:recipient:<user_id>`. University-administrator
-  recipients come from `UNIVERSITY_ADMIN_USER_IDS` plus the recorded
-  `university_user_id` until Identity exposes a role directory.
+  recipients are resolved from the Identity role directory
+  (`GET /api/internal/users/?role=university_admin`, active accounts only) and
+  the recorded `university_user_id`. The directory lookup runs inside the
+  after-commit callback, never inside the application transaction, so Identity
+  latency never extends row locks. When Identity is unavailable, recipients
+  fall back to `UNIVERSITY_ADMIN_USER_IDS` plus the recorded administrator;
+  the business action never fails because Identity is down. Successful and
+  failed directory lookups are cached briefly to avoid one call per
+  notification.
 
 **Consequences:** Applications now depends on Offers for intake and acceptance
 and on Notifications for delivery; both are best effort except intake and
@@ -351,6 +360,87 @@ capacity, which fail closed. Confirming requires the reconciliation command to
 be scheduled, otherwise a transient internships outage leaves applications in
 `STUDENT_ACCEPTED`. The reservation row is the single source of truth for
 committed places, so Offers must call the capacity endpoint before reducing
-capacity. The application contract changes incompatibly (`company_user_id` is no
-longer accepted and list responses are paginated); this is acceptable because
-the platform has no production clients yet.
+capacity. Administrator notifications also depend on Identity, but only after
+commit and with a configured fallback, so an Identity outage delays neither the
+state transition nor the response. The application contract changes
+incompatibly (`company_user_id` is no longer accepted and list responses are
+paginated); this is acceptable because the platform has no production clients
+yet.
+
+---
+
+## ADR-012: Account lifecycle and refresh-token revocation
+
+**Status:** accepted
+**Date:** 2026-11-12
+
+**Context:** Accounts could register, sign in and refresh, but could not sign
+out, change a password or deactivate. A stolen refresh token therefore stayed
+usable for its full lifetime, and a deactivated account kept working in services
+that only verify the JWT signature.
+
+**Decision:** Identity owns the account lifecycle:
+
+- Refresh tokens rotate on every refresh; the submitted token is blacklisted.
+- `POST /api/auth/logout/` blacklists one refresh token and is idempotent.
+- `POST /api/users/me/password/` verifies the current password, applies
+  Django's password validators, and blacklists every refresh token issued to
+  the account.
+- `POST /api/users/me/deactivate/` requires the password, sets
+  `is_active=false`, and blacklists every refresh token.
+- Access tokens stay stateless and valid until they expire (15 minutes by
+  default). Cross-service revocation of an individual access token is out of
+  scope; deactivation is enforced wherever the user row is loaded.
+
+**Consequences:** Clients must persist the rotated refresh token and must sign
+in again after a password change or deactivation. The blacklist tables need the
+normal backup and retention policy. A password change cannot revoke an already
+issued access token, so the short access lifetime is a security control, not a
+tuning knob.
+
+---
+
+## ADR-013: Directory-resolved notification recipients
+
+**Status:** accepted
+**Date:** 2026-11-12
+
+**Context:** Applications and Internships needed university-administrator
+recipients. A static `UNIVERSITY_ADMIN_USER_IDS` list drifts from the real
+account directory and requires a redeploy whenever staff change.
+
+**Decision:** Both services resolve active university administrators from the
+Identity directory (`GET /api/internal/users/?role=university_admin`) after the
+business transaction commits. Successful lookups are cached briefly and failed
+lookups are cached for a shorter period. If Identity is unavailable, the
+service falls back to `UNIVERSITY_ADMIN_USER_IDS`; an empty directory result is
+authoritative and is not replaced by the fallback. An unavailable directory
+never fails the business action.
+
+**Consequences:** Identity becomes a soft dependency of notification fan-out,
+not of the state transition. Notifications may be delayed during an Identity
+outage but are delivered to the configured fallback administrators.
+
+---
+
+## ADR-014: Browser access and deployment hardening
+
+**Status:** accepted
+**Date:** 2026-11-12
+
+**Context:** The front end will run on a different origin from the APIs. The
+services also need a consistent production configuration: TLS, secure cookies,
+HSTS, proxy headers, scheduled commands, backups and log retention.
+
+**Decision:** Every service installs `django-cors-headers` and allows only the
+origins in `CORS_ALLOWED_ORIGINS`; credentials are disabled because
+authentication uses the `Authorization` header, not cookies. All services apply
+the same `SECURE_*`, cookie, referrer and frame settings, with
+`SECURE_PROXY_SSL_HEADER` enabled only behind a trusted TLS-terminating proxy.
+The two idempotent commands run as Compose scheduler sidecars every five
+minutes. The production procedure is documented in `docs/deployment.md`.
+
+**Consequences:** Adding a new front-end origin requires a configuration change,
+not a code change. The services remain independent and can be deployed behind
+one reverse proxy or several. Local Compose uses generous login limits; a
+production deployment must set the documented secure values.

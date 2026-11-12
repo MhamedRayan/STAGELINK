@@ -32,11 +32,34 @@ The shared `JWT_SIGNING_KEY` and `INTERNAL_SERVICE_TOKEN` live in the root
 `.env`; keep them in sync with the services that validate user tokens or call
 internal endpoints.
 
+## Demo data
+
+`seed_demo` creates the platform administrator, a verified company, a student,
+a university administrator, a supervisor, and a published demo offer in one
+idempotent command:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec identity python manage.py seed_demo
+```
+
+The default password is `StagelinkDemo!2026`; use `--password` to change it and
+`--json` for machine-readable output. Rerunning the command resets the demo
+passwords and converges the profile, verification and offer state without
+creating duplicates. It refuses to run when `DJANGO_DEBUG` is false unless
+`--force` is passed. Offers must be reachable because the offer is created
+through the Offers HTTP API; pass `--skip-offer` when only Identity is running.
+
+See [`docs/setup.md`](../../docs/setup.md#seed-demo-data) for the full account
+list and options.
+
 ## Roles and account activation
 
 The authoritative role values are `student`, `company`, `supervisor`, `university_admin`, and `platform_admin`. Public registration accepts only `student` and `company`, so clients cannot grant themselves administrative privileges. Company registration always creates an inactive account. A platform administrator verifies and activates company accounts through the verification API; superusers can be provisioned with `createsuperuser` and receive the `platform_admin` role.
 
 The account endpoint permits edits to a user's own `name` and `email`. Role, activation state, password hash, UUID, and join date are protected. Role-specific student, company, and supervisor profiles are created idempotently whenever those users are created and are repaired on login if missing. Company accounts stay inactive until a platform administrator verifies them through the API.
+
+Refresh tokens rotate on every use and the submitted token is blacklisted. Logging out blacklists one token. Changing the password or deactivating the account blacklists every refresh token for that user, so the client must sign in again. Access tokens are stateless and remain valid until they expire (15 minutes by default); they are not individually revocable across services.
 
 ## API
 
@@ -47,9 +70,12 @@ All routes are rooted at `/api/`.
 | `GET` | `/health/` | Public | Liveness probe for Docker and load balancers |
 | `POST` | `/api/auth/register/` | Public, rate-limited | Register a student or inactive company |
 | `POST` | `/api/auth/login/` | Public, rate-limited | Validate credentials and issue a JWT pair |
-| `POST` | `/api/auth/refresh/` | Valid refresh token | Issue a new access token |
+| `POST` | `/api/auth/refresh/` | Valid refresh token | Rotate the refresh token and issue a new access token |
+| `POST` | `/api/auth/logout/` | User access token | Blacklist the supplied refresh token |
 | `GET` | `/api/users/me/` | User access token | Read caller's profile |
 | `PATCH` | `/api/users/me/` | User access token | Update caller's name or email |
+| `POST` | `/api/users/me/password/` | User access token | Change password and revoke all refresh tokens |
+| `POST` | `/api/users/me/deactivate/` | User access token | Deactivate the account and revoke all refresh tokens |
 | `GET/PUT` | `/api/users/me/profile/` | User access token | Read or replace the caller's student, company, or supervisor profile |
 | `GET` | `/api/companies/{uuid}/profile/` | Public | Read non-sensitive fields for an active, verified company |
 | `GET` | `/api/internal/users/{uuid}/` | `X-Service-Token` | Return minimal user details to trusted services |
@@ -68,7 +94,7 @@ Role profile fields:
 
 Profile references are plain text in this release; reference-data IDs are planned for P1. Role profile `PUT` replaces the submitted profile fields and cannot change account role, email, or activation state. `university_admin` and `platform_admin` accounts do not have a role-specific profile endpoint.
 
-Internal directory filters accept `role`, `department`, and `page`. Batch lookup uses `ids` as a comma-separated list and cannot be combined with other filters; it returns only each matching user's `id` and `name`. Filtered directory results expose `id`, `name`, `email`, and `role`; the existing single-user endpoint is unchanged.
+Internal directory filters accept `role`, `department`, and `page` and return **active accounts only**, so callers do not notify deactivated users. Batch lookup uses `ids` as a comma-separated list and cannot be combined with other filters; it returns only each matching user's `id` and `name` regardless of activation state, so historical display names keep working. Filtered directory results expose `id`, `name`, `email`, and `role`; the existing single-user endpoint is unchanged.
 
 Provisioning accepts either a validated `password` or `generate_password: true`. A generated value is returned as `one_time_password` in the creation response only; it is not included in later reads. Company accounts created by either public registration or provisioning start pending and inactive. Admin updates cannot change role, email, or password.
 

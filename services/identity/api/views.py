@@ -12,6 +12,11 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.models import (
@@ -26,6 +31,9 @@ from api.serializers import (
     AdminUserUpdateSerializer,
     CompanyProfileSerializer,
     CompanyRejectSerializer,
+    DeactivateAccountSerializer,
+    LogoutSerializer,
+    PasswordChangeSerializer,
     PublicCompanyProfileSerializer,
     StudentProfileSerializer,
     SupervisorProfileSerializer,
@@ -109,6 +117,76 @@ class UserProfileView(APIView):
                 {"email": "An account with this email address already exists."}
             ) from exc
         return Response(UserProfileSerializer(user).data)
+
+
+class LogoutView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refresh_token = RefreshToken(serializer.validated_data["refresh"])
+        except TokenError as exc:
+            if "blacklist" in str(exc).lower():
+                # Logging out twice is harmless; the token is already revoked.
+                return Response({"detail": "Logged out."})
+            raise ValidationError(
+                {"refresh": "This refresh token is invalid or has expired."}
+            ) from exc
+
+        if str(refresh_token.get("user_id")) != str(request.user.pk):
+            raise PermissionDenied("This refresh token belongs to another account.")
+
+        refresh_token.blacklist()
+        return Response({"detail": "Logged out."})
+
+
+def _blacklist_all_refresh_tokens(user):
+    """Revoke every refresh token issued to a user.
+
+    Access tokens are stateless and stay valid until they expire, but no new
+    access token can be obtained once the refresh tokens are blacklisted.
+    """
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=outstanding)
+
+
+class PasswordChangeView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password_hash"])
+        _blacklist_all_refresh_tokens(user)
+
+        return Response({"detail": "Password changed. Sign in again."})
+
+
+class DeactivateAccountView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        serializer = DeactivateAccountSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.is_active = False
+        user.save(update_fields=["is_active"])
+        _blacklist_all_refresh_tokens(user)
+
+        return Response({"detail": "Account deactivated."})
 
 
 class InternalUserLookupView(APIView):
@@ -228,7 +306,11 @@ class InternalUserDirectoryView(APIView):
             ]
             return Response({"results": results})
 
-        users = User.objects.all().only("id", "name", "email", "role")
+        # Directory recipients must be usable accounts. Batch lookup stays
+        # unfiltered so callers can still render historical display names.
+        users = User.objects.filter(is_active=True).only(
+            "id", "name", "email", "role"
+        )
         role = params.get("role")
         if role is not None:
             if role not in UserRole.values:

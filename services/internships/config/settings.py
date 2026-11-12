@@ -28,11 +28,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "internships",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -143,9 +145,16 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Empty by default, so if it is not configured, nothing passes.
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
 
-# Identity & Profiles internal directory, used to verify supervisors before assignment.
+# Identity & Profiles internal directory, used to verify supervisors before
+# assignment and to resolve university-administrator notification recipients.
 IDENTITY_BASE_URL = env("IDENTITY_BASE_URL", default="http://localhost:8001")
 IDENTITY_TIMEOUT_SECONDS = env.float("IDENTITY_TIMEOUT_SECONDS", default=5.0)
+IDENTITY_DIRECTORY_CACHE_SECONDS = env.int(
+    "IDENTITY_DIRECTORY_CACHE_SECONDS", default=60
+)
+IDENTITY_DIRECTORY_ERROR_CACHE_SECONDS = env.int(
+    "IDENTITY_DIRECTORY_ERROR_CACHE_SECONDS", default=10
+)
 
 # Notifications service. Calls are best-effort: a failure never rolls back the
 # internship change. Delivery happens after the database commit.
@@ -166,8 +175,8 @@ APPLICATIONS_TIMEOUT_SECONDS = env.float(
     "APPLICATIONS_TIMEOUT_SECONDS", default=5.0
 )
 
-# Until Identity exposes a role directory, university administrators who must
-# receive cancellation notifications are configured explicitly as UUIDs.
+# Identity's directory is the primary source for university-administrator
+# notification recipients. This UUID list is only an outage fallback.
 UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
 
 # JWT issued by the Identity & Profiles service. The signing key must match theirs.
@@ -191,7 +200,7 @@ REST_FRAMEWORK = {
 
 # Transport security. Defaults are safe for local development; a deployment sets
 # SECURE_SSL_REDIRECT and SECURE_HSTS_SECONDS explicitly.
-SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
 SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
@@ -203,3 +212,9 @@ X_FRAME_OPTIONS = "DENY"
 # Set only when running behind a TLS-terminating proxy that overwrites the header.
 if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+# Browser clients call the APIs from a different origin. Only explicitly
+# allowed origins are accepted; authentication uses the Bearer header, not
+# cookies, so credentials are not shared.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = False

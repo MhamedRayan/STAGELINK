@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 
 from .models import InternshipStatus, SubmissionStatus
 from .notifications_client import notify
+from .exceptions import IdentityUnavailable
 from .roles import Role
 from .services import (
     assign_supervisor,
@@ -30,6 +31,7 @@ PAST = date(2000, 1, 1)
 NOTIFY = "internships.notifications_client.notify"
 FETCH_IDENTITY = "internships.services.fetch_identity_user"
 RELEASE_PLACE = "internships.services.release_place"
+DIRECTORY = "internships.notifications.identity_client.list_university_admin_ids"
 
 
 @override_settings(JWT_SIGNING_KEY=TEST_JWT_KEY)
@@ -132,9 +134,60 @@ class NotificationEventTests(TemporaryMediaMixin, TestCase):
                 f"supervisor_assigned:{second}", call.kwargs["deduplication_key"]
             )
 
+    @patch(DIRECTORY, return_value=[])
     @patch(NOTIFY)
-    def test_cancellation_request_notifies_company_and_configured_admins(
-        self, notify_mock
+    def test_cancellation_request_notifies_company_and_directory_admins(
+        self, notify_mock, directory
+    ):
+        internship = make_internship(start=PAST)
+        admin = new_id()
+        directory.return_value = [str(admin)]
+
+        with self.captureOnCommitCallbacks(execute=True):
+            cancellation = request_cancellation(
+                internship,
+                requested_by_user_id=internship.student_user_id,
+                requested_by_role=Role.STUDENT,
+                reason="Found another placement.",
+            )
+
+        self.assertEqual(
+            self._recipients(notify_mock),
+            [internship.company_user_id, admin],
+        )
+        directory.assert_called_once()
+        for call in notify_mock.call_args_list:
+            self.assertEqual(call.kwargs["notification_type"], "cancellation_requested")
+            self.assertIn(
+                f"cancellation_requested:{cancellation.pk}",
+                call.kwargs["deduplication_key"],
+            )
+
+    @patch(DIRECTORY, return_value=[])
+    @patch(NOTIFY)
+    def test_cancellation_recipients_are_resolved_after_commit(
+        self, notify_mock, directory
+    ):
+        internship = make_internship(start=PAST)
+
+        with self.captureOnCommitCallbacks(execute=False):
+            request_cancellation(
+                internship,
+                requested_by_user_id=internship.student_user_id,
+                requested_by_role=Role.STUDENT,
+                reason="Found another placement.",
+            )
+
+        # Both recipients are queued, but the directory lookup must not run
+        # inside the business transaction.
+        directory.assert_not_called()
+        notify_mock.assert_not_called()
+
+    @override_settings(UNIVERSITY_ADMIN_USER_IDS=[])
+    @patch(DIRECTORY, side_effect=IdentityUnavailable())
+    @patch(NOTIFY)
+    def test_cancellation_falls_back_to_configured_admins_on_outage(
+        self, notify_mock, directory
     ):
         internship = make_internship(start=PAST)
         admin = new_id()
@@ -159,8 +212,9 @@ class NotificationEventTests(TemporaryMediaMixin, TestCase):
             )
 
     @override_settings(UNIVERSITY_ADMIN_USER_IDS=["not-a-uuid"])
+    @patch(DIRECTORY, side_effect=IdentityUnavailable())
     @patch(NOTIFY)
-    def test_invalid_configured_admin_ids_are_ignored(self, notify_mock):
+    def test_invalid_configured_admin_ids_are_ignored(self, notify_mock, directory):
         internship = make_internship(start=PAST)
 
         with self.captureOnCommitCallbacks(execute=True):

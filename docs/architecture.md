@@ -15,10 +15,10 @@ flowchart LR
     Browser --> Notifications[Notifications :8005]
 
     Applications -->|offer and candidate data| Offers
-    Applications -->|candidate identity| Identity
+    Applications -->|candidate identity and admin directory| Identity
     Applications -->|internship creation| Internships
     Applications -->|application events| Notifications
-    Internships -->|participant data| Identity
+    Internships -->|participant data and admin directory| Identity
     Internships -->|place release after cancellation| Applications
     Internships -->|internship events| Notifications
     Notifications -->|delivery target data| Identity

@@ -59,7 +59,20 @@ python manage.py migrate
 python manage.py runserver 8002
 ```
 
-See [`docs/setup.md`](docs/setup.md) for prerequisites and troubleshooting.
+To create the demo accounts, a verified company and a published offer in one
+step:
+
+```bash
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec identity python manage.py seed_demo
+```
+
+All demo accounts use the password `StagelinkDemo!2026`; see
+[`docs/setup.md`](docs/setup.md#seed-demo-data) for the account list and flags.
+
+See [`docs/setup.md`](docs/setup.md) for prerequisites and troubleshooting, and
+[`docs/deployment.md`](docs/deployment.md) for production TLS, secrets,
+backups, schedulers and the security checklist.
 
 ## Development
 
@@ -85,6 +98,9 @@ Compose stack:
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml up -d --build \
   identity offers applications internships
+
+docker compose --env-file .env -f infra/docker/docker-compose.yml \
+  exec -T identity python manage.py seed_demo
 
 python -m pip install -r tests/integration/requirements.txt
 python -m unittest discover -s tests/integration -v

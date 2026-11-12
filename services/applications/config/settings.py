@@ -28,11 +28,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "corsheaders",
     "applications",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -132,6 +134,18 @@ OFFERS_SERVICE_URL = env(
 OFFERS_TIMEOUT_SECONDS = env.float("OFFERS_TIMEOUT_SECONDS", default=5.0)
 INTERNAL_SERVICE_TOKEN = env("INTERNAL_SERVICE_TOKEN", default="")
 
+# Identity role directory, used to resolve university-administrator recipients.
+# The lookup is best effort and runs after commit, never inside the business
+# transaction. Results are cached briefly.
+IDENTITY_BASE_URL = env("IDENTITY_BASE_URL", default="http://localhost:8001")
+IDENTITY_TIMEOUT_SECONDS = env.float("IDENTITY_TIMEOUT_SECONDS", default=2.0)
+IDENTITY_DIRECTORY_CACHE_SECONDS = env.int(
+    "IDENTITY_DIRECTORY_CACHE_SECONDS", default=60
+)
+IDENTITY_DIRECTORY_ERROR_CACHE_SECONDS = env.int(
+    "IDENTITY_DIRECTORY_ERROR_CACHE_SECONDS", default=10
+)
+
 # Notifications (best effort, after commit). See ADR-009.
 NOTIFICATIONS_ENABLED = env.bool("NOTIFICATIONS_ENABLED", default=True)
 NOTIFICATIONS_BASE_URL = env(
@@ -141,8 +155,10 @@ NOTIFICATIONS_BASE_URL = env(
 NOTIFICATIONS_TIMEOUT_SECONDS = env.float("NOTIFICATIONS_TIMEOUT_SECONDS", default=5.0)
 NOTIFICATIONS_MAX_ATTEMPTS = env.int("NOTIFICATIONS_MAX_ATTEMPTS", default=3)
 
-# University administrators who receive validation notifications, as a list of
-# UUIDs, until Identity exposes a role directory.
+# Fallback university administrators who receive validation notifications when
+# the Identity directory is unavailable, as a list of UUIDs. The directory is
+# the primary source; the application's recorded university_user_id is always
+# included.
 UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
 
 LANGUAGE_CODE = "en-us"
@@ -162,3 +178,22 @@ STORAGES = {
     },
 }
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Browser clients call the APIs from a different origin. Only explicitly
+# allowed origins are accepted; authentication uses the Bearer header, not
+# cookies, so credentials are not shared.
+CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_CREDENTIALS = False
+
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = "same-origin"
+X_FRAME_OPTIONS = "DENY"
+
+if env.bool("SECURE_PROXY_SSL_HEADER", default=False):
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
