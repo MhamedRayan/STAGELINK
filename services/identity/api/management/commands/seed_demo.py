@@ -25,8 +25,11 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.models import (
     CompanyProfile,
+    Department,
+    Specialty,
     StudentProfile,
     SupervisorProfile,
+    University,
     User,
     UserRole,
 )
@@ -260,11 +263,27 @@ class Command(BaseCommand):
         return profile
 
     @staticmethod
+    def _demo_reference_data():
+        university = University.objects.get(
+            name="M'hamed Bougara University, Boumerdès"
+        )
+        department = Department.objects.get(
+            university=university,
+            name="Computer Science Department, Faculty of Sciences",
+        )
+        specialty, _ = Specialty.objects.get_or_create(
+            department=department,
+            name="Software Engineering",
+        )
+        return university, department, specialty
+
+    @staticmethod
     def _seed_student_profile(student):
         profile, _ = StudentProfile.objects.get_or_create(user=student)
-        profile.university = "Demo University"
-        profile.department = "Computer Science"
-        profile.specialty = "Software Engineering"
+        university, department, specialty = Command._demo_reference_data()
+        profile.university = university
+        profile.department = department
+        profile.specialty = specialty
         profile.academic_year = "2026/2027"
         profile.matricule = "DEMO-2026-001"
         profile.save()
@@ -273,7 +292,8 @@ class Command(BaseCommand):
     @staticmethod
     def _seed_supervisor_profile(supervisor):
         profile, _ = SupervisorProfile.objects.get_or_create(user=supervisor)
-        profile.department = "Computer Science"
+        _, department, _ = Command._demo_reference_data()
+        profile.department = department
         profile.grade = "Senior Lecturer"
         profile.save()
         return profile

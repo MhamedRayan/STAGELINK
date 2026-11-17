@@ -39,6 +39,8 @@ tags:
     description: Authenticated user profile and role profile operations.
   - name: Companies
     description: Public company profile endpoints.
+  - name: Reference Data
+    description: Public university, department, and specialty catalogs.
   - name: Internal
     description: Trusted service-to-service endpoints.
   - name: Admin
@@ -365,6 +367,143 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/universities/:
+    get:
+      tags:
+        - Reference Data
+      operationId: listUniversities
+      summary: List universities
+      security: []
+      responses:
+        '200':
+          description: The available universities.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/University'
+
+  /api/universities/{university_id}/:
+    get:
+      tags:
+        - Reference Data
+      operationId: getUniversity
+      summary: Retrieve a university
+      security: []
+      parameters:
+        - name: university_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The university.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/University'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/departments/:
+    get:
+      tags:
+        - Reference Data
+      operationId: listDepartments
+      summary: List departments
+      security: []
+      parameters:
+        - name: university
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The available departments.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Department'
+
+  /api/departments/{department_id}/:
+    get:
+      tags:
+        - Reference Data
+      operationId: getDepartment
+      summary: Retrieve a department
+      security: []
+      parameters:
+        - name: department_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The department.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/specialties/:
+    get:
+      tags:
+        - Reference Data
+      operationId: listSpecialties
+      summary: List specialties
+      security: []
+      parameters:
+        - name: department
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The available specialties.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Specialty'
+
+  /api/specialties/{specialty_id}/:
+    get:
+      tags:
+        - Reference Data
+      operationId: getSpecialty
+      summary: Retrieve a specialty
+      security: []
+      parameters:
+        - name: specialty_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The specialty.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Specialty'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/internal/users/:
     get:
       tags:
@@ -398,11 +537,11 @@ paths:
           in: query
           required: false
           description: |
-            Directory mode only. Matches the student or supervisor profile
-            department.
+            Directory mode only. Filter by the reference-data department UUID
+            on student or supervisor profiles.
           schema:
             type: string
-            minLength: 1
+            format: uuid
         - name: page
           in: query
           required: false
@@ -924,6 +1063,50 @@ components:
           type: string
           writeOnly: true
 
+    University:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Department:
+      type: object
+      required:
+        - id
+        - university
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        university:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Specialty:
+      type: object
+      required:
+        - id
+        - department
+        - name
+      properties:
+        id:
+          type: string
+          format: uuid
+        department:
+          type: string
+          format: uuid
+        name:
+          type: string
+
     MessageResponse:
       type: object
       required:
@@ -947,13 +1130,16 @@ components:
           format: uuid
         university:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         department:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         specialty:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         academic_year:
           type: string
           maxLength: 64
@@ -1021,7 +1207,8 @@ components:
           format: uuid
         department:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         grade:
           type: string
           maxLength: 255
@@ -1043,13 +1230,16 @@ components:
       properties:
         university:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         department:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         specialty:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         academic_year:
           type: string
           maxLength: 64
@@ -1093,7 +1283,8 @@ components:
       properties:
         department:
           type: string
-          maxLength: 255
+          format: uuid
+          nullable: true
         grade:
           type: string
           maxLength: 255

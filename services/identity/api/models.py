@@ -116,14 +116,90 @@ class User(AbstractBaseUser, PermissionsMixin):
         return self.email
 
 
+class University(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"), name="identity_university_name_ci_unique"
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class Department(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    university = models.ForeignKey(
+        University, on_delete=models.PROTECT, related_name="departments"
+    )
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        ordering = ("university__name", "name")
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "university",
+                name="identity_department_univ_name_ci_unique",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.university.name})"
+
+
+class Specialty(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    department = models.ForeignKey(
+        Department, on_delete=models.PROTECT, related_name="specialties"
+    )
+    name = models.CharField(max_length=255)
+
+    class Meta:
+        ordering = ("department__name", "name")
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "department",
+                name="identity_specialty_dept_name_ci_unique",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.department.name})"
+
+
 class StudentProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="student_profile"
     )
-    university = models.CharField(max_length=255, blank=True, default="")
-    department = models.CharField(max_length=255, blank=True, default="")
-    specialty = models.CharField(max_length=255, blank=True, default="")
+    university = models.ForeignKey(
+        University,
+        on_delete=models.SET_NULL,
+        related_name="student_profiles",
+        blank=True,
+        null=True,
+    )
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        related_name="student_profiles",
+        blank=True,
+        null=True,
+    )
+    specialty = models.ForeignKey(
+        Specialty,
+        on_delete=models.SET_NULL,
+        related_name="student_profiles",
+        blank=True,
+        null=True,
+    )
     academic_year = models.CharField(max_length=64, blank=True, default="")
     matricule = models.CharField(max_length=128, blank=True, default="")
 
@@ -171,7 +247,13 @@ class SupervisorProfile(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="supervisor_profile"
     )
-    department = models.CharField(max_length=255, blank=True, default="")
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        related_name="supervisor_profiles",
+        blank=True,
+        null=True,
+    )
     grade = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:

@@ -7,9 +7,12 @@ from rest_framework.exceptions import AuthenticationFailed
 
 from api.models import (
     CompanyProfile,
+    Department,
     PUBLIC_REGISTRATION_ROLES,
+    Specialty,
     StudentProfile,
     SupervisorProfile,
+    University,
     User,
     UserRole,
 )
@@ -212,16 +215,48 @@ class StrictModelSerializer(serializers.ModelSerializer):
 
 
 class StudentProfileSerializer(StrictModelSerializer):
-    university = serializers.CharField(max_length=255, required=True, allow_blank=True)
-    department = serializers.CharField(max_length=255, required=True, allow_blank=True)
-    specialty = serializers.CharField(max_length=255, required=True, allow_blank=True)
+    university = serializers.PrimaryKeyRelatedField(
+        queryset=University.objects.all(), required=True, allow_null=True
+    )
+    department = serializers.PrimaryKeyRelatedField(
+        queryset=Department.objects.all(), required=True, allow_null=True
+    )
+    specialty = serializers.PrimaryKeyRelatedField(
+        queryset=Specialty.objects.all(), required=True, allow_null=True
+    )
     academic_year = serializers.CharField(max_length=64, required=True, allow_blank=True)
     matricule = serializers.CharField(max_length=128, required=True, allow_blank=True)
 
     class Meta:
         model = StudentProfile
-        fields = ("id", "university", "department", "specialty", "academic_year", "matricule")
+        fields = (
+            "id",
+            "university",
+            "department",
+            "specialty",
+            "academic_year",
+            "matricule",
+        )
         read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        university = attrs.get("university")
+        department = attrs.get("department")
+        specialty = attrs.get("specialty")
+        errors = {}
+        if department is not None:
+            if university is None:
+                errors["university"] = "Select the university that owns this department."
+            elif department.university_id != university.id:
+                errors["department"] = "This department belongs to another university."
+        if specialty is not None:
+            if department is None:
+                errors["department"] = "Select the department that owns this specialty."
+            elif specialty.department_id != department.id:
+                errors["specialty"] = "This specialty belongs to another department."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
 
 
 class CompanyProfileSerializer(StrictModelSerializer):
@@ -264,7 +299,9 @@ class PublicCompanyProfileSerializer(serializers.ModelSerializer):
 
 
 class SupervisorProfileSerializer(StrictModelSerializer):
-    department = serializers.CharField(max_length=255, required=True, allow_blank=True)
+    department = serializers.PrimaryKeyRelatedField(
+        queryset=Department.objects.all(), required=True, allow_null=True
+    )
     grade = serializers.CharField(max_length=255, required=True, allow_blank=True)
 
     class Meta:
@@ -395,3 +432,21 @@ class AdminUserUpdateSerializer(serializers.Serializer):
         if not attrs:
             raise serializers.ValidationError("At least one update field is required.")
         return attrs
+
+
+class UniversitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = University
+        fields = ("id", "name")
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ("id", "university", "name")
+
+
+class SpecialtySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Specialty
+        fields = ("id", "department", "name")

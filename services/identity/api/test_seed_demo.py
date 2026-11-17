@@ -89,7 +89,15 @@ class SeedDemoCommandTests(TestCase):
 
         student = User.objects.get(email="student@stagelink.demo")
         student_profile = StudentProfile.objects.get(user=student)
-        self.assertEqual(student_profile.university, "Demo University")
+        self.assertEqual(
+            student_profile.university.name,
+            "M'hamed Bougara University, Boumerdès",
+        )
+        self.assertEqual(
+            student_profile.department.name,
+            "Computer Science Department, Faculty of Sciences",
+        )
+        self.assertEqual(student_profile.specialty.name, "Software Engineering")
         self.assertEqual(student_profile.matricule, "DEMO-2026-001")
 
         university_admin = User.objects.get(email="university@stagelink.demo")
@@ -98,8 +106,8 @@ class SeedDemoCommandTests(TestCase):
         supervisor = User.objects.get(email="supervisor@stagelink.demo")
         self.assertEqual(supervisor.role, UserRole.SUPERVISOR)
         self.assertEqual(
-            SupervisorProfile.objects.get(user=supervisor).department,
-            "Computer Science",
+            SupervisorProfile.objects.get(user=supervisor).department.name,
+            "Computer Science Department, Faculty of Sciences",
         )
 
         # The offer is created and published through Offers, using a company JWT.

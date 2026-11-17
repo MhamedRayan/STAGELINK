@@ -13,14 +13,13 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.token_blacklist.models import (
-    BlacklistedToken,
-    OutstandingToken,
-)
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.models import (
     CompanyProfile,
+    Department,
+    Specialty,
+    University,
     User,
     UserRole,
 )
@@ -32,15 +31,19 @@ from api.serializers import (
     CompanyProfileSerializer,
     CompanyRejectSerializer,
     DeactivateAccountSerializer,
+    DepartmentSerializer,
     LogoutSerializer,
     PasswordChangeSerializer,
     PublicCompanyProfileSerializer,
+    SpecialtySerializer,
     StudentProfileSerializer,
     SupervisorProfileSerializer,
+    UniversitySerializer,
     UserLoginSerializer,
     UserProfileSerializer,
     UserRegistrationSerializer,
 )
+from api.tokens import revoke_user_refresh_tokens
 
 
 class ApiPagePagination(PageNumberPagination):
@@ -143,16 +146,6 @@ class LogoutView(APIView):
         return Response({"detail": "Logged out."})
 
 
-def _blacklist_all_refresh_tokens(user):
-    """Revoke every refresh token issued to a user.
-
-    Access tokens are stateless and stay valid until they expire, but no new
-    access token can be obtained once the refresh tokens are blacklisted.
-    """
-    for outstanding in OutstandingToken.objects.filter(user=user):
-        BlacklistedToken.objects.get_or_create(token=outstanding)
-
-
 class PasswordChangeView(APIView):
     permission_classes = (IsAuthenticated,)
 
@@ -166,7 +159,7 @@ class PasswordChangeView(APIView):
         user = request.user
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password_hash"])
-        _blacklist_all_refresh_tokens(user)
+        revoke_user_refresh_tokens(user)
 
         return Response({"detail": "Password changed. Sign in again."})
 
@@ -184,7 +177,7 @@ class DeactivateAccountView(APIView):
         user = request.user
         user.is_active = False
         user.save(update_fields=["is_active"])
-        _blacklist_all_refresh_tokens(user)
+        revoke_user_refresh_tokens(user)
 
         return Response({"detail": "Account deactivated."})
 
@@ -255,6 +248,89 @@ class PublicCompanyProfileView(APIView):
         return Response(PublicCompanyProfileSerializer(profile).data)
 
 
+class ReferenceListView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    model = None
+    serializer_class = None
+    filter_parameter = None
+    filter_field = None
+
+    def get(self, request):
+        allowed_parameters = {self.filter_parameter} if self.filter_parameter else set()
+        unknown_parameters = set(request.query_params.keys()) - allowed_parameters
+        if unknown_parameters:
+            raise ValidationError(
+                {name: "Unknown query parameter." for name in sorted(unknown_parameters)}
+            )
+
+        queryset = self.model.objects.all()
+        if self.filter_parameter in request.query_params:
+            raw_value = request.query_params[self.filter_parameter]
+            try:
+                reference_id = UUID(raw_value)
+            except (ValueError, AttributeError) as exc:
+                raise ValidationError(
+                    {self.filter_parameter: "Provide a valid UUID."}
+                ) from exc
+            queryset = queryset.filter(**{self.filter_field: reference_id})
+
+        return Response(self.serializer_class(queryset, many=True).data)
+
+
+class ReferenceDetailView(APIView):
+    authentication_classes = ()
+    permission_classes = (AllowAny,)
+    model = None
+    serializer_class = None
+    lookup_url_kwarg = None
+
+    def get(self, request, **kwargs):
+        reference_id = kwargs[self.lookup_url_kwarg]
+        try:
+            instance = self.model.objects.get(pk=reference_id)
+        except self.model.DoesNotExist as exc:
+            raise NotFound("Reference data record not found.") from exc
+        return Response(self.serializer_class(instance).data)
+
+
+class UniversityListView(ReferenceListView):
+    model = University
+    serializer_class = UniversitySerializer
+
+
+class UniversityDetailView(ReferenceDetailView):
+    model = University
+    serializer_class = UniversitySerializer
+    lookup_url_kwarg = "university_id"
+
+
+class DepartmentListView(ReferenceListView):
+    model = Department
+    serializer_class = DepartmentSerializer
+    filter_parameter = "university"
+    filter_field = "university_id"
+
+
+class DepartmentDetailView(ReferenceDetailView):
+    model = Department
+    serializer_class = DepartmentSerializer
+    lookup_url_kwarg = "department_id"
+
+
+class SpecialtyListView(ReferenceListView):
+    model = Specialty
+    serializer_class = SpecialtySerializer
+    filter_parameter = "department"
+    filter_field = "department_id"
+
+
+class SpecialtyDetailView(ReferenceDetailView):
+    model = Specialty
+    serializer_class = SpecialtySerializer
+    lookup_url_kwarg = "specialty_id"
+
+
 class InternalUserDirectoryView(APIView):
     authentication_classes = ()
     permission_classes = (IsTrustedService,)
@@ -319,11 +395,15 @@ class InternalUserDirectoryView(APIView):
 
         department = params.get("department")
         if department is not None:
-            if not department.strip():
-                raise ValidationError({"department": "This field may not be blank."})
+            try:
+                department_id = UUID(department)
+            except (ValueError, AttributeError) as exc:
+                raise ValidationError(
+                    {"department": "Provide a valid department UUID."}
+                ) from exc
             users = users.filter(
-                Q(student_profile__department=department.strip())
-                | Q(supervisor_profile__department=department.strip())
+                Q(student_profile__department_id=department_id)
+                | Q(supervisor_profile__department_id=department_id)
             )
 
         users = users.order_by("email")
@@ -456,6 +536,7 @@ class AdminCompanyRejectView(APIView):
         )
         profile.user.is_active = False
         profile.user.save(update_fields=["is_active"])
+        revoke_user_refresh_tokens(profile.user)
         return Response(_company_admin_summary(profile.user))
 
 
@@ -565,4 +646,6 @@ class AdminUserDetailView(APIView):
         if "is_active" in updates:
             user.is_active = updates["is_active"]
         user.save(update_fields=("is_active",))
+        if not user.is_active:
+            revoke_user_refresh_tokens(user)
         return Response(_admin_user_summary(user))

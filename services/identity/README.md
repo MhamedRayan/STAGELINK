@@ -59,7 +59,7 @@ The authoritative role values are `student`, `company`, `supervisor`, `universit
 
 The account endpoint permits edits to a user's own `name` and `email`. Role, activation state, password hash, UUID, and join date are protected. Role-specific student, company, and supervisor profiles are created idempotently whenever those users are created and are repaired on login if missing. Company accounts stay inactive until a platform administrator verifies them through the API.
 
-Refresh tokens rotate on every use and the submitted token is blacklisted. Logging out blacklists one token. Changing the password or deactivating the account blacklists every refresh token for that user, so the client must sign in again. Access tokens are stateless and remain valid until they expire (15 minutes by default); they are not individually revocable across services.
+Refresh tokens rotate on every use and the submitted token is blacklisted. Logout requires the caller's access token and a refresh token belonging to that account; repeating logout for the same token is harmless. Password changes require the current password and blacklists every outstanding refresh token. Self-deactivation also requires the current password; administrative deactivation and company rejection revoke refresh tokens as well. Inactive accounts cannot sign in or refresh. Reactivating an account does not restore revoked refresh tokens. Access tokens are stateless and remain valid until they expire (15 minutes by default); they are not individually revocable across services. Schedule Django's `flushexpiredtokens` management command at least daily to remove expired outstanding and blacklist records.
 
 ## API
 
@@ -78,6 +78,9 @@ All routes are rooted at `/api/`.
 | `POST` | `/api/users/me/deactivate/` | User access token | Deactivate the account and revoke all refresh tokens |
 | `GET/PUT` | `/api/users/me/profile/` | User access token | Read or replace the caller's student, company, or supervisor profile |
 | `GET` | `/api/companies/{uuid}/profile/` | Public | Read non-sensitive fields for an active, verified company |
+| `GET` | `/api/universities/`, `/api/universities/{uuid}/` | Public | List or retrieve universities |
+| `GET` | `/api/departments/`, `/api/departments/{uuid}/` | Public | List or retrieve departments; optionally filter by university UUID |
+| `GET` | `/api/specialties/`, `/api/specialties/{uuid}/` | Public | List or retrieve specialties; optionally filter by department UUID |
 | `GET` | `/api/internal/users/{uuid}/` | `X-Service-Token` | Return minimal user details to trusted services |
 | `GET` | `/api/internal/users/` | `X-Service-Token` | Filter and paginate users, or batch lookup up to 100 UUIDs |
 | `GET` | `/api/admin/companies/?status=pending\|active\|rejected` | Platform admin | List companies by verification status |
@@ -92,9 +95,9 @@ Role profile fields:
 - Companies: `legal_name`, `address`, `contact_person`, `phone`, `website`, `description`.
 - Supervisors: `department`, `grade`.
 
-Profile references are plain text in this release; reference-data IDs are planned for P1. Role profile `PUT` replaces the submitted profile fields and cannot change account role, email, or activation state. `university_admin` and `platform_admin` accounts do not have a role-specific profile endpoint.
+Students and supervisors reference departments by UUID. Student profiles also reference a university and specialty by UUID; department and specialty references must belong to the selected university and department. Existing text profile values are converted into reference records by migration `0004_reference_data_and_profile_links.py`. It seeds M'hamed Bougara University, Boumerdès, and its Computer Science Department in the Faculty of Sciences, while preserving other existing profile labels as reference records. Role profile `PUT` replaces the submitted profile fields and cannot change account role, email, or activation state. `university_admin` and `platform_admin` accounts do not have a role-specific profile endpoint.
 
-Internal directory filters accept `role`, `department`, and `page` and return **active accounts only**, so callers do not notify deactivated users. Batch lookup uses `ids` as a comma-separated list and cannot be combined with other filters; it returns only each matching user's `id` and `name` regardless of activation state, so historical display names keep working. Filtered directory results expose `id`, `name`, `email`, and `role`; the existing single-user endpoint is unchanged.
+Internal directory filters accept `role`, `department` (a department UUID), and `page` and return **active accounts only**, so callers do not notify deactivated users. Batch lookup uses `ids` as a comma-separated list and cannot be combined with other filters; it returns only each matching user's `id` and `name` regardless of activation state, so historical display names keep working. Filtered directory results expose `id`, `name`, `email`, and `role`; the existing single-user endpoint is unchanged.
 
 Provisioning accepts either a validated `password` or `generate_password: true`. A generated value is returned as `one_time_password` in the creation response only; it is not included in later reads. Company accounts created by either public registration or provisioning start pending and inactive. Admin updates cannot change role, email, or password.
 

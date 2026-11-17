@@ -4,6 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 
 from api.models import User, UserRole
+from api.tokens import revoke_user_refresh_tokens
 
 
 class UserAdminCreationForm(forms.ModelForm):
@@ -79,3 +80,13 @@ class UserAdmin(admin.ModelAdmin):
         if obj is None:
             return self.add_fieldsets
         return super().get_fieldsets(request, obj)
+
+    def save_model(self, request, obj, form, change):
+        was_active = None
+        if change and obj.pk:
+            was_active = User.objects.filter(pk=obj.pk).values_list(
+                "is_active", flat=True
+            ).first()
+        super().save_model(request, obj, form, change)
+        if was_active and not obj.is_active:
+            revoke_user_refresh_tokens(obj)

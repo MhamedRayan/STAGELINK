@@ -7,10 +7,17 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from api.models import (
     CompanyProfile,
+    Department,
+    Specialty,
     StudentProfile,
     SupervisorProfile,
+    University,
     User,
     UserRole,
+)
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
 )
 
 TEST_SERVICE_TOKEN = "test-service-token"
@@ -32,6 +39,17 @@ class IdentityApiTests(APITestCase):
             password="OtherStrongPassword!2026",
             name="Other Student",
             role=UserRole.STUDENT,
+        )
+        self.university = University.objects.get(
+            name="M'hamed Bougara University, Boumerdès"
+        )
+        self.department = Department.objects.get(
+            university=self.university,
+            name="Computer Science Department, Faculty of Sciences",
+        )
+        self.specialty, _ = Specialty.objects.get_or_create(
+            department=self.department,
+            name="Software Engineering",
         )
 
     def test_registration_hashes_password_and_normalizes_email(self):
@@ -113,6 +131,189 @@ class IdentityApiTests(APITestCase):
         access_token = AccessToken(response.data["access"])
         self.assertEqual(access_token["role"], UserRole.STUDENT)
         self.assertEqual(access_token["email"], self.student.email)
+
+    def test_reference_data_is_public_read_only_and_filterable(self):
+        universities = self.client.get(reverse("university-list"))
+        university = self.client.get(
+            reverse("university-detail", args=[self.university.id])
+        )
+        departments = self.client.get(
+            reverse("department-list"), {"university": str(self.university.id)}
+        )
+        department = self.client.get(
+            reverse("department-detail", args=[self.department.id])
+        )
+        specialties = self.client.get(
+            reverse("specialty-list"), {"department": str(self.department.id)}
+        )
+        specialty = self.client.get(
+            reverse("specialty-detail", args=[self.specialty.id])
+        )
+
+        self.assertEqual(universities.status_code, status.HTTP_200_OK)
+        self.assertEqual(university.status_code, status.HTTP_200_OK)
+        self.assertEqual(university.data["id"], str(self.university.id))
+        self.assertEqual(departments.status_code, status.HTTP_200_OK)
+        self.assertEqual(departments.data[0]["id"], str(self.department.id))
+        self.assertEqual(str(department.data["university"]), str(self.university.id))
+        self.assertEqual(specialties.status_code, status.HTTP_200_OK)
+        self.assertEqual(specialties.data[0]["id"], str(self.specialty.id))
+        self.assertEqual(str(specialty.data["department"]), str(self.department.id))
+        self.assertEqual(
+            self.client.get(
+                reverse("department-list"), {"university": "not-a-uuid"}
+            ).status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+        self.assertEqual(
+            self.client.post(reverse("university-list"), {}, format="json").status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+    def test_refresh_tokens_rotate_and_the_previous_token_is_blacklisted(self):
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        old_refresh = login.data["refresh"]
+
+        rotated = self.client.post(
+            reverse("auth-refresh"), {"refresh": old_refresh}, format="json"
+        )
+        replay = self.client.post(
+            reverse("auth-refresh"), {"refresh": old_refresh}, format="json"
+        )
+
+        self.assertEqual(rotated.status_code, status.HTTP_200_OK)
+        self.assertIn("refresh", rotated.data)
+        self.assertNotEqual(rotated.data["refresh"], old_refresh)
+        self.assertEqual(replay.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout_revokes_only_the_callers_refresh_token(self):
+        own_login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        other_login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.other_student.email,
+                "password": "OtherStrongPassword!2026",
+            },
+            format="json",
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {own_login.data['access']}"
+        )
+
+        wrong_owner = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": other_login.data["refresh"]},
+            format="json",
+        )
+        logout = self.client.post(
+            reverse("auth-logout"),
+            {"refresh": own_login.data["refresh"]},
+            format="json",
+        )
+        revoked_refresh = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": own_login.data["refresh"]},
+            format="json",
+        )
+
+        self.assertEqual(wrong_owner.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(logout.status_code, status.HTTP_200_OK)
+        self.assertEqual(revoked_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_password_change_checks_current_password_and_revokes_refresh_tokens(self):
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        original_outstanding_token = OutstandingToken.objects.filter(
+            user=self.student
+        ).latest("created_at")
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        invalid_current = self.client.post(
+            reverse("user-password-change"),
+            {
+                "current_password": "incorrect",
+                "new_password": "NewStudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        changed = self.client.post(
+            reverse("user-password-change"),
+            {
+                "current_password": "StudentStrongPassword!2026",
+                "new_password": "NewStudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        old_refresh = self.client.post(
+            reverse("auth-refresh"), {"refresh": login.data["refresh"]}, format="json"
+        )
+        new_login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "NewStudentStrongPassword!2026",
+            },
+            format="json",
+        )
+
+        self.assertEqual(invalid_current.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(changed.status_code, status.HTTP_200_OK)
+        self.assertEqual(old_refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(new_login.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            BlacklistedToken.objects.filter(token=original_outstanding_token).exists()
+        )
+
+    def test_account_deactivation_checks_password_and_revokes_sessions(self):
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+        bad_password = self.client.post(
+            reverse("user-deactivate"),
+            {"password": "incorrect"},
+            format="json",
+        )
+        deactivated = self.client.post(
+            reverse("user-deactivate"),
+            {"password": "StudentStrongPassword!2026"},
+            format="json",
+        )
+        self.student.refresh_from_db()
+        refresh = self.client.post(
+            reverse("auth-refresh"), {"refresh": login.data["refresh"]}, format="json"
+        )
+        profile = self.client.get(reverse("user-profile"))
+
+        self.assertEqual(bad_password.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(deactivated.status_code, status.HTTP_200_OK)
+        self.assertFalse(self.student.is_active)
+        self.assertEqual(refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(profile.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_login_rejects_inactive_company(self):
         User.objects.create_user(
@@ -292,9 +493,9 @@ class IdentityApiTests(APITestCase):
         put_response = self.client.put(
             reverse("user-role-profile"),
             {
-                "university": "University of Algiers",
-                "department": "Computer Science",
-                "specialty": "Software Engineering",
+                "university": str(self.university.id),
+                "department": str(self.department.id),
+                "specialty": str(self.specialty.id),
                 "academic_year": "2026-2027",
                 "matricule": "STU-001",
             },
@@ -302,7 +503,7 @@ class IdentityApiTests(APITestCase):
         )
 
         self.assertEqual(get_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(get_response.data["department"], "")
+        self.assertIsNone(get_response.data["department"])
         self.assertEqual(put_response.status_code, status.HTTP_200_OK)
         self.assertEqual(put_response.data["matricule"], "STU-001")
         self.assertEqual(StudentProfile.objects.filter(user=self.student).count(), 1)
@@ -312,15 +513,15 @@ class IdentityApiTests(APITestCase):
 
         missing_fields = self.client.put(
             reverse("user-role-profile"),
-            {"university": "University of Algiers"},
+            {"university": str(self.university.id)},
             format="json",
         )
         protected_field = self.client.put(
             reverse("user-role-profile"),
             {
-                "university": "University of Algiers",
-                "department": "Computer Science",
-                "specialty": "Software Engineering",
+                "university": str(self.university.id),
+                "department": str(self.department.id),
+                "specialty": str(self.specialty.id),
                 "academic_year": "2026-2027",
                 "matricule": "STU-001",
                 "role": UserRole.PLATFORM_ADMIN,
@@ -355,6 +556,104 @@ class IdentityApiTests(APITestCase):
 
             self.assertEqual(get_response.status_code, status.HTTP_403_FORBIDDEN)
             self.assertEqual(put_response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_role_profile_permission_matrix_covers_every_canonical_role(self):
+        expected_status = {
+            UserRole.STUDENT: status.HTTP_200_OK,
+            UserRole.COMPANY: status.HTTP_200_OK,
+            UserRole.SUPERVISOR: status.HTTP_200_OK,
+            UserRole.UNIVERSITY_ADMIN: status.HTTP_403_FORBIDDEN,
+            UserRole.PLATFORM_ADMIN: status.HTTP_403_FORBIDDEN,
+        }
+        for role, expected in expected_status.items():
+            if role == UserRole.STUDENT:
+                user = self.student
+            elif role == UserRole.COMPANY:
+                user = User.objects.create_user(
+                    email="matrix-role-company@example.com",
+                    password="SecureMatrixCompanyPhrase!2026",
+                    name="Matrix Company",
+                    role=role,
+                )
+            else:
+                user = User.objects.create_user(
+                    email=f"matrix-role-{role}@example.edu",
+                    password="SecureMatrixRolePassword!2026",
+                    name=f"Matrix {role}",
+                    role=role,
+                )
+            update_payload = {
+                UserRole.STUDENT: {
+                    "university": str(self.university.id),
+                    "department": str(self.department.id),
+                    "specialty": str(self.specialty.id),
+                    "academic_year": "2026-2027",
+                    "matricule": "MATRIX-001",
+                },
+                UserRole.COMPANY: {
+                    "legal_name": "Matrix Company Ltd",
+                    "address": "Main Street",
+                    "contact_person": "Contact Person",
+                    "phone": "+2135550101",
+                    "website": "https://example.com",
+                    "description": "Matrix company profile.",
+                },
+                UserRole.SUPERVISOR: {
+                    "department": str(self.department.id),
+                    "grade": "Professor",
+                },
+                UserRole.UNIVERSITY_ADMIN: {},
+                UserRole.PLATFORM_ADMIN: {},
+            }[role]
+            self.client.force_authenticate(user=user)
+            read = self.client.get(reverse("user-role-profile"))
+            update = self.client.put(
+                reverse("user-role-profile"), update_payload, format="json"
+            )
+            self.assertEqual(read.status_code, expected, msg=role)
+            self.assertEqual(update.status_code, expected, msg=role)
+        self.client.force_authenticate(user=None)
+
+    def test_student_profile_rejects_cross_university_or_department_references(self):
+        other_university = University.objects.create(name="Other University")
+        other_department = Department.objects.create(
+            university=other_university,
+            name="Other Department",
+        )
+        self.client.force_authenticate(user=self.student)
+
+        wrong_university = self.client.put(
+            reverse("user-role-profile"),
+            {
+                "university": str(other_university.id),
+                "department": str(self.department.id),
+                "specialty": str(self.specialty.id),
+                "academic_year": "2026-2027",
+                "matricule": "STU-002",
+            },
+            format="json",
+        )
+        wrong_department = self.client.put(
+            reverse("user-role-profile"),
+            {
+                "university": str(self.university.id),
+                "department": str(self.department.id),
+                "specialty": str(
+                    Specialty.objects.create(
+                        department=other_department,
+                        name="Other Specialty",
+                    ).id
+                ),
+                "academic_year": "2026-2027",
+                "matricule": "STU-002",
+            },
+            format="json",
+        )
+
+        self.assertEqual(wrong_university.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("department", wrong_university.data)
+        self.assertEqual(wrong_department.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("specialty", wrong_department.data)
 
     def test_company_can_read_and_replace_own_profile(self):
         company = User.objects.create_user(
@@ -398,7 +697,10 @@ class IdentityApiTests(APITestCase):
         get_response = self.client.get(reverse("user-role-profile"))
         put_response = self.client.put(
             reverse("user-role-profile"),
-            {"department": "Computer Science", "grade": "Associate Professor"},
+            {
+                "department": str(self.department.id),
+                "grade": "Associate Professor",
+            },
             format="json",
         )
 
@@ -690,6 +992,39 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(privilege_escalation.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(supervisor.role, UserRole.SUPERVISOR)
 
+    def test_admin_deactivation_blacklists_existing_refresh_tokens(self):
+        admin = User.objects.create_user(
+            email="platform-lifecycle@example.edu",
+            password="PlatformLifecycleStrongPassword!2026",
+            name="Platform Lifecycle Admin",
+            role=UserRole.PLATFORM_ADMIN,
+        )
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": self.student.email,
+                "password": "StudentStrongPassword!2026",
+            },
+            format="json",
+        )
+        self.client.force_authenticate(user=admin)
+
+        deactivated = self.client.patch(
+            reverse("admin-user-detail", args=[self.student.id]),
+            {"is_active": False},
+            format="json",
+        )
+        self.client.force_authenticate(user=None)
+        refresh = self.client.post(
+            reverse("auth-refresh"), {"refresh": login.data["refresh"]}, format="json"
+        )
+
+        self.assertEqual(deactivated.status_code, status.HTTP_200_OK)
+        self.assertTrue(
+            BlacklistedToken.objects.filter(token__user=self.student).exists()
+        )
+        self.assertEqual(refresh.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_admin_user_patch_applies_company_verification_rules(self):
         admin = User.objects.create_user(
             email="platform@example.edu",
@@ -741,12 +1076,18 @@ class IdentityApiTests(APITestCase):
             name="Directory Supervisor",
             role=UserRole.SUPERVISOR,
         )
-        SupervisorProfile.objects.filter(user=supervisor).update(department="CS-01")
+        SupervisorProfile.objects.filter(user=supervisor).update(
+            department_id=self.department.id
+        )
         self.client.credentials(HTTP_X_SERVICE_TOKEN=TEST_SERVICE_TOKEN)
 
         filtered = self.client.get(
             reverse("internal-user-directory"),
-            {"role": UserRole.SUPERVISOR, "department": "CS-01", "page": 1},
+            {
+                "role": UserRole.SUPERVISOR,
+                "department": str(self.department.id),
+                "page": 1,
+            },
         )
         batch = self.client.get(
             reverse("internal-user-directory"),
