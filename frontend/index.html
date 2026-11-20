@@ -1,0 +1,1096 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STAGELINK API tester</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --panel: #ffffff;
+    --ink: #1d2330;
+    --muted: #6b7280;
+    --line: #dfe3ea;
+    --accent: #2f6feb;
+    --ok: #15803d;
+    --warn: #b45309;
+    --err: #b91c1c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 18px;
+    background: #111827;
+    color: #fff;
+  }
+  header h1 { font-size: 15px; margin: 0; font-weight: 600; letter-spacing: .2px; }
+  header .spacer { flex: 1; }
+  header .who { font-size: 13px; color: #cbd5e1; }
+  header .who strong { color: #fff; }
+  main { max-width: 1180px; margin: 0 auto; padding: 18px; }
+  .hidden { display: none !important; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .card h2 { margin: 0 0 4px; font-size: 15px; }
+  .card p.hint { margin: 0 0 12px; color: var(--muted); font-size: 12.5px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 4px; }
+  input, textarea, select {
+    width: 100%;
+    padding: 8px 9px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font: inherit;
+    background: #fff;
+    color: var(--ink);
+  }
+  textarea { min-height: 58px; resize: vertical; }
+  .grid { display: grid; gap: 10px; }
+  .grid.two { grid-template-columns: 1fr 1fr; }
+  .grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .row { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; }
+  .row > * { flex: 0 0 auto; }
+  .row .grow { flex: 1 1 220px; }
+  button {
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    cursor: pointer;
+  }
+  button:hover { border-color: #b9c1cf; background: #f8fafc; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #2559c9; }
+  button.danger { color: var(--err); border-color: #f0c4c4; }
+  button.small { padding: 4px 8px; font-size: 12px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tab { border-radius: 999px; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.actions { white-space: nowrap; }
+  td.actions button { margin: 2px 3px 2px 0; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .error { color: var(--err); font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+  pre.json {
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    overflow: auto;
+    max-height: 320px;
+    margin: 12px 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #log-wrap {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 24px;
+  }
+  #log-wrap .head { display: flex; align-items: center; gap: 10px; }
+  #log-wrap h2 { font-size: 14px; margin: 0; }
+  #log { max-height: 280px; overflow: auto; margin-top: 8px; font-size: 12px; }
+  .log-entry { border-bottom: 1px dashed var(--line); padding: 6px 0; }
+  .log-entry pre {
+    margin: 4px 0 0;
+    color: #334155;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .log-time { color: var(--muted); margin-right: 8px; }
+  .log-method { font-weight: 600; margin-right: 8px; }
+  .log-status { font-weight: 600; margin-right: 8px; }
+  .log-status.ok { color: var(--ok); }
+  .log-status.warn { color: var(--warn); }
+  .log-status.err { color: var(--err); }
+  .log-url { color: #334155; word-break: break-all; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #e8eefc;
+    color: #1e4bb8;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+  .demo-buttons { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>STAGELINK API tester</h1>
+  <span class="badge">localhost</span>
+  <div class="spacer"></div>
+  <span class="who hidden" id="who"></span>
+  <button class="small hidden" id="logout-btn">Log out</button>
+</header>
+
+<main>
+
+  <!-- Login -->
+  <section id="auth-view">
+    <div class="card" style="max-width: 520px; margin: 40px auto;">
+      <h2>Sign in</h2>
+      <p class="hint">Uses the Identity service at <span class="mono" id="identity-url"></span>.</p>
+      <form id="login-form" class="grid">
+        <div>
+          <label for="login-email">Email</label>
+          <input id="login-email" name="email" type="email" autocomplete="username" required>
+        </div>
+        <div>
+          <label for="login-password">Password</label>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="row">
+          <button class="primary" type="submit">Sign in</button>
+        </div>
+      </form>
+      <p class="error" id="login-error"></p>
+      <div class="demo-buttons" id="demo-buttons">
+        <button class="small" data-email="admin@stagelink.demo">admin</button>
+        <button class="small" data-email="company@stagelink.demo">company</button>
+        <button class="small" data-email="student@stagelink.demo">student</button>
+        <button class="small" data-email="university@stagelink.demo">university</button>
+        <button class="small" data-email="supervisor@stagelink.demo">supervisor</button>
+      </div>
+      <p class="hint" style="margin-top:10px;">Password for every demo account: <span class="mono">StagelinkDemo!2026</span></p>
+    </div>
+  </section>
+
+  <!-- Application -->
+  <section id="app-view" class="hidden">
+
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-tab="account">Account</button>
+      <button class="tab" data-tab="offers">Offers</button>
+      <button class="tab" data-tab="applications">Applications</button>
+      <button class="tab" data-tab="internships">Internships</button>
+      <button class="tab" data-tab="notifications">Notifications</button>
+    </nav>
+
+    <!-- Account -->
+    <div class="panel active" id="panel-account">
+      <div class="card">
+        <h2>Current user</h2>
+        <p class="hint">GET /api/users/me/</p>
+        <button id="reload-me">Reload</button>
+        <pre class="json" id="account-json">Not loaded.</pre>
+      </div>
+
+      <div class="card">
+        <h2>Change password</h2>
+        <p class="hint">Revokes every refresh token, so you will be signed out.</p>
+        <form id="password-form" class="grid two">
+          <div>
+            <label for="current-password">Current password</label>
+            <input id="current-password" name="current" type="password" required>
+          </div>
+          <div>
+            <label for="new-password">New password</label>
+            <input id="new-password" name="next" type="password" required>
+          </div>
+          <div class="row" style="grid-column: 1 / -1;">
+            <button type="submit">Change password</button>
+          </div>
+        </form>
+        <pre class="json" id="password-json"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Deactivate account</h2>
+        <p class="hint">Irreversible from this screen. Revokes every refresh token.</p>
+        <form id="deactivate-form" class="row">
+          <div class="grow">
+            <label for="deactivate-password">Password</label>
+            <input id="deactivate-password" type="password" required>
+          </div>
+          <button class="danger" type="submit">Deactivate</button>
+        </form>
+        <pre class="json" id="deactivate-json"></pre>
+      </div>
+    </div>
+
+    <!-- Offers -->
+    <div class="panel" id="panel-offers">
+      <div class="card">
+        <h2>Create offer</h2>
+        <p class="hint">Company accounts only. Creates a draft and optionally publishes it.</p>
+        <form id="offer-create-form" class="grid">
+          <div class="grid two">
+            <div>
+              <label for="offer-title">Title</label>
+              <input id="offer-title" name="title" required maxlength="200">
+            </div>
+            <div>
+              <label for="offer-location">Location</label>
+              <input id="offer-location" name="location" required maxlength="255">
+            </div>
+          </div>
+          <div>
+            <label for="offer-description">Description</label>
+            <textarea id="offer-description" name="description" required></textarea>
+          </div>
+          <div>
+            <label for="offer-requirements">Requirements</label>
+            <textarea id="offer-requirements" name="requirements" required></textarea>
+          </div>
+          <div class="grid two">
+            <div>
+              <label for="offer-deadline">Deadline</label>
+              <input id="offer-deadline" name="deadline" type="datetime-local" required>
+            </div>
+            <div>
+              <label for="offer-capacity">Capacity</label>
+              <input id="offer-capacity" name="capacity" type="number" min="1" value="3" required>
+            </div>
+          </div>
+          <label style="display:flex; gap:8px; align-items:center; color:var(--ink);">
+            <input type="checkbox" name="publish" checked style="width:auto;"> Publish immediately
+          </label>
+          <div class="row">
+            <button class="primary" type="submit">Create offer</button>
+          </div>
+        </form>
+        <pre class="json" id="offers-json"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Offers</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="load-published">Published</button>
+          <button id="load-mine">My offers</button>
+        </div>
+        <table id="offers-table">
+          <thead>
+            <tr><th>Title</th><th>Status</th><th>Deadline</th><th>Capacity</th><th>ID</th><th>Actions</th></tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="muted">Load offers to begin.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Applications -->
+    <div class="panel" id="panel-applications">
+      <div class="card">
+        <h2>Submit application</h2>
+        <p class="hint">Student accounts only. The offer must be published and not expired.</p>
+        <form id="apply-form" class="grid three">
+          <div>
+            <label for="apply-offer-id">Offer ID</label>
+            <input id="apply-offer-id" name="offer_id" required placeholder="uuid">
+          </div>
+          <div>
+            <label for="apply-start">Start date</label>
+            <input id="apply-start" name="start_date" type="date" required>
+          </div>
+          <div>
+            <label for="apply-end">End date</label>
+            <input id="apply-end" name="end_date" type="date" required>
+          </div>
+          <div class="row" style="grid-column: 1 / -1;">
+            <button class="primary" type="submit">Apply</button>
+          </div>
+        </form>
+        <pre class="json" id="applications-json"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Applications</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <div class="grow">
+            <label for="application-status-filter">Status filter (optional)</label>
+            <input id="application-status-filter" placeholder="SUBMITTED, COMPANY_ACCEPTED, ...">
+          </div>
+          <button id="load-applications">Load</button>
+        </div>
+        <table id="applications-table">
+          <thead>
+            <tr><th>ID</th><th>Offer</th><th>Student</th><th>Status</th><th>Dates</th><th>Actions</th></tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="muted">Load applications to begin.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Internships -->
+    <div class="panel" id="panel-internships">
+      <div class="card">
+        <h2>Internships</h2>
+        <p class="hint">Visibility depends on the signed-in role. Assigning a supervisor is a university-admin action.</p>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="load-internships">Load</button>
+        </div>
+        <table id="internships-table">
+          <thead>
+            <tr><th>ID</th><th>Status</th><th>Student</th><th>Company</th><th>Supervisor</th><th>Dates</th><th>Actions</th></tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="muted">Load internships to begin.</td></tr></tbody>
+        </table>
+        <pre class="json" id="internships-json"></pre>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="panel" id="panel-notifications">
+      <div class="card">
+        <h2>Notifications</h2>
+        <div class="row" style="margin-bottom:10px;">
+          <button id="load-notifications">Load</button>
+          <button id="load-unread">Unread count</button>
+          <button id="read-all">Mark all read</button>
+          <span class="muted">Unread: <strong id="unread-count">–</strong></span>
+        </div>
+        <table id="notifications-table">
+          <thead>
+            <tr><th>ID</th><th>Type</th><th>Title</th><th>Read</th><th>Created</th><th>Actions</th></tr>
+          </thead>
+          <tbody><tr><td colspan="6" class="muted">Load notifications to begin.</td></tr></tbody>
+        </table>
+        <pre class="json" id="notifications-json"></pre>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Request log -->
+  <div id="log-wrap">
+    <div class="head">
+      <h2>Request log</h2>
+      <button class="small" id="clear-log">Clear</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+</main>
+
+<script>
+/* ------------------------------------------------------------------ */
+/* Config                                                             */
+/* ------------------------------------------------------------------ */
+
+const API = {
+  identity: 'http://localhost:8001',
+  offers: 'http://localhost:8002',
+  applications: 'http://localhost:8003',
+  internships: 'http://localhost:8004',
+  notifications: 'http://localhost:8005',
+};
+
+const ACCESS_KEY = 'sl_access';
+const REFRESH_KEY = 'sl_refresh';
+
+let tokens = {
+  access: localStorage.getItem(ACCESS_KEY) || '',
+  refresh: localStorage.getItem(REFRESH_KEY) || '',
+};
+let me = null;
+let offersMine = false;
+let lastOffers = [];
+let lastApplications = [];
+let lastInternships = [];
+let lastNotifications = [];
+let refreshing = null;
+
+/* ------------------------------------------------------------------ */
+/* Small helpers                                                      */
+/* ------------------------------------------------------------------ */
+
+const $ = (id) => document.getElementById(id);
+
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+function shortId(id) {
+  return id ? String(id).slice(0, 8) : '';
+}
+
+function showJson(id, data) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = data === undefined
+    ? ''
+    : (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
+}
+
+function errorText(data, status) {
+  if (data && typeof data === 'object') {
+    if (data.detail) return data.detail;
+    if (data.code) return `${data.code}${data.detail ? ': ' + data.detail : ''}`;
+    return JSON.stringify(data);
+  }
+  return data ? String(data) : `HTTP ${status}`;
+}
+
+function setLoginError(message) {
+  $('login-error').textContent = message || '';
+}
+
+function setTokens(next) {
+  tokens = { access: next.access || '', refresh: next.refresh || '' };
+  if (tokens.access) localStorage.setItem(ACCESS_KEY, tokens.access);
+  else localStorage.removeItem(ACCESS_KEY);
+  if (tokens.refresh) localStorage.setItem(REFRESH_KEY, tokens.refresh);
+  else localStorage.removeItem(REFRESH_KEY);
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function toLocalInput(date) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+    + `T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function setDateDefaults() {
+  const start = new Date();
+  start.setDate(start.getDate() + 30);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 120);
+  $('apply-start').value = isoDate(start);
+  $('apply-end').value = isoDate(end);
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 30);
+  $('offer-deadline').value = toLocalInput(deadline);
+}
+
+/* ------------------------------------------------------------------ */
+/* Request log                                                        */
+/* ------------------------------------------------------------------ */
+
+function logEntry(method, url, status, data) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  let cls = 'warn';
+  if (typeof status === 'number' && status >= 200 && status < 300) cls = 'ok';
+  if (status === 'ERR' || (typeof status === 'number' && status >= 400)) cls = 'err';
+  entry.innerHTML = `
+    <span class="log-time">${esc(new Date().toLocaleTimeString())}</span>
+    <span class="log-method">${esc(method)}</span>
+    <span class="log-status ${cls}">${esc(status)}</span>
+    <span class="log-url">${esc(url)}</span>
+    <pre>${esc(data === undefined ? '' : JSON.stringify(data, null, 2))}</pre>
+  `;
+  $('log').prepend(entry);
+  while ($('log').children.length > 60) $('log').lastChild.remove();
+}
+
+async function readBody(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Auth + API wrapper                                                 */
+/* ------------------------------------------------------------------ */
+
+async function refreshTokens() {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    if (!tokens.refresh) return false;
+    const url = `${API.identity}/api/auth/refresh/`;
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh: tokens.refresh }),
+      });
+      const data = await readBody(response);
+      logEntry('POST', url, response.status, data);
+      if (!response.ok) {
+        setTokens({});
+        return false;
+      }
+      // Rotation: the submitted refresh token is now blacklisted.
+      setTokens({ access: data.access, refresh: data.refresh });
+      return true;
+    } catch (error) {
+      logEntry('POST', url, 'ERR', String(error));
+      return false;
+    } finally {
+      refreshing = null;
+    }
+  })();
+  return refreshing;
+}
+
+async function api(base, path, options = {}) {
+  const { method = 'GET', body, auth = true, retry = true } = options;
+  const url = base + path;
+  const headers = {};
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  if (auth && tokens.access) headers['Authorization'] = `Bearer ${tokens.access}`;
+
+  let response;
+  let data;
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    data = await readBody(response);
+  } catch (error) {
+    logEntry(method, url, 'ERR', String(error));
+    return { ok: false, status: 0, data: String(error) };
+  }
+
+  logEntry(method, url, response.status, data);
+
+  if (response.status === 401 && auth && retry) {
+    if (tokens.refresh && await refreshTokens()) {
+      return api(base, path, { ...options, retry: false });
+    }
+    authLost();
+  }
+
+  return { ok: response.ok, status: response.status, data };
+}
+
+function authLost() {
+  setTokens({});
+  me = null;
+  showLogin();
+  setLoginError('Your session expired. Sign in again.');
+}
+
+function showLogin() {
+  $('auth-view').classList.remove('hidden');
+  $('app-view').classList.add('hidden');
+  $('who').classList.add('hidden');
+  $('logout-btn').classList.add('hidden');
+}
+
+function enterApp() {
+  $('auth-view').classList.add('hidden');
+  $('app-view').classList.remove('hidden');
+  $('who').classList.remove('hidden');
+  $('logout-btn').classList.remove('hidden');
+  activateTab('account');
+}
+
+async function login(email, password) {
+  setLoginError('');
+  const url = `${API.identity}/api/auth/login/`;
+  let response;
+  let data;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    data = await readBody(response);
+  } catch (error) {
+    logEntry('POST', url, 'ERR', String(error));
+    setLoginError(`Cannot reach Identity at ${API.identity}. Is the stack running?`);
+    return;
+  }
+  logEntry('POST', url, response.status, data);
+  if (!response.ok) {
+    setLoginError(errorText(data, response.status));
+    return;
+  }
+  setTokens({ access: data.access, refresh: data.refresh });
+  const loaded = await loadMe();
+  if (loaded) enterApp();
+}
+
+async function loadMe() {
+  const result = await api(API.identity, '/api/users/me/');
+  showJson('account-json', result.data);
+  if (!result.ok) return false;
+  me = result.data;
+  $('who').innerHTML = `<strong>${esc(me.name || me.email)}</strong> · ${esc(me.role)}`;
+  return true;
+}
+
+async function logout() {
+  if (tokens.refresh) {
+    let result = await api(API.identity, '/api/auth/logout/', {
+      method: 'POST',
+      body: { refresh: tokens.refresh },
+      retry: false,
+    });
+    // If the access token expired, rotate once and revoke the new refresh token.
+    if (result.status === 401 && tokens.refresh && await refreshTokens()) {
+      await api(API.identity, '/api/auth/logout/', {
+        method: 'POST',
+        body: { refresh: tokens.refresh },
+        retry: false,
+      });
+    }
+  }
+  setTokens({});
+  me = null;
+  showLogin();
+  setLoginError('');
+}
+
+/* ------------------------------------------------------------------ */
+/* Tabs                                                               */
+/* ------------------------------------------------------------------ */
+
+function activateTab(name) {
+  document.querySelectorAll('.tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.tab === name);
+  });
+  document.querySelectorAll('.panel').forEach((panel) => {
+    panel.classList.toggle('active', panel.id === `panel-${name}`);
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Offers                                                             */
+/* ------------------------------------------------------------------ */
+
+async function loadOffers(mine) {
+  offersMine = Boolean(mine);
+  const result = await api(API.offers, `/api/offers/${mine ? '?mine=true' : ''}`);
+  if (result.ok) {
+    lastOffers = result.data.results || [];
+    renderOffers();
+  }
+  showJson('offers-json', result.data);
+}
+
+function renderOffers() {
+  const tbody = document.querySelector('#offers-table tbody');
+  if (!lastOffers.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">No offers.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lastOffers.map((offer) => {
+    const actions = [];
+    if (offer.status === 'draft') {
+      actions.push(`<button class="small" data-action="publish" data-id="${esc(offer.id)}">Publish</button>`);
+    }
+    if (offer.status === 'published') {
+      actions.push(`<button class="small" data-action="close" data-id="${esc(offer.id)}">Close</button>`);
+      actions.push(`<button class="small" data-action="apply" data-id="${esc(offer.id)}">Use in Apply</button>`);
+    }
+    return `
+      <tr>
+        <td>${esc(offer.title)}</td>
+        <td>${esc(offer.status)}</td>
+        <td>${esc((offer.deadline || '').slice(0, 10))}</td>
+        <td>${esc(offer.capacity)}</td>
+        <td class="mono" title="${esc(offer.id)}">${esc(shortId(offer.id))}</td>
+        <td class="actions">${actions.join('')}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function handleOfferAction(action, id) {
+  if (action === 'apply') {
+    $('apply-offer-id').value = id;
+    activateTab('applications');
+    return;
+  }
+  const path = action === 'publish'
+    ? `/api/offers/${id}/publish/`
+    : `/api/offers/${id}/close/`;
+  const result = await api(API.offers, path, { method: 'POST', body: {} });
+  showJson('offers-json', result.data);
+  if (result.ok) loadOffers(offersMine);
+}
+
+/* ------------------------------------------------------------------ */
+/* Applications                                                       */
+/* ------------------------------------------------------------------ */
+
+async function loadApplications() {
+  const filter = $('application-status-filter').value.trim();
+  const path = filter
+    ? `/api/applications/?status=${encodeURIComponent(filter)}`
+    : '/api/applications/';
+  const result = await api(API.applications, path);
+  if (result.ok) {
+    lastApplications = result.data.results || [];
+    renderApplications();
+  }
+  showJson('applications-json', result.data);
+}
+
+function renderApplications() {
+  const tbody = document.querySelector('#applications-table tbody');
+  if (!lastApplications.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">No applications.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lastApplications.map((app) => {
+    const actions = [];
+    if (app.status === 'SUBMITTED') {
+      actions.push(`<button class="small" data-action="company-accept" data-id="${esc(app.id)}">Company accept</button>`);
+      actions.push(`<button class="small" data-action="company-reject" data-id="${esc(app.id)}">Company reject</button>`);
+    }
+    if (app.status === 'COMPANY_ACCEPTED') {
+      actions.push(`<button class="small" data-action="university-accept" data-id="${esc(app.id)}">Validate</button>`);
+      actions.push(`<button class="small" data-action="university-reject" data-id="${esc(app.id)}">University reject</button>`);
+    }
+    if (app.status === 'UNIVERSITY_VALIDATED') {
+      actions.push(`<button class="small" data-action="student-accept" data-id="${esc(app.id)}">Student accept</button>`);
+      actions.push(`<button class="small" data-action="student-decline" data-id="${esc(app.id)}">Student decline</button>`);
+    }
+    if (['SUBMITTED', 'COMPANY_ACCEPTED', 'UNIVERSITY_VALIDATED', 'STUDENT_ACCEPTED'].includes(app.status)) {
+      actions.push(`<button class="small danger" data-action="withdraw" data-id="${esc(app.id)}">Withdraw</button>`);
+    }
+    return `
+      <tr>
+        <td class="mono" title="${esc(app.id)}">${esc(shortId(app.id))}</td>
+        <td class="mono" title="${esc(app.offer_id)}">${esc(shortId(app.offer_id))}</td>
+        <td class="mono" title="${esc(app.student_user_id)}">${esc(shortId(app.student_user_id))}</td>
+        <td>${esc(app.status)}</td>
+        <td>${esc(app.start_date)} → ${esc(app.end_date)}</td>
+        <td class="actions">${actions.join('')}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function handleApplicationAction(action, id) {
+  if (action === 'withdraw') {
+    const reason = prompt('Withdrawal reason (optional):') ?? '';
+    const body = reason ? { reason } : {};
+    const result = await api(API.applications, `/api/applications/${id}/withdraw/`, {
+      method: 'POST', body,
+    });
+    showJson('applications-json', result.data);
+    if (result.ok) loadApplications();
+    return;
+  }
+
+  const map = {
+    'company-accept': ['company-decision', 'ACCEPT'],
+    'company-reject': ['company-decision', 'REJECT'],
+    'university-accept': ['university-decision', 'ACCEPT'],
+    'university-reject': ['university-decision', 'REJECT'],
+    'student-accept': ['student-decision', 'ACCEPT'],
+    'student-decline': ['student-decision', 'DECLINE'],
+  };
+  const [endpoint, decision] = map[action] || [];
+  if (!endpoint) return;
+
+  const body = { decision };
+  if (decision === 'REJECT') {
+    const reason = prompt('Rejection reason (required):');
+    if (!reason) return;
+    body.reason = reason;
+  }
+
+  const result = await api(API.applications, `/api/applications/${id}/${endpoint}/`, {
+    method: 'POST', body,
+  });
+  showJson('applications-json', result.data);
+  if (result.ok) loadApplications();
+}
+
+/* ------------------------------------------------------------------ */
+/* Internships                                                        */
+/* ------------------------------------------------------------------ */
+
+async function loadInternships() {
+  const result = await api(API.internships, '/api/internships/');
+  if (result.ok) {
+    lastInternships = result.data.results || [];
+    renderInternships();
+  }
+  showJson('internships-json', result.data);
+}
+
+function renderInternships() {
+  const tbody = document.querySelector('#internships-table tbody');
+  if (!lastInternships.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="muted">No internships.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lastInternships.map((internship) => {
+    const actions = [];
+    if (['confirmed', 'in_progress'].includes(internship.status)) {
+      actions.push(`<button class="small" data-action="assign" data-id="${esc(internship.id)}">Assign supervisor</button>`);
+    }
+    if (internship.status === 'confirmed') {
+      actions.push(`<button class="small" data-action="start" data-id="${esc(internship.id)}">Start</button>`);
+    }
+    if (internship.status === 'in_progress') {
+      actions.push(`<button class="small" data-action="complete" data-id="${esc(internship.id)}">Complete</button>`);
+    }
+    return `
+      <tr>
+        <td class="mono" title="${esc(internship.id)}">${esc(shortId(internship.id))}</td>
+        <td>${esc(internship.status)}</td>
+        <td class="mono" title="${esc(internship.student_user_id)}">${esc(shortId(internship.student_user_id))}</td>
+        <td class="mono" title="${esc(internship.company_user_id)}">${esc(shortId(internship.company_user_id))}</td>
+        <td class="mono" title="${esc(internship.supervisor_user_id || '')}">${esc(shortId(internship.supervisor_user_id))}</td>
+        <td>${esc(internship.start_date)} → ${esc(internship.end_date)}</td>
+        <td class="actions">${actions.join('')}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function handleInternshipAction(action, id) {
+  if (action === 'assign') {
+    const internship = lastInternships.find((item) => item.id === id);
+    const supervisor = prompt('Supervisor user UUID:');
+    if (!supervisor) return;
+    const body = { supervisor_user_id: supervisor.trim() };
+    if (internship && internship.supervisor_user_id) {
+      const reason = prompt('Reason for reassignment (required):');
+      if (!reason) return;
+      body.reason = reason;
+    }
+    const result = await api(API.internships, `/api/internships/${id}/assign-supervisor/`, {
+      method: 'POST', body,
+    });
+    showJson('internships-json', result.data);
+    if (result.ok) loadInternships();
+    return;
+  }
+
+  const result = await api(API.internships, `/api/internships/${id}/${action}/`, {
+    method: 'POST', body: {},
+  });
+  showJson('internships-json', result.data);
+  if (result.ok) loadInternships();
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications                                                      */
+/* ------------------------------------------------------------------ */
+
+async function loadNotifications() {
+  const result = await api(API.notifications, '/api/notifications/');
+  if (result.ok) {
+    lastNotifications = result.data.results || [];
+    renderNotifications();
+  }
+  showJson('notifications-json', result.data);
+}
+
+function renderNotifications() {
+  const tbody = document.querySelector('#notifications-table tbody');
+  if (!lastNotifications.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">No notifications.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lastNotifications.map((notification) => `
+    <tr>
+      <td class="mono" title="${esc(notification.id)}">${esc(shortId(notification.id))}</td>
+      <td>${esc(notification.type)}</td>
+      <td>${esc(notification.title)}</td>
+      <td>${notification.is_read ? 'yes' : 'no'}</td>
+      <td>${esc((notification.created_at || '').slice(0, 19).replace('T', ' '))}</td>
+      <td class="actions">
+        ${notification.is_read ? '' : `<button class="small" data-action="read" data-id="${esc(notification.id)}">Mark read</button>`}
+      </td>
+    </tr>`).join('');
+}
+
+async function markNotificationRead(id) {
+  const result = await api(API.notifications, `/api/notifications/${id}/read/`, {
+    method: 'PATCH',
+  });
+  showJson('notifications-json', result.data);
+  if (result.ok) loadNotifications();
+}
+
+async function loadUnreadCount() {
+  const result = await api(API.notifications, '/api/notifications/unread-count/');
+  if (result.ok) $('unread-count').textContent = result.data.unread_count;
+  showJson('notifications-json', result.data);
+}
+
+/* ------------------------------------------------------------------ */
+/* Bindings                                                           */
+/* ------------------------------------------------------------------ */
+
+function bind() {
+  $('identity-url').textContent = API.identity;
+  setDateDefaults();
+
+  $('login-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    login($('login-email').value.trim(), $('login-password').value);
+  });
+
+  $('demo-buttons').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-email]');
+    if (!button) return;
+    $('login-email').value = button.dataset.email;
+    $('login-password').value = 'StagelinkDemo!2026';
+    $('login-password').focus();
+  });
+
+  $('logout-btn').addEventListener('click', logout);
+  $('tabs').addEventListener('click', (event) => {
+    const tab = event.target.closest('.tab');
+    if (tab) activateTab(tab.dataset.tab);
+  });
+
+  $('reload-me').addEventListener('click', loadMe);
+
+  $('password-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const result = await api(API.identity, '/api/users/me/password/', {
+      method: 'POST',
+      body: {
+        current_password: $('current-password').value,
+        new_password: $('new-password').value,
+      },
+    });
+    showJson('password-json', result.data);
+    if (result.ok) {
+      setTokens({});
+      showLogin();
+      setLoginError('Password changed. Sign in with the new password.');
+    }
+  });
+
+  $('deactivate-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!confirm('Deactivate this account? You will be signed out.')) return;
+    const result = await api(API.identity, '/api/users/me/deactivate/', {
+      method: 'POST',
+      body: { password: $('deactivate-password').value },
+    });
+    showJson('deactivate-json', result.data);
+    if (result.ok) {
+      setTokens({});
+      showLogin();
+      setLoginError('Account deactivated.');
+    }
+  });
+
+  $('offer-create-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!$('offer-deadline').value) {
+      showJson('offers-json', { detail: 'Choose a deadline.' });
+      return;
+    }
+    const payload = {
+      title: $('offer-title').value.trim(),
+      description: $('offer-description').value.trim(),
+      requirements: $('offer-requirements').value.trim(),
+      location: $('offer-location').value.trim(),
+      deadline: new Date($('offer-deadline').value).toISOString(),
+      capacity: Number($('offer-capacity').value),
+    };
+    const created = await api(API.offers, '/api/offers/', { method: 'POST', body: payload });
+    showJson('offers-json', created.data);
+    if (!created.ok) return;
+    if (event.target.elements.publish.checked) {
+      const published = await api(API.offers, `/api/offers/${created.data.id}/publish/`, {
+        method: 'POST', body: {},
+      });
+      showJson('offers-json', published.data);
+    }
+    event.target.reset();
+    setDateDefaults();
+    loadOffers(true);
+  });
+
+  $('load-published').addEventListener('click', () => loadOffers(false));
+  $('load-mine').addEventListener('click', () => loadOffers(true));
+
+  $('offers-table').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (button) handleOfferAction(button.dataset.action, button.dataset.id);
+  });
+
+  $('apply-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const result = await api(API.applications, '/api/applications/', {
+      method: 'POST',
+      body: {
+        offer_id: $('apply-offer-id').value.trim(),
+        start_date: $('apply-start').value,
+        end_date: $('apply-end').value,
+      },
+    });
+    showJson('applications-json', result.data);
+    if (result.ok) loadApplications();
+  });
+
+  $('load-applications').addEventListener('click', loadApplications);
+  $('applications-table').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (button) handleApplicationAction(button.dataset.action, button.dataset.id);
+  });
+
+  $('load-internships').addEventListener('click', loadInternships);
+  $('internships-table').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action]');
+    if (button) handleInternshipAction(button.dataset.action, button.dataset.id);
+  });
+
+  $('load-notifications').addEventListener('click', loadNotifications);
+  $('load-unread').addEventListener('click', loadUnreadCount);
+  $('read-all').addEventListener('click', async () => {
+    const result = await api(API.notifications, '/api/notifications/read-all/', {
+      method: 'POST', body: {},
+    });
+    showJson('notifications-json', result.data);
+    if (result.ok) {
+      $('unread-count').textContent = '0';
+      loadNotifications();
+    }
+  });
+  $('notifications-table').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-action="read"]');
+    if (button) markNotificationRead(button.dataset.id);
+  });
+
+  $('clear-log').addEventListener('click', () => {
+    $('log').innerHTML = '';
+  });
+}
+
+async function boot() {
+  bind();
+  if (tokens.access || tokens.refresh) {
+    const loaded = await loadMe();
+    if (loaded) enterApp();
+    else showLogin();
+  } else {
+    showLogin();
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
