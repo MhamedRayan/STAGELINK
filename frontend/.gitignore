@@ -3,3 +3,5 @@ dist
 .env.local
 opencode.json
 *.tsbuildinfo
+test-results
+playwright-report

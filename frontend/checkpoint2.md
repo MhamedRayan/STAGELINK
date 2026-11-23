@@ -65,22 +65,28 @@ measurements in a throw-away browser harness (deleted afterwards).
 
 ## 2. To do next time (in order)
 
-1. **Cross-service half of the rich seed** — a workflow script that calls the public APIs,
-   not another service's database: ≥6 offers (published/draft/closed/near deadline),
-   applications in every status (two rejections with reasons, one confirmed, one withdrawn
-   after confirmation, two live for the same student), internships `confirmed` / `in_progress`
-   / `completed` (approved submission + `17.50` evaluation) / `cancelled`, one pending
-   cancellation request, rejected-then-approved submission versions with real files <10 MB,
-   and unread/read notifications per role. **Internships must already be started for evaluation.**
+1. **Cross-service half of the rich seed — done**: `tests/integration/seed_rich_demo.py`
+   drives the public APIs only (no other service's database, no `/api/internal/*`). It creates
+   ≥6 offers (published/draft/closed/near deadline), applications in every status (two
+   rejections with reasons, one confirmed, one withdrawn after confirmation, two live for the
+   same student), internships `confirmed` / `in_progress` / `completed` (approved submission +
+   `17.50` evaluation) / `cancelled`, one pending cancellation request, rejected-then-approved
+   submission versions with real PDF/DOCX files <10 MB, and read/unread notifications per
+   role. Internships are started before evaluation.
 2. **`useOfferSummary`** in `features/directory` — **done** during B integration as
    `features/directory/offers.ts` (`useOfferSummary` + `useOfferTitle`), used by the Student lane.
 3. **Infra & quality — done**: frontend `Dockerfile` + nginx (`/svc/*` proxy, SPA
    fallback), compose `web` service, CI jobs `web-gates` and `web-smoke`,
    Playwright role-login smoke test, `docs/setup.md` + ADRs 015–017.
-4. **Live verification**: all 5 demo roles log in, role redirects, refresh after expiry,
-   logout, company registration (incl. 400 duplicate + 429), every profile save and
-   password-change flow, visual comparison at 1440×900 / 1280 / 1920.
-5. **Demo script — two clean runs** before the freeze (G5, Wed 25 Nov 2026).
+4. **Live verification — done for the client shell**: Playwright covers all 5 role
+   logins/dashboards, anonymous and wrong-role redirects, logout, profile load with the
+   password modal open/Esc, and no horizontal overflow at 1280/1920 (1440 is the smoke
+   default). API-level refresh-after-expiry, company registration 400/429 and mutating
+   profile/password saves are exercised by the integration and Django suites, not by the
+   browser smoke test.
+5. **Demo script — two clean runs** before the freeze (G5, Wed 25 Nov 2026): run the seed
+   pair on a fresh stack and rehearse the walkthrough twice; the smoke suite passed twice
+   against the seeded stack during handoff.
 
 ---
 
@@ -112,8 +118,8 @@ B's lane has been received as a separate completed frontend and is being integra
 
 | Gate | Status |
 | --- | --- |
-| G1 Foundation + auth + guest | Done (live-backend check still pending) |
-| G2 All 46 routes render | Person B's pages integrated; live render check pending |
-| G3 End-to-end workflow | Blocked by cross-service seed |
-| G4 Docker/nginx/CI | Implemented; live smoke run pending |
-| G5 Freeze (Wed 25 Nov 2026) | At risk until G2/G4 land |
+| G1 Foundation + auth + guest | Done and verified against the live stack |
+| G2 All 46 routes render | Person B's pages integrated; role dashboards verified live |
+| G3 End-to-end workflow | Cross-service seed implemented and verified through public APIs |
+| G4 Docker/nginx/CI | Implemented; live smoke suite green |
+| G5 Freeze (Wed 25 Nov 2026) | Ready after final PR CI verification |

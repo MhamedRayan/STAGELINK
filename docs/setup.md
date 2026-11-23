@@ -157,6 +157,31 @@ Useful options:
 accounts through the ORM and creates the offer through the Offers HTTP API; it
 never reads another service's database.
 
+### Cross-service demo data
+
+After the identity seed, populate the domain screens with a second, idempotent
+script that drives every flow through **public HTTP APIs only**:
+
+```bash
+python tests/integration/seed_rich_demo.py
+python tests/integration/seed_rich_demo.py --json
+```
+
+It creates six offer states, applications in every status, four internships
+(completed with a `17.50` evaluation and two submission versions, cancelled,
+confirmed/unassigned, in-progress with a pending submission), cancellation
+requests in all three states, and read/unread notifications for each role.
+The script never calls `/api/internal/*`; service-to-service effects such as
+internship creation and notification delivery happen inside the services.
+
+Rerunning skips completed decisions and reuses objects by their exact demo
+titles, so it is safe for a top-up. For a clean rehearsal, recreate the stack,
+run both seeds in order, then perform the walkthrough; repeat once more before
+the freeze. Override service URLs with `--identity-url`, `--offers-url`,
+`--applications-url`, `--internships-url` and `--notifications-url` (or the
+matching `*_BASE_URL` environment variables) when the stack is not on the
+default local ports.
+
 ## Uploads and media
 
 The internships service stores student submissions on the `internships-media`
