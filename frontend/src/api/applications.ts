@@ -8,6 +8,7 @@ export type ApplicationHistoryList = components['schemas']['ApplicationHistoryLi
 export type ApplicationCreate = components['schemas']['ApplicationCreate'];
 export type ApplicationStatus = components['schemas']['ApplicationStatus'];
 export type StudentDecisionValue = components['schemas']['StudentDecisionValue'];
+export type CompanyDecisionValue = components['schemas']['CompanyDecisionValue'];
 
 export interface ListApplicationsParams {
   limit?: number;
@@ -36,6 +37,28 @@ export function createApplication(payload: ApplicationCreate): Promise<Applicati
 
 export function listApplicationHistory(id: string): Promise<ApplicationHistoryList> {
   return http<ApplicationHistoryList>('applications', `/api/applications/${id}/history/`);
+}
+
+export function postCompanyDecision(
+  id: string,
+  decision: CompanyDecisionValue,
+  reason?: string,
+): Promise<Application> {
+  return http<Application>('applications', `/api/applications/${id}/company-decision/`, {
+    method: 'POST',
+    body: { decision, ...(reason?.trim() ? { reason } : {}) },
+  });
+}
+
+export function postUniversityDecision(
+  id: string,
+  decision: CompanyDecisionValue,
+  reason?: string,
+): Promise<Application> {
+  return http<Application>('applications', `/api/applications/${id}/university-decision/`, {
+    method: 'POST',
+    body: { decision, ...(reason?.trim() ? { reason } : {}) },
+  });
 }
 
 export function postStudentDecision(

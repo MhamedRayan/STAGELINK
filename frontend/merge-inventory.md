@@ -95,8 +95,35 @@ titles resolved via `useOfferTitle`; company names via `useCompanyLabel`; deadli
 apply; submission upload restricted to file + 10 MB; evaluation reachable with a real empty state.
 Gates green: typecheck, lint, 30 tests, build.
 
+**Status — University lane done (step 4).** B's 8 University pages were mapped and ported as
+behaviour/layout only: `features/university/{keys,hooks,strings}.ts`, name cells, and 8 pages
+(Dashboard, Students, Supervisors, Applications, Application Detail, Supervisor Assignment,
+Internships, Cancellations). `api/applications.ts` gained `postUniversityDecision`;
+`api/internships.ts` gained assignment, cancellation decisions and broader list filters;
+`features/directory/users.ts` gained `demoDirectoryUsers`; `ReasonDialog` gained an optional
+description. Deltas honoured: supervisors/students derived from applications + internships,
+cancellations aggregated per internship with bounded load-more, reassign requires a reason.
+B's Notifications and Profile pages were deliberately not ported — ours already cover them.
+
+**Status — Supervisor lane done (step 4).** B's 7 Supervisor pages were mapped and ported:
+`features/supervisor/{keys,hooks,strings}.ts`, name cells and 5 pages (Dashboard, My Students,
+Student Profile, Internship Progress, Final Review) — Profile and Notifications stay ours.
+`api/internships.ts` gained detail/history/submission review/evaluation/complete helpers.
+Per-internship dashboard calls are capped at 50 and cached for a minute; the matricule column is
+hidden outside demo mode; Files/Reports are merged into one Submissions tab; grade is validated
+0–20 with at most two decimals and serialised as a string.
+
+**Status — Company lane done (step 4).** B's 7 Company pages were mapped and ported:
+`features/company/{keys,hooks,strings,schemas}.ts`, name cells and 5 pages (Dashboard, My Offers,
+Post/Edit Internship, Incoming Requests, Cancellations) — Profile and Notifications stay ours.
+`api/offers.ts` gained list-mine/create/update/publish/close/delete and `OfferWrite`;
+`api/applications.ts` gained `postCompanyDecision`. Deltas honoured: capacity only (no reserved
+count), datetime-local deadline with future validation, draft delete restricted with a 409-aware
+message, cancellations aggregated per internship (bounded to the first 100).
+
 Reference pattern for the remaining lanes: `api/<service>.ts` → `keys.ts` → `hooks.ts` →
 `strings.ts` → pages. `AppLayout`/router were not touched. `TopBar` remains intentionally unwired.
+All four gates green after each lane: typecheck, lint, 30 tests, build.
 
 ## 4. EVALUATE — infra
 

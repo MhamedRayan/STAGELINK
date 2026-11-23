@@ -11,6 +11,8 @@ interface ReasonDialogProps {
   title: string;
   label: string;
   confirmLabel: string;
+  /** Optional explanatory copy above the reason field (e.g. academic justification rules). */
+  description?: string;
   required?: boolean;
   onConfirm(reason: string): Promise<void>;
 }
@@ -22,6 +24,7 @@ export function ReasonDialog({
   title,
   label,
   confirmLabel,
+  description,
   required = false,
   onConfirm,
 }: ReasonDialogProps) {
@@ -74,6 +77,7 @@ export function ReasonDialog({
         </>
       }
     >
+      {description && <p className="mb-4 text-[13px] leading-5 text-ink">{description}</p>}
       <Field label={label} error={error ?? undefined}>
         <Textarea
           rows={3}
