@@ -15,6 +15,10 @@ export type AdminUserCreateResponse = components['schemas']['AdminUserCreateResp
 export type AdminUserUpdateRequest = components['schemas']['AdminUserUpdateRequest'];
 export type ProvisionableRole = components['schemas']['ProvisionableRole'];
 export type PublicCompanyProfile = components['schemas']['PublicCompanyProfile'];
+export type UserSummary = components['schemas']['UserSummary'];
+export type BatchUserLookup = components['schemas']['BatchUserLookup'];
+
+const LOOKUP_CHUNK_SIZE = 100;
 
 export function login(email: string, password: string): Promise<TokenPair> {
   return http<TokenPair>('identity', '/api/auth/login/', {
@@ -111,4 +115,60 @@ export function getPublicCompanyProfile(companyId: string): Promise<PublicCompan
   return http<PublicCompanyProfile>('identity', `/api/companies/${companyId}/profile/`, {
     skipAuth: true,
   });
+}
+
+interface PendingUserLookup {
+  ids: string[];
+  resolve: (users: UserSummary[]) => void;
+  reject: (error: unknown) => void;
+}
+
+let lookupQueue: PendingUserLookup[] = [];
+let lookupScheduled = false;
+
+/**
+ * Resolve UUIDs to display names through the authenticated Identity directory.
+ * Calls made in the same render tick are coalesced into one batch request
+ * (chunks of at most 100), then fanned back out in the requested order.
+ */
+export function lookupUsers(ids: string[]): Promise<UserSummary[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (unique.length === 0) return Promise.resolve([]);
+  return new Promise<UserSummary[]>((resolve, reject) => {
+    lookupQueue.push({ ids: unique, resolve, reject });
+    if (!lookupScheduled) {
+      lookupScheduled = true;
+      queueMicrotask(flushUserLookups);
+    }
+  });
+}
+
+async function flushUserLookups(): Promise<void> {
+  lookupScheduled = false;
+  const pending = lookupQueue;
+  lookupQueue = [];
+  const allIds = [...new Set(pending.flatMap((entry) => entry.ids))];
+
+  const chunks: string[][] = [];
+  for (let index = 0; index < allIds.length; index += LOOKUP_CHUNK_SIZE) {
+    chunks.push(allIds.slice(index, index + LOOKUP_CHUNK_SIZE));
+  }
+  try {
+    const pages = await Promise.all(
+      chunks.map((chunk) =>
+        http<BatchUserLookup>('identity', '/api/users/lookup/', { query: { ids: chunk.join(',') } }),
+      ),
+    );
+    const byId = new Map(pages.flatMap((page) => page.results).map((user) => [user.id, user]));
+    pending.forEach(({ ids, resolve }) =>
+      resolve(
+        ids.flatMap((id) => {
+          const user = byId.get(id);
+          return user ? [user] : [];
+        }),
+      ),
+    );
+  } catch (error) {
+    pending.forEach(({ reject }) => reject(error));
+  }
 }

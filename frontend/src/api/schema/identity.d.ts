@@ -34,10 +34,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Register a student or company account
-         * @description Public registration is limited to the `student` and `company` roles.
-         *     Company accounts are created inactive until an administrator verifies
-         *     and activates them. Other roles must be provisioned by an administrator.
+         * Register a company account
+         * @description Public registration is limited to the `company` role. Students,
+         *     supervisors and administrators must be provisioned by an administrator.
+         *     Company accounts are created inactive until a platform administrator
+         *     verifies and activates them.
          */
         post: operations["registerUser"];
         delete?: never;
@@ -185,9 +186,9 @@ export interface paths {
         };
         /**
          * Read the authenticated user's role-specific profile
-         * @description Returns the profile matching the caller's role. Student, company and
-         *     supervisor accounts have a role-specific profile; university and
-         *     platform administrators do not.
+         * @description Returns the profile matching the caller's role. Student, company,
+         *     supervisor and university-administrator accounts have a role-specific
+         *     profile; platform administrators do not.
          */
         get: operations["getCurrentRoleProfile"];
         /**
@@ -196,6 +197,92 @@ export interface paths {
          *     fields and protected fields are rejected with a field error.
          */
         put: operations["updateCurrentRoleProfile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the authenticated user directory
+         * @description Returns active accounts visible to any authenticated user. The payload
+         *     is visibility-filtered: every caller receives `id`, `name` and `role`;
+         *     supervisors and companies also receive a student's academic line
+         *     (`university`, `department`, `specialty`, `academic_year`). Email,
+         *     phone and `matricule` are returned only to the account owner and to
+         *     university/platform administrators.
+         */
+        get: operations["listDirectoryUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/lookup/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve user UUIDs to display names in one request
+         * @description Accepts up to 100 comma-separated UUIDs. Results follow the requested
+         *     order; unknown IDs are omitted. Deactivated users are included so
+         *     historical records can still be rendered. The same field visibility
+         *     rules as the directory apply.
+         */
+        get: operations["lookupUsersByIds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a user from the authenticated directory */
+        get: operations["getDirectoryUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/companies/{company_id}/verification/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a company's verification status anonymously
+         * @description Public and unauthenticated. Unlike the full public profile, this
+         *     endpoint works for pending, active and rejected companies.
+         */
+        get: operations["getCompanyVerification"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -346,14 +433,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List user accounts */
+        /**
+         * List user accounts
+         * @description Platform administrators see all accounts. University administrators
+         *     see only students and supervisors of their own university.
+         */
         get: operations["listAdminUsers"];
         put?: never;
         /**
-         * Provision a privileged user account
-         * @description Creates a `company`, `university_admin` or `supervisor` account. Provide
-         *     either a password or `generate_password: true`, but not both. The
-         *     generated password is returned once as `one_time_password`.
+         * Provision a user account
+         * @description Creates a `student`, `company`, `university_admin` or `supervisor`
+         *     account. Platform administrators may create any of these roles;
+         *     university administrators may create only `student` and `supervisor`
+         *     accounts in their own university. Provide either a password or
+         *     `generate_password: true`, but not both. The generated password is
+         *     returned once as `one_time_password`.
          */
         post: operations["createAdminUser"];
         delete?: never;
@@ -399,9 +493,9 @@ export interface components {
         /** @enum {string} */
         Role: "student" | "company" | "supervisor" | "university_admin" | "platform_admin";
         /** @enum {string} */
-        PublicRole: "student" | "company";
+        PublicRole: "company";
         /** @enum {string} */
-        ProvisionableRole: "company" | "university_admin" | "supervisor";
+        ProvisionableRole: "student" | "company" | "university_admin" | "supervisor";
         /** @enum {string} */
         VerificationStatus: "pending" | "active" | "rejected";
         UserProfile: {
@@ -419,6 +513,55 @@ export interface components {
             /** Format: email */
             email?: string;
             name?: string;
+        };
+        UserSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            role: components["schemas"]["Role"];
+            /** @description Present only for university and platform administrators. */
+            is_active?: boolean;
+            /**
+             * Format: email
+             * @description Present only for the account owner and administrators.
+             */
+            email?: string;
+            /** @description Present only for the account owner and administrators. */
+            phone?: string;
+            /** @description Present for students; also visible to supervisors and companies. */
+            university?: string;
+            /** @description Present for students and supervisors; also visible to supervisors and companies for students. */
+            department?: string;
+            /** @description Present for students; also visible to supervisors and companies. */
+            specialty?: string;
+            /** @description Present for students; also visible to supervisors and companies. */
+            academic_year?: string;
+            /** @description Present only for the account owner and administrators. */
+            matricule?: string;
+        };
+        UserSummaryPage: {
+            count: number;
+            /** Format: uri */
+            next: string | null;
+            /** Format: uri */
+            previous: string | null;
+            results: components["schemas"]["UserSummary"][];
+        };
+        BatchUserLookup: {
+            results: components["schemas"]["UserSummary"][];
+        };
+        UserPublicProfile: components["schemas"]["UserSummary"] & {
+            /** @description Present for supervisors. */
+            grade?: string;
+            /** @description Present for verified companies. */
+            website?: string;
+            /** @description Present for verified companies. */
+            description?: string;
+        };
+        CompanyVerification: {
+            /** Format: uuid */
+            id: string;
+            verification_status: components["schemas"]["VerificationStatus"];
         };
         UserRegistration: {
             /** Format: email */
@@ -491,10 +634,18 @@ export interface components {
         SupervisorRoleProfile: {
             /** Format: uuid */
             id: string;
+            /** @description Institution the supervisor belongs to. */
+            university: string;
             department: string;
             grade: string;
         };
-        RoleProfile: components["schemas"]["StudentRoleProfile"] | components["schemas"]["CompanyRoleProfile"] | components["schemas"]["SupervisorRoleProfile"];
+        UniversityAdminRoleProfile: {
+            /** Format: uuid */
+            id: string;
+            university: string;
+            department: string;
+        };
+        RoleProfile: components["schemas"]["StudentRoleProfile"] | components["schemas"]["CompanyRoleProfile"] | components["schemas"]["SupervisorRoleProfile"] | components["schemas"]["UniversityAdminRoleProfile"];
         StudentProfileUpdate: {
             university: string;
             department: string;
@@ -512,10 +663,15 @@ export interface components {
             description: string;
         };
         SupervisorProfileUpdate: {
+            university: string;
             department: string;
             grade: string;
         };
-        RoleProfileUpdate: components["schemas"]["StudentProfileUpdate"] | components["schemas"]["CompanyProfileUpdate"] | components["schemas"]["SupervisorProfileUpdate"];
+        UniversityAdminProfileUpdate: {
+            university: string;
+            department: string;
+        };
+        RoleProfileUpdate: components["schemas"]["StudentProfileUpdate"] | components["schemas"]["CompanyProfileUpdate"] | components["schemas"]["SupervisorProfileUpdate"] | components["schemas"]["UniversityAdminProfileUpdate"];
         PublicCompanyProfile: {
             /**
              * Format: uuid
@@ -527,6 +683,7 @@ export interface components {
             /** @description May be empty or a valid URL. */
             website: string;
             description: string;
+            verification_status: components["schemas"]["VerificationStatus"];
         };
         InternalUser: {
             /** Format: uuid */
@@ -598,6 +755,8 @@ export interface components {
             email: string;
             role: components["schemas"]["Role"];
             is_active: boolean;
+            /** @description Present for students, supervisors and university administrators. */
+            university?: string;
             /** @description Present only for company accounts. */
             verification_status?: components["schemas"]["VerificationStatus"];
             /**
@@ -633,16 +792,41 @@ export interface components {
              * @default false
              */
             generate_password: boolean;
+            /**
+             * @description Institution for student/supervisor accounts. University
+             *     administrators may only use their own university; if omitted it is
+             *     taken from their profile.
+             */
+            university?: string;
         };
         AdminUserCreateResponse: components["schemas"]["AdminUserSummary"] & {
             /** @description Returned once when `generate_password` is true. */
             one_time_password?: string;
         };
         AdminUserUpdateRequest: {
+            /** @description University administrators may update scoped students/supervisors. */
+            name?: string;
+            /**
+             * Format: email
+             * @description University administrators may update scoped students/supervisors.
+             */
+            email?: string;
             is_active?: boolean;
-            /** @description Company accounts only. */
+            /** @description Students, supervisors and university administrators only. */
+            university?: string;
+            /** @description Students, supervisors and university administrators only. */
+            department?: string;
+            /** @description Students only. */
+            specialty?: string;
+            /** @description Students only. */
+            academic_year?: string;
+            /** @description Students only. */
+            matricule?: string;
+            /** @description Supervisors only. */
+            grade?: string;
+            /** @description Company accounts only; platform administrators only. */
             verification_status?: components["schemas"]["VerificationStatus"];
-            /** @description Company accounts only. Required when rejecting. */
+            /** @description Company accounts only; platform administrators only. Required when rejecting. */
             rejection_reason?: string;
         };
         Error: {
@@ -995,6 +1179,107 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
+    listDirectoryUsers: {
+        parameters: {
+            query?: {
+                role?: components["schemas"]["Role"];
+                /** @description Case-insensitive search over name and email. */
+                q?: string;
+                /** @description Case-insensitive exact match on the university field. */
+                university?: string;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of user summaries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSummaryPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    lookupUsersByIds: {
+        parameters: {
+            query: {
+                /** @description Comma-separated user UUIDs (maximum 100). */
+                ids: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resolved users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchUserLookup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getDirectoryUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visibility-filtered user profile. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPublicProfile"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getCompanyVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                company_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The verification status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyVerification"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
     getPublicCompanyProfile: {
         parameters: {
             query?: never;
@@ -1176,6 +1461,10 @@ export interface operations {
             query?: {
                 /** @description Filter by authoritative role. */
                 role?: components["schemas"]["Role"];
+                /** @description Case-insensitive search over name and email. */
+                q?: string;
+                /** @description Case-insensitive exact match on the institution. */
+                university?: string;
                 /** @description Page number, 20 results per page. */
                 page?: number;
             };

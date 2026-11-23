@@ -2,24 +2,30 @@
 const REFRESH_KEY = 'stagelink.refresh';
 
 let accessToken: string | null = null;
+let memoryRefresh: string | null = null;
 const expiredListeners = new Set<() => void>();
+
+function tokenStorage(): Storage | null {
+  try {
+    return typeof localStorage === 'undefined' ? null : localStorage;
+  } catch {
+    return null;
+  }
+}
 
 export function getAccessToken(): string | null {
   return accessToken;
 }
 
 export function getRefreshToken(): string | null {
-  try {
-    return localStorage.getItem(REFRESH_KEY);
-  } catch {
-    return null;
-  }
+  return tokenStorage()?.getItem(REFRESH_KEY) ?? memoryRefresh;
 }
 
 export function setTokens(tokens: { access: string; refresh: string }): void {
   accessToken = tokens.access;
+  memoryRefresh = tokens.refresh;
   try {
-    localStorage.setItem(REFRESH_KEY, tokens.refresh);
+    tokenStorage()?.setItem(REFRESH_KEY, tokens.refresh);
   } catch {
     /* storage unavailable: session will not survive a reload */
   }
@@ -28,8 +34,9 @@ export function setTokens(tokens: { access: string; refresh: string }): void {
 /** Silent clear (logout, password change). Does not notify listeners. */
 export function clearTokens(): void {
   accessToken = null;
+  memoryRefresh = null;
   try {
-    localStorage.removeItem(REFRESH_KEY);
+    tokenStorage()?.removeItem(REFRESH_KEY);
   } catch {
     /* ignore */
   }

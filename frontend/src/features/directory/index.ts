@@ -1,6 +1,8 @@
 export { useCompanyProfile, useCompanyLabel, companyKeys } from './companies';
 export {
-  useDemoDirectoryUser,
+  useDirectoryUser,
   useUserLabel,
+  demoDirectoryUsers,
+  type DirectoryUser,
   type DemoDirectoryUser,
 } from './users';

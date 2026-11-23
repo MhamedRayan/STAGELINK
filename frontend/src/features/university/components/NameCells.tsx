@@ -1,6 +1,6 @@
 import { shortId } from '@/lib/ids';
 import type { Role } from '@/lib/roles';
-import { useDemoDirectoryUser, useUserLabel } from '@/features/directory/users';
+import { useDirectoryUser, useUserLabel } from '@/features/directory/users';
 
 /** Table cells that need name hooks — hooks cannot be called inside a column render map. */
 export function StudentNameCell({ userId }: { userId: string }) {
@@ -8,7 +8,7 @@ export function StudentNameCell({ userId }: { userId: string }) {
 }
 
 export function StudentMatriculeCell({ userId }: { userId: string }) {
-  const user = useDemoDirectoryUser(userId);
+  const user = useDirectoryUser(userId);
   return <>{user?.matricule ?? shortId(userId)}</>;
 }
 

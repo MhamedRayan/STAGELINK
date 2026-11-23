@@ -34,6 +34,7 @@ export const companyProfileSchema = z.object({
 export type CompanyProfileFormValues = z.infer<typeof companyProfileSchema>;
 
 export const supervisorProfileSchema = accountSchema.extend({
+  university: requiredText(),
   department: requiredText(),
   grade: requiredText(),
 });

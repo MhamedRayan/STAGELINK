@@ -12,7 +12,7 @@ import {
 } from '@/components/ui';
 import { useCompanyLabel } from '@/features/directory/companies';
 import { useOfferTitle } from '@/features/directory/offers';
-import { useDemoDirectoryUser, useUserLabel } from '@/features/directory/users';
+import { useDirectoryUser, useUserLabel } from '@/features/directory/users';
 import { normalizeError } from '@/lib/errors';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { getStatusInfo } from '@/lib/status';
@@ -30,8 +30,8 @@ export function SupervisorInternshipProgressPage() {
   const offerTitle = useOfferTitle(internship.data?.offer_id);
   const companyName = useCompanyLabel(internship.data?.company_user_id);
   const studentName = useUserLabel(internship.data?.student_user_id, 'student');
-  const studentEmail = useDemoDirectoryUser(internship.data?.student_user_id)?.email;
-  const companyEmail = useDemoDirectoryUser(internship.data?.company_user_id)?.email;
+  const studentEmail = useDirectoryUser(internship.data?.student_user_id)?.email;
+  const companyEmail = useDirectoryUser(internship.data?.company_user_id)?.email;
 
   if (internship.isError) {
     return <ErrorState error={internship.error} onRetry={() => void internship.refetch()} />;

@@ -51,11 +51,18 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
     formState: { errors, isSubmitting },
   } = useForm<SupervisorProfileFormValues>({
     resolver: zodResolver(supervisorProfileSchema),
-    defaultValues: { name: user.name, email: user.email, department: profile.department, grade: profile.grade },
+    defaultValues: {
+      name: user.name,
+      email: user.email,
+      university: profile.university,
+      department: profile.department,
+      grade: profile.grade,
+    },
   });
   const feedback = useSaveFeedback<SupervisorProfileFormValues>(setError, {
     name: 'name',
     email: 'email',
+    university: 'university',
     department: 'department',
     grade: 'grade',
   });
@@ -64,7 +71,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
     try {
       await save.mutateAsync({
         account: accountChanges(user, values),
-        role: { department: values.department, grade: values.grade },
+        role: { university: values.university, department: values.department, grade: values.grade },
       });
       reset(values);
       feedback.onSaved();
@@ -83,6 +90,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
             <div className="mt-[27px] space-y-2">
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
+              <TextField label={S.supervisor.university} error={errors.university?.message} {...register('university')} />
               <TextField label={S.supervisor.department} error={errors.department?.message} {...register('department')} />
               <TextField label={S.supervisor.grade} error={errors.grade?.message} {...register('grade')} />
             </div>

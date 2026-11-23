@@ -14,7 +14,7 @@ import {
 } from '@/components/ui';
 import { useCompanyLabel } from '@/features/directory/companies';
 import { useOfferTitle } from '@/features/directory/offers';
-import { useDemoDirectoryUser, useUserLabel } from '@/features/directory/users';
+import { useDirectoryUser, useUserLabel } from '@/features/directory/users';
 import { normalizeError } from '@/lib/errors';
 import { formatBytes, formatDate, formatDateTime, formatGrade } from '@/lib/format';
 import { getStatusInfo } from '@/lib/status';
@@ -41,7 +41,7 @@ export function SupervisorStudentProfilePage() {
   const offerTitle = useOfferTitle(internship.data?.offer_id);
   const companyName = useCompanyLabel(internship.data?.company_user_id);
   const studentName = useUserLabel(internship.data?.student_user_id, 'student');
-  const student = useDemoDirectoryUser(internship.data?.student_user_id);
+  const student = useDirectoryUser(internship.data?.student_user_id);
   const matricule = student?.matricule;
 
   if (internship.isError) {

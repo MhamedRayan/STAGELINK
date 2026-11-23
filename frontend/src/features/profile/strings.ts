@@ -55,6 +55,7 @@ export const S = {
     title: 'Profile',
     subtitle: 'Your supervisor account and assignment summary.',
     personal: 'Personal information',
+    university: 'University',
     department: 'Department',
     grade: 'Grade',
     summary: 'Assignment summary',

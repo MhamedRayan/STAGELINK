@@ -1,4 +1,4 @@
-import { useDemoDirectoryUser, useUserLabel } from '@/features/directory/users';
+import { useDirectoryUser, useUserLabel } from '@/features/directory/users';
 import { shortId } from '@/lib/ids';
 
 /** Name cells for table columns (hooks cannot run inside a column render map). */
@@ -7,6 +7,6 @@ export function StudentNameCell({ userId }: { userId: string }) {
 }
 
 export function StudentMatriculeCell({ userId }: { userId: string }) {
-  const user = useDemoDirectoryUser(userId);
+  const user = useDirectoryUser(userId);
   return <>{user?.matricule ?? shortId(userId)}</>;
 }
