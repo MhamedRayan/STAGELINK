@@ -46,9 +46,29 @@ DEFAULT_OFFER_TITLE = "Software Engineering Internship"
 DEFAULT_OFFER_CAPACITY = 3
 DEFAULT_OFFER_DEADLINE_DAYS = 30
 
-# repo/services/identity/api/management/commands/seed_demo.py -> repo/
-REPO_ROOT = Path(__file__).resolve().parents[5]
-DEFAULT_DIRECTORY_FILE = REPO_ROOT / "frontend" / "src" / "demo" / "directory.json"
+def _find_repo_root():
+    """Return the repo checkout containing the front-end, or ``None``.
+
+    In a local checkout this command lives at
+    ``repo/services/identity/api/management/commands/seed_demo.py``. Inside the
+    identity container it lives at ``/app/api/management/commands/seed_demo.py``
+    with no repo checkout around it, so indexing ``parents[5]`` would raise
+    ``IndexError`` at import time. Searching for the known ``frontend/src/demo``
+    marker is safe in both layouts: it finds the repo locally and returns
+    ``None`` in the container, where the front-end directory is skipped.
+    """
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "frontend" / "src" / "demo").is_dir():
+            return parent
+    return None
+
+
+REPO_ROOT = _find_repo_root()
+DEFAULT_DIRECTORY_FILE = (
+    REPO_ROOT / "frontend" / "src" / "demo" / "directory.json"
+    if REPO_ROOT is not None
+    else None
+)
 
 ACTIVE = CompanyProfile.VerificationStatus.ACTIVE
 PENDING = CompanyProfile.VerificationStatus.PENDING
@@ -292,7 +312,7 @@ class Command(BaseCommand):
             default=None,
             help=(
                 "Where to write the front-end demo directory "
-                f"(default: {DEFAULT_DIRECTORY_FILE})."
+                f"(default: {DEFAULT_DIRECTORY_FILE or 'auto-detected repo checkout'})."
             ),
         )
         parser.add_argument(
@@ -359,12 +379,22 @@ class Command(BaseCommand):
                 self._seed_profile(account, user, users["platform_admin"])
 
         directory_file = None
-        if not options["skip_directory"]:
+        if options["skip_directory"]:
+            pass
+        elif options["directory_file"]:
             directory_file = self._write_directory(
-                users,
-                Path(options["directory_file"])
-                if options["directory_file"]
-                else DEFAULT_DIRECTORY_FILE,
+                users, Path(options["directory_file"])
+            )
+        elif DEFAULT_DIRECTORY_FILE is not None:
+            directory_file = self._write_directory(users, DEFAULT_DIRECTORY_FILE)
+        else:
+            # No repo checkout (e.g. the identity container in CI). The
+            # directory.json artifact is generated locally and committed; there
+            # is nowhere to write it here, so skip instead of crashing.
+            self._log(
+                "No front-end checkout found; skipping the demo directory "
+                "(pass --directory-file to write one explicitly).",
+                self.style.WARNING,
             )
 
         offer = None

@@ -15,6 +15,7 @@ from rest_framework_simplejwt.tokens import AccessToken
 from api.management.commands.seed_demo import (
     DEFAULT_OFFER_TITLE,
     DEFAULT_PASSWORD,
+    REPO_ROOT,
     demo_user_id,
 )
 from api.models import (
@@ -258,6 +259,23 @@ class SeedDemoCommandTests(TestCase):
 
         self.assertEqual(User.objects.count(), 16)
         self.assertFalse(self.directory_file.exists())
+
+    def test_repo_root_is_detected_from_a_local_checkout(self):
+        self.assertIsNotNone(REPO_ROOT)
+        self.assertTrue((REPO_ROOT / "frontend" / "src" / "demo").is_dir())
+
+    def test_no_repo_checkout_skips_the_directory_without_crashing(self):
+        # Inside the identity container there is no repo checkout, so
+        # DEFAULT_DIRECTORY_FILE is None. Seeding must still work and simply
+        # skip the front-end directory artifact (regression for CI's
+        # `manage.py seed_demo` step, which previously raised IndexError).
+        with patch("api.management.commands.seed_demo.DEFAULT_DIRECTORY_FILE", None):
+            stdout = StringIO()
+            call_command("seed_demo", "--skip-offer", stdout=stdout)
+
+        self.assertEqual(User.objects.count(), 16)
+        self.assertFalse(self.directory_file.exists())
+        self.assertIn("skipping the demo directory", stdout.getvalue())
 
     def test_rerun_preserves_a_company_verified_through_the_ui(self):
         call_command("seed_demo", "--skip-offer", stdout=StringIO())
