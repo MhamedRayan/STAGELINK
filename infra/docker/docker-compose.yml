@@ -248,6 +248,24 @@ services:
     healthcheck: *postgres-healthcheck
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ../../frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      identity:
+        condition: service_healthy
+      offers:
+        condition: service_healthy
+      applications:
+        condition: service_healthy
+      internships:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   identity-data:
   offers-data:
