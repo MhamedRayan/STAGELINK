@@ -1,1 +1,97 @@
-{ "users": {} }
+{
+  "users": {
+    "d65dbab0-955a-5668-a444-f73e3a520c18": {
+      "name": "ABC Company",
+      "email": "abc-company@stagelink.demo",
+      "role": "company"
+    },
+    "605f15b4-3b69-5834-a987-1efedd282cfa": {
+      "name": "Demo Platform Administrator",
+      "email": "admin@stagelink.demo",
+      "role": "platform_admin"
+    },
+    "217a9422-c56a-5c2f-8c4d-a2f42b2c8e75": {
+      "name": "Demo Company Ltd",
+      "email": "company@stagelink.demo",
+      "role": "company"
+    },
+    "180c3d9e-d6f6-5424-a38b-e9979bd558db": {
+      "name": "Delta Services",
+      "email": "delta-services@stagelink.demo",
+      "role": "company"
+    },
+    "c9cb2e0e-073a-5b93-a7e0-b08bea5bb399": {
+      "name": "EURL FARISSIA",
+      "email": "eurl-farissia@stagelink.demo",
+      "role": "company"
+    },
+    "db8fd676-b58a-5d4e-841d-a0844af6270d": {
+      "name": "Horizon Internships",
+      "email": "horizon@stagelink.demo",
+      "role": "company"
+    },
+    "112c9ff1-92d2-5b34-88bf-e69f7c7cb87f": {
+      "name": "Amina Njeri",
+      "email": "student-2@stagelink.demo",
+      "role": "student",
+      "matricule": "DEMO-2026-002",
+      "department": "Computer Science"
+    },
+    "4cbb315c-9119-5d29-8bd6-11d25275b3c1": {
+      "name": "Paul Mbarga",
+      "email": "student-3@stagelink.demo",
+      "role": "student",
+      "matricule": "DEMO-2026-003",
+      "department": "Computer Science"
+    },
+    "0bde46ce-deb2-5c2f-ad61-cd10a46cd92f": {
+      "name": "Sara Essomba",
+      "email": "student-4@stagelink.demo",
+      "role": "student",
+      "matricule": "DEMO-2026-004",
+      "department": "Information Systems"
+    },
+    "71daf49e-51eb-556b-ab24-7ab73a5f5a60": {
+      "name": "Yann Fotso",
+      "email": "student-5@stagelink.demo",
+      "role": "student",
+      "matricule": "DEMO-2026-005",
+      "department": "Computer Science"
+    },
+    "9f4c9e0a-f94d-5d8d-87cd-401385fdd224": {
+      "name": "Demo Student",
+      "email": "student@stagelink.demo",
+      "role": "student",
+      "matricule": "DEMO-2026-001",
+      "department": "Computer Science"
+    },
+    "cc55fd6d-2279-5ec2-ae9b-aa9a88d93a27": {
+      "name": "Dr. Amina Bello",
+      "email": "supervisor-2@stagelink.demo",
+      "role": "supervisor",
+      "department": "Computer Science"
+    },
+    "0cec7d8d-423b-5c1f-83a1-0765c87a2d06": {
+      "name": "Dr. Pierre Nkoulou",
+      "email": "supervisor-3@stagelink.demo",
+      "role": "supervisor",
+      "department": "Information Systems"
+    },
+    "065ba99c-8022-56e9-a95a-29d62c41a24d": {
+      "name": "Demo Supervisor",
+      "email": "supervisor@stagelink.demo",
+      "role": "supervisor",
+      "department": "Computer Science"
+    },
+    "7ad83194-a7d0-564c-ac92-f133115300fd": {
+      "name": "Demo University Administrator",
+      "email": "university@stagelink.demo",
+      "role": "university_admin"
+    },
+    "39d50623-3515-5d8f-a3b4-3078fdccf070": {
+      "name": "Vertex Consulting",
+      "email": "vertex@stagelink.demo",
+      "role": "company"
+    }
+  }
+}

@@ -15,7 +15,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       ref={ref}
       aria-invalid={hasError || undefined}
       className={cn(
-        'h-11 w-full rounded-btn border bg-canvas px-4 text-[14px] text-forest-900 placeholder:text-muted',
+        'h-11 w-full rounded-[8px] border bg-canvas px-4 text-[14px] text-forest-900 placeholder:text-muted',
         hasError ? 'border-pill-danger-fg' : 'border-line',
         className,
       )}

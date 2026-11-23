@@ -21,7 +21,7 @@ export function StatusPill({ domain, value, className }: StatusPillProps) {
   return (
     <span
       className={cn(
-        'inline-flex h-[26px] items-center justify-center whitespace-nowrap rounded-pill px-3.5 text-pill',
+        'inline-flex h-[26px] items-center justify-center whitespace-nowrap rounded-pill px-[25px] text-pill',
         TONE[tone],
         className,
       )}

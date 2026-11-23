@@ -80,7 +80,7 @@ export function AuthCompanyRegisterPage() {
           <div className="mt-[18px] grid grid-cols-2 gap-x-10 gap-y-[14px]">
             <Field label={S.register.nameLabel} controlGap="md" error={errors.name?.message}>
               <Input
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="organization"
                 placeholder={S.register.namePlaceholder}
                 hasError={Boolean(errors.name)}
@@ -89,7 +89,7 @@ export function AuthCompanyRegisterPage() {
             </Field>
             <Field label={S.register.legalFormLabel} controlGap="md" error={errors.legalForm?.message}>
               <Input
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 placeholder={S.register.legalFormPlaceholder}
                 hasError={Boolean(errors.legalForm)}
                 {...register('legalForm')}
@@ -97,7 +97,7 @@ export function AuthCompanyRegisterPage() {
             </Field>
             <Field label={S.register.locationLabel} controlGap="md" error={errors.location?.message}>
               <Input
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="address-level2"
                 placeholder={S.register.locationPlaceholder}
                 hasError={Boolean(errors.location)}
@@ -110,7 +110,7 @@ export function AuthCompanyRegisterPage() {
               error={errors.registrationNumber?.message}
             >
               <Input
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 placeholder={S.register.registrationNumberPlaceholder}
                 hasError={Boolean(errors.registrationNumber)}
                 {...register('registrationNumber')}
@@ -119,7 +119,7 @@ export function AuthCompanyRegisterPage() {
             <Field label={S.register.emailLabel} controlGap="md" error={errors.email?.message}>
               <Input
                 type="email"
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="email"
                 placeholder={S.register.emailPlaceholder}
                 hasError={Boolean(errors.email)}
@@ -129,7 +129,7 @@ export function AuthCompanyRegisterPage() {
             <Field label={S.register.phoneLabel} controlGap="md" error={errors.phone?.message}>
               <Input
                 type="tel"
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="tel"
                 placeholder={S.register.phonePlaceholder}
                 hasError={Boolean(errors.phone)}
@@ -139,7 +139,7 @@ export function AuthCompanyRegisterPage() {
             <Field label={S.register.passwordLabel} controlGap="md" error={errors.password?.message}>
               <Input
                 type="password"
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="new-password"
                 placeholder={S.register.passwordPlaceholder}
                 hasError={Boolean(errors.password)}
@@ -153,7 +153,7 @@ export function AuthCompanyRegisterPage() {
             >
               <Input
                 type="password"
-                className="h-10 text-[13px]"
+                className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="new-password"
                 placeholder={S.register.passwordPlaceholder}
                 hasError={Boolean(errors.confirmPassword)}

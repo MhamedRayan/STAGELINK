@@ -1,20 +1,29 @@
 """Seed a complete demo tenant so the platform can be shown without Django admin.
 
 The command is intentionally idempotent: rerunning it converges the demo
-accounts, the verified company profile and the published offer instead of
-creating duplicates. Accounts are written directly through the ORM because
-Identity owns them; the offer is created through the Offers HTTP API because
-Offers owns offers, and no cross-service database access is allowed.
+accounts, the role profiles, the verification states and the published offer
+instead of creating duplicates. Accounts are written directly through the ORM
+because Identity owns them; the offer is created through the Offers HTTP API
+because Offers owns offers, and no cross-service database access is allowed.
+
+User ids are derived deterministically from the demo email local part so the
+front-end demo directory (``frontend/src/demo/directory.json``) can be
+committed with ids that match a freshly seeded database. The command rewrites
+that directory from the ids actually stored, so reruns after a manual delete
+stay consistent.
 
 Usage::
 
     python manage.py seed_demo
     python manage.py seed_demo --skip-offer
     python manage.py seed_demo --json
+    python manage.py seed_demo --directory-file /tmp/directory.json
 """
 
 import json
+import uuid
 from datetime import timedelta
+from pathlib import Path
 
 import requests
 from django.conf import settings
@@ -37,6 +46,29 @@ DEFAULT_OFFER_TITLE = "Software Engineering Internship"
 DEFAULT_OFFER_CAPACITY = 3
 DEFAULT_OFFER_DEADLINE_DAYS = 30
 
+# repo/services/identity/api/management/commands/seed_demo.py -> repo/
+REPO_ROOT = Path(__file__).resolve().parents[5]
+DEFAULT_DIRECTORY_FILE = REPO_ROOT / "frontend" / "src" / "demo" / "directory.json"
+
+ACTIVE = CompanyProfile.VerificationStatus.ACTIVE
+PENDING = CompanyProfile.VerificationStatus.PENDING
+REJECTED = CompanyProfile.VerificationStatus.REJECTED
+
+STUDENT_DEFAULTS = {
+    "university": "Demo University",
+    "department": "Computer Science",
+    "specialty": "Software Engineering",
+    "academic_year": "2026/2027",
+}
+SUPERVISOR_DEFAULTS = {
+    "department": "Computer Science",
+    "grade": "Senior Lecturer",
+}
+
+# Design-plan §7: 1 platform admin, 1 university admin, 3 supervisors,
+# 5 students and 6 companies (the requirement lists 5 but enumerates
+# 3 verified + 2 pending + 1 rejected - see the Δ note in design-plan §7).
+# The five original keys are kept so existing docs and scripts keep working.
 DEMO_ACCOUNTS = (
     {
         "key": "platform_admin",
@@ -47,36 +79,181 @@ DEMO_ACCOUNTS = (
         "is_superuser": True,
     },
     {
-        "key": "company",
-        "local_part": "company",
-        "name": "Demo Company",
-        "role": UserRole.COMPANY,
-    },
-    {
-        "key": "student",
-        "local_part": "student",
-        "name": "Demo Student",
-        "role": UserRole.STUDENT,
-    },
-    {
         "key": "university_admin",
         "local_part": "university",
         "name": "Demo University Administrator",
         "role": UserRole.UNIVERSITY_ADMIN,
     },
     {
+        "key": "company",
+        "local_part": "company",
+        "name": "Demo Company Ltd",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "Demo Company Ltd",
+            "address": "1 Demo Avenue, Douala",
+            "contact_person": "Demo Recruiter",
+            "phone": "+237600000000",
+            "website": "https://demo.example.com",
+            "description": (
+                "Fictional company used to demonstrate the STAGELINK internship flow."
+            ),
+            "verification_status": ACTIVE,
+        },
+    },
+    {
+        "key": "company_abc",
+        "local_part": "abc-company",
+        "name": "ABC Company",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "ABC Company",
+            "address": "12 Industrial Road, Douala",
+            "contact_person": "Claire Mbala",
+            "phone": "+237611000001",
+            "website": "https://abc-company.example.com",
+            "description": "Engineering and digital services group.",
+            "verification_status": ACTIVE,
+        },
+    },
+    {
+        "key": "company_farissia",
+        "local_part": "eurl-farissia",
+        "name": "EURL FARISSIA",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "EURL FARISSIA",
+            "address": "8 Rue de la Paix, Yaoundé",
+            "contact_person": "Farid Ali",
+            "phone": "+237611000002",
+            "website": "https://farissia.example.com",
+            "description": "Consulting and software development cooperative.",
+            "verification_status": ACTIVE,
+        },
+    },
+    {
+        "key": "company_horizon",
+        "local_part": "horizon",
+        "name": "Horizon Internships",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "Horizon Internships SARL",
+            "address": "45 Akwa Street, Douala",
+            "contact_person": "Hélène Nkomo",
+            "phone": "+237611000003",
+            "website": "https://horizon.example.com",
+            "description": "Awaiting platform verification.",
+            "verification_status": PENDING,
+        },
+    },
+    {
+        "key": "company_delta",
+        "local_part": "delta-services",
+        "name": "Delta Services",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "Delta Services and Consulting",
+            "address": "3 Bastos Avenue, Yaoundé",
+            "contact_person": "Daniel Ondo",
+            "phone": "+237611000004",
+            "website": "https://delta.example.com",
+            "description": "Business process outsourcing company.",
+            "verification_status": PENDING,
+        },
+    },
+    {
+        "key": "company_vertex",
+        "local_part": "vertex",
+        "name": "Vertex Consulting",
+        "role": UserRole.COMPANY,
+        "profile": {
+            "legal_name": "Vertex Consulting Ltd",
+            "address": "72 Bonamoussadi, Douala",
+            "contact_person": "Victor Eto'a",
+            "phone": "+237611000005",
+            "website": "https://vertex.example.com",
+            "description": "Registration documents could not be verified.",
+            "verification_status": REJECTED,
+            "rejection_reason": (
+                "The registration certificate is expired. Please upload a current "
+                "document and resubmit the registration."
+            ),
+        },
+    },
+    {
         "key": "supervisor",
         "local_part": "supervisor",
         "name": "Demo Supervisor",
         "role": UserRole.SUPERVISOR,
+        "profile": dict(SUPERVISOR_DEFAULTS),
+    },
+    {
+        "key": "supervisor_2",
+        "local_part": "supervisor-2",
+        "name": "Dr. Amina Bello",
+        "role": UserRole.SUPERVISOR,
+        "profile": {**SUPERVISOR_DEFAULTS, "grade": "Lecturer"},
+    },
+    {
+        "key": "supervisor_3",
+        "local_part": "supervisor-3",
+        "name": "Dr. Pierre Nkoulou",
+        "role": UserRole.SUPERVISOR,
+        "profile": {**SUPERVISOR_DEFAULTS, "department": "Information Systems"},
+    },
+    {
+        "key": "student",
+        "local_part": "student",
+        "name": "Demo Student",
+        "role": UserRole.STUDENT,
+        "profile": {**STUDENT_DEFAULTS, "matricule": "DEMO-2026-001"},
+    },
+    {
+        "key": "student_2",
+        "local_part": "student-2",
+        "name": "Amina Njeri",
+        "role": UserRole.STUDENT,
+        "profile": {**STUDENT_DEFAULTS, "matricule": "DEMO-2026-002"},
+    },
+    {
+        "key": "student_3",
+        "local_part": "student-3",
+        "name": "Paul Mbarga",
+        "role": UserRole.STUDENT,
+        "profile": {**STUDENT_DEFAULTS, "matricule": "DEMO-2026-003"},
+    },
+    {
+        "key": "student_4",
+        "local_part": "student-4",
+        "name": "Sara Essomba",
+        "role": UserRole.STUDENT,
+        "profile": {
+            **STUDENT_DEFAULTS,
+            "department": "Information Systems",
+            "matricule": "DEMO-2026-004",
+        },
+    },
+    {
+        "key": "student_5",
+        "local_part": "student-5",
+        "name": "Yann Fotso",
+        "role": UserRole.STUDENT,
+        "profile": {**STUDENT_DEFAULTS, "matricule": "DEMO-2026-005"},
     },
 )
 
 
+def demo_user_id(local_part):
+    """Stable UUID for a demo local part (same value on every machine and rerun)."""
+    return str(
+        uuid.uuid5(uuid.NAMESPACE_URL, f"stagelink.demo/users/{local_part.lower()}")
+    )
+
+
 class Command(BaseCommand):
     help = (
-        "Create or refresh the demo accounts, a verified company, and a "
-        "published offer for end-to-end demonstrations."
+        "Create or refresh the demo accounts, role profiles, a verified demo "
+        "company, the front-end directory and a published offer."
     )
 
     def add_arguments(self, parser):
@@ -109,6 +286,19 @@ class Command(BaseCommand):
             "--json",
             action="store_true",
             help="Print the result as JSON instead of human-readable text.",
+        )
+        parser.add_argument(
+            "--directory-file",
+            default=None,
+            help=(
+                "Where to write the front-end demo directory "
+                f"(default: {DEFAULT_DIRECTORY_FILE})."
+            ),
+        )
+        parser.add_argument(
+            "--skip-directory",
+            action="store_true",
+            help="Do not write the front-end demo directory file.",
         )
         parser.add_argument(
             "--offer-title",
@@ -155,6 +345,7 @@ class Command(BaseCommand):
             users = {}
             for account in DEMO_ACCOUNTS:
                 user, created = self._upsert_user(
+                    user_id=demo_user_id(account["local_part"]),
                     email=emails[account["key"]],
                     name=account["name"],
                     role=account["role"],
@@ -165,10 +356,16 @@ class Command(BaseCommand):
                 users[account["key"]] = user
                 if created:
                     created_emails.append(user.email)
+                self._seed_profile(account, user, users["platform_admin"])
 
-            self._seed_company_profile(users["company"], users["platform_admin"])
-            self._seed_student_profile(users["student"])
-            self._seed_supervisor_profile(users["supervisor"])
+        directory_file = None
+        if not options["skip_directory"]:
+            directory_file = self._write_directory(
+                users,
+                Path(options["directory_file"])
+                if options["directory_file"]
+                else DEFAULT_DIRECTORY_FILE,
+            )
 
         offer = None
         if not options["skip_offer"]:
@@ -188,6 +385,7 @@ class Command(BaseCommand):
                 for key, user in users.items()
             },
             "company_profile_id": str(users["company"].company_profile.id),
+            "directory": str(directory_file) if directory_file else None,
             "offer": offer,
             "offer_skipped": bool(options["skip_offer"]),
         }
@@ -206,7 +404,16 @@ class Command(BaseCommand):
         self.stdout.write(message)
 
     @staticmethod
-    def _upsert_user(*, email, name, role, password, is_staff, is_superuser):
+    def _upsert_user(
+        *,
+        user_id,
+        email,
+        name,
+        role,
+        password,
+        is_staff,
+        is_superuser,
+    ):
         user = User.objects.filter(email__iexact=email).first()
         created = user is None
 
@@ -215,6 +422,7 @@ class Command(BaseCommand):
                 role = role.value
             if role == UserRole.PLATFORM_ADMIN and is_superuser:
                 user = User.objects.create_superuser(
+                    id=uuid.UUID(user_id),
                     email=email,
                     password=password,
                     name=name,
@@ -222,6 +430,7 @@ class Command(BaseCommand):
                 )
             else:
                 user = User.objects.create_user(
+                    id=uuid.UUID(user_id),
                     email=email,
                     password=password,
                     name=name,
@@ -230,10 +439,10 @@ class Command(BaseCommand):
 
         # Converge every run: the demo tenant must always be usable and the
         # documented password must always work, including after manual edits.
-        # Company accounts are created inactive by the manager; they are
-        # activated here because the demo company is already verified.
         user.name = name
         user.role = role
+        # Companies are refined by _seed_profile once their verification state
+        # is known (a signal creates the profile on user creation).
         user.is_active = True
         user.is_staff = is_staff
         user.is_superuser = is_superuser
@@ -242,41 +451,77 @@ class Command(BaseCommand):
         return user, created
 
     @staticmethod
-    def _seed_company_profile(company, admin):
-        profile, _ = CompanyProfile.objects.get_or_create(user=company)
-        profile.legal_name = "Demo Company Ltd"
-        profile.address = "1 Demo Avenue, Douala"
-        profile.contact_person = "Demo Recruiter"
-        profile.phone = "+237600000000"
-        profile.website = "https://demo.example.com"
-        profile.description = (
-            "Fictional company used to demonstrate the STAGELINK internship flow."
-        )
-        profile.verification_status = CompanyProfile.VerificationStatus.ACTIVE
-        profile.verified_by = admin
-        profile.verified_at = timezone.now()
-        profile.rejection_reason = ""
-        profile.save()
-        return profile
+    def _seed_profile(account, user, admin):
+        data = account.get("profile")
+        if not data:
+            return
+        if user.role == UserRole.COMPANY:
+            profile, created = CompanyProfile.objects.get_or_create(user=user)
+            status = data["verification_status"]
+            # A status that differs from the seed and carries a decision marker
+            # was set by a tester through the verification UI: keep it.
+            ui_decision = (
+                not created
+                and profile.verification_status != status
+                and bool(profile.verified_at or profile.rejection_reason)
+            )
+            if not ui_decision:
+                for field in (
+                    "legal_name",
+                    "address",
+                    "contact_person",
+                    "phone",
+                    "website",
+                    "description",
+                    "verification_status",
+                ):
+                    setattr(profile, field, data.get(field, ""))
+                profile.rejection_reason = data.get("rejection_reason", "")
+                profile.verified_by = admin if status != PENDING else None
+                profile.verified_at = timezone.now() if status != PENDING else None
+                profile.save()
+            user.is_active = profile.verification_status == ACTIVE
+            user.save(update_fields=["is_active"])
+        elif user.role == UserRole.STUDENT:
+            profile, _ = StudentProfile.objects.get_or_create(user=user)
+            for field in (
+                "university",
+                "department",
+                "specialty",
+                "academic_year",
+                "matricule",
+            ):
+                setattr(profile, field, data.get(field, ""))
+            profile.save()
+        elif user.role == UserRole.SUPERVISOR:
+            profile, _ = SupervisorProfile.objects.get_or_create(user=user)
+            profile.department = data.get("department", "")
+            profile.grade = data.get("grade", "")
+            profile.save()
 
-    @staticmethod
-    def _seed_student_profile(student):
-        profile, _ = StudentProfile.objects.get_or_create(user=student)
-        profile.university = "Demo University"
-        profile.department = "Computer Science"
-        profile.specialty = "Software Engineering"
-        profile.academic_year = "2026/2027"
-        profile.matricule = "DEMO-2026-001"
-        profile.save()
-        return profile
+    def _write_directory(self, users, path):
+        """Write the demo-only name directory consumed when VITE_DEMO_DIRECTORY=1."""
+        entries = {}
+        for account in DEMO_ACCOUNTS:
+            user = users[account["key"]]
+            entry = {
+                "name": user.name,
+                "email": user.email,
+                "role": user.role,
+            }
+            data = account.get("profile") or {}
+            for field in ("matricule", "department"):
+                if data.get(field):
+                    entry[field] = data[field]
+            entries[str(user.id)] = entry
 
-    @staticmethod
-    def _seed_supervisor_profile(supervisor):
-        profile, _ = SupervisorProfile.objects.get_or_create(user=supervisor)
-        profile.department = "Computer Science"
-        profile.grade = "Senior Lecturer"
-        profile.save()
-        return profile
+        payload = {
+            "users": dict(sorted(entries.items(), key=lambda item: item[1]["email"]))
+        }
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        self._log(f"Wrote demo directory to {path}.", self.style.SUCCESS)
+        return path
 
     def _ensure_demo_offer(self, company, options):
         base_url = (options.get("offers_url") or settings.OFFERS_BASE_URL or "").rstrip(
@@ -412,14 +657,21 @@ class Command(BaseCommand):
         labels = {
             "platform_admin": "Platform admin",
             "company": "Company",
+            "company_abc": "Company (ABC)",
+            "company_farissia": "Company (Farissia)",
+            "company_horizon": "Company (pending)",
+            "company_delta": "Company (pending)",
+            "company_vertex": "Company (rejected)",
             "student": "Student",
             "university_admin": "University admin",
             "supervisor": "Supervisor",
         }
         for key, account in result["accounts"].items():
             self.stdout.write(
-                f"  {labels.get(key, key):<16} {account['email']:<38} {account['id']}"
+                f"  {labels.get(key, key):<24} {account['email']:<38} {account['id']}"
             )
+        if result["directory"]:
+            self.stdout.write(f"\nDemo directory written to {result['directory']}.")
 
         if result["offer_skipped"]:
             self.stdout.write("")
@@ -440,6 +692,6 @@ class Command(BaseCommand):
             f"  deadline={offer.get('deadline')} capacity={offer.get('capacity')}"
         )
         self.stdout.write(
-            "  The company, student, university admin and supervisor accounts "
-            "can now log in with the password above."
+            "  The verified companies, students, university admin and "
+            "supervisors can now log in with the password above."
         )

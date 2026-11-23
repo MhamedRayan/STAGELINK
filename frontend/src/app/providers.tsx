@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { ToastProvider } from '@/components/ui/Toast';
 import { AuthProvider } from '@/features/auth/AuthProvider';
 import { ApiError } from '@/lib/errors';
 
@@ -18,12 +19,14 @@ function createQueryClient(): QueryClient {
   });
 }
 
-/** Order matters: Query → Auth (auth clears the query cache on logout/expiry). */
+/** Order matters: Query → Toast → Auth (auth clears the query cache on logout/expiry). */
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>{children}</AuthProvider>
+      <ToastProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }

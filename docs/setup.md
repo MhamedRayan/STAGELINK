@@ -86,31 +86,44 @@ Each response should be similar to:
 
 ## Seed demo data
 
-One command creates every account needed to demonstrate the full workflow,
-including a verified company and a published offer:
+One command creates the full demo tenant: 16 accounts, all role profiles, the
+verification states needed by the platform screens, a published offer and the
+front-end name directory:
 
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml \
   exec identity python manage.py seed_demo
 ```
 
-| Role             | Email                         | Password              |
-| ---------------- | ----------------------------- | --------------------- |
-| Platform admin   | `admin@stagelink.demo`        | `StagelinkDemo!2026`  |
-| Company          | `company@stagelink.demo`      | `StagelinkDemo!2026`  |
-| Student          | `student@stagelink.demo`      | `StagelinkDemo!2026`  |
-| University admin | `university@stagelink.demo`   | `StagelinkDemo!2026`  |
-| Supervisor       | `supervisor@stagelink.demo`   | `StagelinkDemo!2026`  |
+| Role                            | Email                            | Verification |
+| ------------------------------- | -------------------------------- | ------------ |
+| Platform admin                  | `admin@stagelink.demo`           | —            |
+| University admin                | `university@stagelink.demo`      | —            |
+| Company (Demo Company Ltd)      | `company@stagelink.demo`         | active       |
+| Company (ABC Company)           | `abc-company@stagelink.demo`     | active       |
+| Company (EURL FARISSIA)         | `eurl-farissia@stagelink.demo`   | active       |
+| Company (Horizon Internships)   | `horizon@stagelink.demo`         | pending      |
+| Company (Delta Services)        | `delta-services@stagelink.demo`  | pending      |
+| Company (Vertex Consulting)     | `vertex@stagelink.demo`          | rejected     |
+| Supervisors (3)                 | `supervisor@`, `supervisor-2@`, `supervisor-3@stagelink.demo` | — |
+| Students (5)                    | `student@`, `student-2@` … `student-5@stagelink.demo` | — |
 
-The company account is active and verified, the student and supervisor have
-complete role profiles, and the company owns a published
-`Software Engineering Internship` offer with capacity 3. Every account can log
-in immediately through `POST /api/auth/login/`.
+Every account uses the password `StagelinkDemo!2026`. Only active companies and
+non-company accounts can log in immediately; pending and rejected companies are
+inactive until the platform admin verifies them. Role profiles are complete,
+and the active `company` account owns a published
+`Software Engineering Internship` offer with capacity 3.
+
+The command also rewrites `frontend/src/demo/directory.json` with the actual
+user ids. Set `VITE_DEMO_DIRECTORY=1` (already in `.env.example`) when running
+the client so student and supervisor ids resolve to names; without it the UI
+degrades to `Role · 3f2a9c`, as in production.
 
 The command is idempotent. Rerunning it resets the demo account passwords,
-converges the profile and verification state, and leaves an already-published
-offer untouched. It refuses to run while `DJANGO_DEBUG` is false unless you pass
-`--force`, which prevents accidental seeding of a production database.
+converges profiles and verification states, and leaves an already-published
+offer untouched. A verification decision made through the UI is preserved. It
+refuses to run while `DJANGO_DEBUG` is false unless you pass `--force`, which
+prevents accidental seeding of a production database.
 
 Useful options:
 
@@ -121,6 +134,9 @@ Useful options:
 # Machine-readable output
 ... exec identity python manage.py seed_demo --json
 
+# Keep an existing front-end directory file
+... exec identity python manage.py seed_demo --skip-directory
+
 # Point at a different Offers instance or change the offer
 ... exec identity python manage.py seed_demo \
   --offers-url http://localhost:8002 \
@@ -129,9 +145,10 @@ Useful options:
   --offer-deadline-days 60
 ```
 
-`--password` and `--domain` change the shared demo password and email domain.
-Identity writes its own accounts directly through the ORM and creates the offer
-through the Offers HTTP API; it never reads the Offers database.
+`--password` and `--domain` change the shared demo password and email domain;
+`--directory-file` overrides the directory output path. Identity writes its own
+accounts through the ORM and creates the offer through the Offers HTTP API; it
+never reads another service's database.
 
 ## Uploads and media
 
