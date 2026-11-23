@@ -72,8 +72,8 @@ measurements in a throw-away browser harness (deleted afterwards).
    / `completed` (approved submission + `17.50` evaluation) / `cancelled`, one pending
    cancellation request, rejected-then-approved submission versions with real files <10 MB,
    and unread/read notifications per role. **Internships must already be started for evaluation.**
-2. **`useOfferSummary`** in `features/directory` (offer titles are absent from
-   applications/internships responses).
+2. **`useOfferSummary`** in `features/directory` — **done** during B integration as
+   `features/directory/offers.ts` (`useOfferSummary` + `useOfferTitle`), used by the Student lane.
 3. **Infra & quality**: frontend `Dockerfile` + nginx (`/svc/*` proxy, SPA fallback),
    compose service, CI job (lint/typecheck/test/build), Playwright smoke test
    (login → dashboard per role), `docs/setup.md` + ADRs 015–017.
@@ -86,15 +86,14 @@ measurements in a throw-away browser harness (deleted afterwards).
 
 ## 3. Waiting on Person B
 
-Person B owns `features/notifications|student|company|university|supervisor`,
-`components/layout/*` and the remaining shared UI primitives. Do not edit those folders;
-message first. We need from B:
+B's lane has been received as a separate completed frontend and is being integrated per
+`merge-inventory.md` (keep ours on overlap, copy only missing, adapt all copied code). Completed:
 
-- `AppShell`, `Sidebar`, `TopBar` — replace the body of the temporary `AppLayout`
-  (TopBar = search + bell only; profile-page titles stay in the page, not the TopBar).
-- `DataTable`, `Pagination`, `Tabs`, `Stepper`, `Timeline`, `FileDropzone`,
-  `NotificationBell` — swap the temporary plain tables/pager on the three platform pages.
-- All of B's route pages so G2 (all 46 screens render) and G3 (end-to-end workflow) can pass.
+- Shared primitives `DataTable`, `Pagination`, `Tabs`, `Stepper`, `Timeline`, `FileDropzone`,
+  `NotificationBell`; `TopBar` exists but is deliberately not wired (would shift Figma-matched
+  pages down). No top nav bar is added.
+- Student lane: 8 pages + one shared `NotificationsPage`, with our hooks/tokens/status maps.
+- Remaining from B's source: University, Supervisor and Company page logic (still stubs here).
 
 **Handoff notes for B (shared files already changed):**
 - `frontend/tailwind.config.js` was deleted — the canonical `tailwind.config.ts` now wins.
