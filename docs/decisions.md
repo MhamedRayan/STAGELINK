@@ -444,3 +444,65 @@ minutes. The production procedure is documented in `docs/deployment.md`.
 not a code change. The services remain independent and can be deployed behind
 one reverse proxy or several. Local Compose uses generous login limits; a
 production deployment must set the documented secure values.
+
+---
+
+## ADR-015: Single-origin web delivery
+
+**Status:** accepted
+**Date:** 2026-11-23
+
+**Context:** The browser client talks to five services. Using separate origins
+would require per-service CORS configuration, complicate token handling and
+make local and deployed behaviour diverge. Deep links also need an SPA fallback.
+
+**Decision:** Build the React client into static assets and serve them through
+one nginx container. nginx proxies `/svc/<service>/` to that service and
+returns 404 for any `/api/internal/` path. Unknown paths fall back to
+`index.html`. Vite's development proxy uses the same prefixes, and the Compose
+`web` service uses the same nginx configuration.
+
+**Consequences:** The browser only sees one origin and CORS stays disabled.
+Adding a service means adding one proxy block in both nginx and Vite. Upload
+proxying allows 12 MiB so the 10 MiB submission limit is not truncated by the
+proxy.
+
+---
+
+## ADR-016: Frontend CI gates and browser smoke test
+
+**Status:** accepted
+**Date:** 2026-11-23
+
+**Context:** Type errors, lint regressions and broken role redirects were only
+caught locally. The other CI jobs exercise Django services but never load the
+client.
+
+**Decision:** CI runs a `web-gates` job (`npm run typecheck`, `lint`, `test`,
+`build`) and a `web-smoke` job that starts the full Compose stack including
+`web`, seeds demo accounts and runs a Playwright test per role: login, expected
+redirect, expected dashboard heading. Browsers are installed in CI only;
+Playwright is not a runtime dependency of the client image.
+
+**Consequences:** Frontend regressions fail the same pull request as backend
+regressions. The smoke test needs a seeded stack, so it is intentionally small
+and serial; detailed behaviour stays in unit and integration tests.
+
+---
+
+## ADR-017: Deterministic demo ids and an opt-in name directory
+
+**Status:** accepted
+**Date:** 2026-11-23
+
+**Context:** The APIs return user and company UUIDs but not display names.
+Demos need readable names; production must not ship a hard-coded account list.
+
+**Decision:** `seed_demo` derives demo ids from a fixed `uuid5` namespace and
+writes `frontend/src/demo/directory.json`. The client loads it only when
+`VITE_DEMO_DIRECTORY=1`; otherwise it degrades to `Role · 3f2a9c` via
+`shortId()`. The directory is demo data, never an authoritative name service.
+
+**Consequences:** A fresh seed always produces the same ids, so the generated
+file matches every demo run. Unknown ids are rendered safely, and production
+builds do not embed demo accounts.

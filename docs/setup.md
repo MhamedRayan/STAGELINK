@@ -66,6 +66,7 @@ individually revocable.
 
 | Service         | URL                            |
 | --------------- | ------------------------------ |
+| `web`           | http://localhost:3000/         |
 | `identity`      | http://localhost:8001/health/  |
 | `offers`        | http://localhost:8002/health/  |
 | `applications`  | http://localhost:8003/health/  |
@@ -76,7 +77,13 @@ individually revocable.
 for port in 8001 8002 8003 8004 8005; do
   curl --fail "http://localhost:$port/health/"
 done
+curl --fail http://localhost:3000/
 ```
+
+The `web` container serves the built client and proxies `/svc/<service>/` to
+the matching API, so the browser only uses one origin. It is part of the
+default `docker compose up` stack; use `npm run dev` in `frontend/` for local
+development with hot reload (the Vite proxy uses the same `/svc/*` prefixes).
 
 Each response should be similar to:
 
@@ -86,31 +93,44 @@ Each response should be similar to:
 
 ## Seed demo data
 
-One command creates every account needed to demonstrate the full workflow,
-including a verified company and a published offer:
+One command creates the full demo tenant: 16 accounts, all role profiles, the
+verification states needed by the platform screens, a published offer and the
+front-end name directory:
 
 ```bash
 docker compose --env-file .env -f infra/docker/docker-compose.yml \
   exec identity python manage.py seed_demo
 ```
 
-| Role             | Email                         | Password              |
-| ---------------- | ----------------------------- | --------------------- |
-| Platform admin   | `admin@stagelink.demo`        | `StagelinkDemo!2026`  |
-| Company          | `company@stagelink.demo`      | `StagelinkDemo!2026`  |
-| Student          | `student@stagelink.demo`      | `StagelinkDemo!2026`  |
-| University admin | `university@stagelink.demo`   | `StagelinkDemo!2026`  |
-| Supervisor       | `supervisor@stagelink.demo`   | `StagelinkDemo!2026`  |
+| Role                            | Email                            | Verification |
+| ------------------------------- | -------------------------------- | ------------ |
+| Platform admin                  | `admin@stagelink.demo`           | —            |
+| University admin                | `university@stagelink.demo`      | —            |
+| Company (Demo Company Ltd)      | `company@stagelink.demo`         | active       |
+| Company (ABC Company)           | `abc-company@stagelink.demo`     | active       |
+| Company (EURL FARISSIA)         | `eurl-farissia@stagelink.demo`   | active       |
+| Company (Horizon Internships)   | `horizon@stagelink.demo`         | pending      |
+| Company (Delta Services)        | `delta-services@stagelink.demo`  | pending      |
+| Company (Vertex Consulting)     | `vertex@stagelink.demo`          | rejected     |
+| Supervisors (3)                 | `supervisor@`, `supervisor-2@`, `supervisor-3@stagelink.demo` | — |
+| Students (5)                    | `student@`, `student-2@` … `student-5@stagelink.demo` | — |
 
-The company account is active and verified, the student and supervisor have
-complete role profiles, and the company owns a published
-`Software Engineering Internship` offer with capacity 3. Every account can log
-in immediately through `POST /api/auth/login/`.
+Every account uses the password `StagelinkDemo!2026`. Only active companies and
+non-company accounts can log in immediately; pending and rejected companies are
+inactive until the platform admin verifies them. Role profiles are complete,
+and the active `company` account owns a published
+`Software Engineering Internship` offer with capacity 3.
+
+The command also rewrites `frontend/src/demo/directory.json` with the actual
+user ids. Set `VITE_DEMO_DIRECTORY=1` (already in `.env.example`) when running
+the client so student and supervisor ids resolve to names; without it the UI
+degrades to `Role · 3f2a9c`, as in production.
 
 The command is idempotent. Rerunning it resets the demo account passwords,
-converges the profile and verification state, and leaves an already-published
-offer untouched. It refuses to run while `DJANGO_DEBUG` is false unless you pass
-`--force`, which prevents accidental seeding of a production database.
+converges profiles and verification states, and leaves an already-published
+offer untouched. A verification decision made through the UI is preserved. It
+refuses to run while `DJANGO_DEBUG` is false unless you pass `--force`, which
+prevents accidental seeding of a production database.
 
 Useful options:
 
@@ -121,6 +141,9 @@ Useful options:
 # Machine-readable output
 ... exec identity python manage.py seed_demo --json
 
+# Keep an existing front-end directory file
+... exec identity python manage.py seed_demo --skip-directory
+
 # Point at a different Offers instance or change the offer
 ... exec identity python manage.py seed_demo \
   --offers-url http://localhost:8002 \
@@ -129,9 +152,35 @@ Useful options:
   --offer-deadline-days 60
 ```
 
-`--password` and `--domain` change the shared demo password and email domain.
-Identity writes its own accounts directly through the ORM and creates the offer
-through the Offers HTTP API; it never reads the Offers database.
+`--password` and `--domain` change the shared demo password and email domain;
+`--directory-file` overrides the directory output path. Identity writes its own
+accounts through the ORM and creates the offer through the Offers HTTP API; it
+never reads another service's database.
+
+### Cross-service demo data
+
+After the identity seed, populate the domain screens with a second, idempotent
+script that drives every flow through **public HTTP APIs only**:
+
+```bash
+python tests/integration/seed_rich_demo.py
+python tests/integration/seed_rich_demo.py --json
+```
+
+It creates six offer states, applications in every status, four internships
+(completed with a `17.50` evaluation and two submission versions, cancelled,
+confirmed/unassigned, in-progress with a pending submission), cancellation
+requests in all three states, and read/unread notifications for each role.
+The script never calls `/api/internal/*`; service-to-service effects such as
+internship creation and notification delivery happen inside the services.
+
+Rerunning skips completed decisions and reuses objects by their exact demo
+titles, so it is safe for a top-up. For a clean rehearsal, recreate the stack,
+run both seeds in order, then perform the walkthrough; repeat once more before
+the freeze. Override service URLs with `--identity-url`, `--offers-url`,
+`--applications-url`, `--internships-url` and `--notifications-url` (or the
+matching `*_BASE_URL` environment variables) when the stack is not on the
+default local ports.
 
 ## Uploads and media
 
@@ -170,6 +219,35 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 # Stop and remove local database volumes
 docker compose --env-file .env -f infra/docker/docker-compose.yml down -v
 ```
+
+## Run the web client and its checks
+
+```bash
+# Development server on http://localhost:3000 (needs the API stack running)
+cd frontend
+npm ci
+VITE_DEMO_DIRECTORY=1 npm run dev
+```
+
+The four gates must pass before any client change is merged:
+
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+```
+
+A browser smoke test checks that each seeded role can log in and reach its
+dashboard. It needs the Compose stack (including `web`) running and seeded:
+
+```bash
+npx playwright install chromium       # once per machine
+npm run test:e2e
+```
+
+CI runs the gates in the `web-gates` job and the smoke test in `web-smoke`.
 
 ## Run a service outside Docker
 

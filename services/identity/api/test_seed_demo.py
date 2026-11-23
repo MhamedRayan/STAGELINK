@@ -1,17 +1,22 @@
 import json
+import tempfile
 import uuid
 from io import StringIO
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework_simplejwt.tokens import AccessToken
 
 from api.management.commands.seed_demo import (
     DEFAULT_OFFER_TITLE,
     DEFAULT_PASSWORD,
+    REPO_ROOT,
+    demo_user_id,
 )
 from api.models import (
     CompanyProfile,
@@ -46,6 +51,17 @@ def _offer_payload(status="draft", **overrides):
     OFFERS_TIMEOUT_SECONDS=2.0,
 )
 class SeedDemoCommandTests(TestCase):
+    def setUp(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.directory_file = Path(temp_dir.name) / "directory.json"
+        patcher = patch(
+            "api.management.commands.seed_demo.DEFAULT_DIRECTORY_FILE",
+            self.directory_file,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_seeds_accounts_profiles_and_a_published_offer(self):
         offer = _offer_payload()
         published = {**offer, "status": "published"}
@@ -65,9 +81,10 @@ class SeedDemoCommandTests(TestCase):
         ) as mock_post:
             call_command("seed_demo", stdout=stdout)
 
-        self.assertEqual(User.objects.count(), 5)
+        self.assertEqual(User.objects.count(), 16)
 
         admin = User.objects.get(email="admin@stagelink.demo")
+        self.assertEqual(str(admin.id), demo_user_id("admin"))
         self.assertEqual(admin.role, UserRole.PLATFORM_ADMIN)
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
@@ -86,6 +103,39 @@ class SeedDemoCommandTests(TestCase):
         )
         self.assertEqual(company_profile.verified_by, admin)
         self.assertIsNotNone(company_profile.verified_at)
+        self.assertTrue(company.is_active)
+
+        statuses = dict(
+            CompanyProfile.objects.values_list("user__email", "verification_status")
+        )
+        self.assertEqual(
+            statuses["abc-company@stagelink.demo"], CompanyProfile.VerificationStatus.ACTIVE
+        )
+        self.assertEqual(
+            statuses["eurl-farissia@stagelink.demo"],
+            CompanyProfile.VerificationStatus.ACTIVE,
+        )
+        self.assertEqual(
+            statuses["horizon@stagelink.demo"], CompanyProfile.VerificationStatus.PENDING
+        )
+        self.assertEqual(
+            statuses["delta-services@stagelink.demo"],
+            CompanyProfile.VerificationStatus.PENDING,
+        )
+        self.assertEqual(
+            statuses["vertex@stagelink.demo"], CompanyProfile.VerificationStatus.REJECTED
+        )
+        self.assertIn(
+            "expired",
+            CompanyProfile.objects.get(user__email="vertex@stagelink.demo").rejection_reason,
+        )
+        self.assertFalse(User.objects.get(email="vertex@stagelink.demo").is_active)
+        self.assertEqual(
+            CompanyProfile.objects.filter(
+                verification_status=CompanyProfile.VerificationStatus.ACTIVE
+            ).count(),
+            3,
+        )
 
         student = User.objects.get(email="student@stagelink.demo")
         student_profile = StudentProfile.objects.get(user=student)
@@ -100,6 +150,22 @@ class SeedDemoCommandTests(TestCase):
         self.assertEqual(
             SupervisorProfile.objects.get(user=supervisor).department,
             "Computer Science",
+        )
+        self.assertEqual(User.objects.filter(role=UserRole.SUPERVISOR).count(), 3)
+        self.assertEqual(User.objects.filter(role=UserRole.STUDENT).count(), 5)
+        self.assertEqual(User.objects.filter(role=UserRole.COMPANY).count(), 6)
+
+        # The directory is written from the ids actually stored, for the
+        # front-end demo-only name resolver (design-plan §6.1).
+        directory = json.loads(self.directory_file.read_text(encoding="utf-8"))
+        self.assertEqual(len(directory["users"]), 16)
+        self.assertEqual(directory["users"][str(student.id)]["matricule"], "DEMO-2026-001")
+        self.assertEqual(directory["users"][str(supervisor.id)]["role"], "supervisor")
+        self.assertEqual(
+            directory["users"][str(User.objects.get(email="student-4@stagelink.demo").id)][
+                "department"
+            ],
+            "Information Systems",
         )
 
         # The offer is created and published through Offers, using a company JWT.
@@ -165,10 +231,10 @@ class SeedDemoCommandTests(TestCase):
 
             call_command("seed_demo", stdout=StringIO())
 
-        self.assertEqual(User.objects.count(), 5)
-        self.assertEqual(CompanyProfile.objects.count(), 1)
-        self.assertEqual(StudentProfile.objects.count(), 1)
-        self.assertEqual(SupervisorProfile.objects.count(), 1)
+        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(CompanyProfile.objects.count(), 6)
+        self.assertEqual(StudentProfile.objects.count(), 5)
+        self.assertEqual(SupervisorProfile.objects.count(), 3)
         # The second run found the published offer and did not publish again.
         self.assertEqual(mock_post.call_count, 2)
 
@@ -184,9 +250,52 @@ class SeedDemoCommandTests(TestCase):
                 stdout=StringIO(),
             )
 
-        self.assertEqual(User.objects.count(), 5)
+        self.assertEqual(User.objects.count(), 16)
         mock_get.assert_not_called()
         mock_post.assert_not_called()
+
+    def test_skip_directory_leaves_the_file_untouched(self):
+        call_command("seed_demo", "--skip-offer", "--skip-directory", stdout=StringIO())
+
+        self.assertEqual(User.objects.count(), 16)
+        self.assertFalse(self.directory_file.exists())
+
+    def test_repo_root_is_detected_from_a_local_checkout(self):
+        self.assertIsNotNone(REPO_ROOT)
+        self.assertTrue((REPO_ROOT / "frontend" / "src" / "demo").is_dir())
+
+    def test_no_repo_checkout_skips_the_directory_without_crashing(self):
+        # Inside the identity container there is no repo checkout, so
+        # DEFAULT_DIRECTORY_FILE is None. Seeding must still work and simply
+        # skip the front-end directory artifact (regression for CI's
+        # `manage.py seed_demo` step, which previously raised IndexError).
+        with patch("api.management.commands.seed_demo.DEFAULT_DIRECTORY_FILE", None):
+            stdout = StringIO()
+            call_command("seed_demo", "--skip-offer", stdout=stdout)
+
+        self.assertEqual(User.objects.count(), 16)
+        self.assertFalse(self.directory_file.exists())
+        self.assertIn("skipping the demo directory", stdout.getvalue())
+
+    def test_rerun_preserves_a_company_verified_through_the_ui(self):
+        call_command("seed_demo", "--skip-offer", stdout=StringIO())
+        user = User.objects.get(email="horizon@stagelink.demo")
+        profile = user.company_profile
+        profile.verification_status = CompanyProfile.VerificationStatus.ACTIVE
+        profile.verified_by = User.objects.get(email="admin@stagelink.demo")
+        profile.verified_at = timezone.now()
+        profile.save()
+        user.is_active = True
+        user.save()
+
+        call_command("seed_demo", "--skip-offer", stdout=StringIO())
+
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+        self.assertEqual(
+            user.company_profile.verification_status,
+            CompanyProfile.VerificationStatus.ACTIVE,
+        )
 
     def test_json_output_is_a_single_document(self):
         stdout = StringIO()
@@ -208,12 +317,24 @@ class SeedDemoCommandTests(TestCase):
             set(payload["accounts"]),
             {
                 "platform_admin",
-                "company",
-                "student",
                 "university_admin",
+                "company",
+                "company_abc",
+                "company_farissia",
+                "company_horizon",
+                "company_delta",
+                "company_vertex",
                 "supervisor",
+                "supervisor_2",
+                "supervisor_3",
+                "student",
+                "student_2",
+                "student_3",
+                "student_4",
+                "student_5",
             },
         )
+        self.assertEqual(payload["directory"], str(self.directory_file))
         self.assertEqual(
             User.objects.get(email="student@stagelink.demo").check_password(
                 "CustomDemoPass!2026"
@@ -229,7 +350,7 @@ class SeedDemoCommandTests(TestCase):
             with self.assertRaisesMessage(CommandError, "Accounts were created"):
                 call_command("seed_demo", stdout=StringIO())
 
-        self.assertEqual(User.objects.count(), 5)
+        self.assertEqual(User.objects.count(), 16)
 
     def test_closed_offer_is_not_silently_recreated(self):
         closed = _offer_payload(status="closed")
@@ -268,4 +389,4 @@ class SeedDemoCommandTests(TestCase):
             stdout=StringIO(),
         )
 
-        self.assertEqual(User.objects.count(), 5)
+        self.assertEqual(User.objects.count(), 16)

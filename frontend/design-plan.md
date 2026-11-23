@@ -575,7 +575,8 @@ Each page lists its frame, content, data sources, actions and deviations.
 - **Data:** `GET /api/admin/companies/?status=pending|active&page=`,
   `GET /api/admin/users/?role=university_admin|student&page=` — all counts are real here.
 - **Δ** “Location” comes from the company profile `address`, which is empty for companies that
-  registered after the form was trimmed; show “Not provided”.
+  registered after the form was trimmed; show “Not provided”. `AdminCompanySummary` has no
+  registration date, so the “Registered” column is replaced by “Legal name” (`legal_name`).
 
 #### Company Verification — `/app/platform/companies` (`24:285`)
 - **Layout:** title + “Companies stay inactive until manually verified and activated.”; filter
@@ -589,13 +590,16 @@ Each page lists its frame, content, data sources, actions and deviations.
   during account creation” line.
 
 #### Create Accounts — `/app/platform/accounts/new` (`24:447`)
-- **Layout:** two cards: “University account” (university name, address, create) and “Company
-  account” (company name, email, create) with the note that companies stay inactive until
-  verified.
+- **Layout:** three cards: “University account” (university name, create), “Company account”
+  (company name, email, create) with the note that companies stay inactive until verified, and
+  “Supervisor account” (name, email, create).
 - **Data:** `POST /api/admin/users/` with `{name, email, role, password}` or
   `{generate_password: true}`. Allowed roles: `company`, `university_admin`, `supervisor`.
 - **Δ** There are no address or university-specific fields; “University name” becomes `name`.
-  When a password is generated, show it once in a copyable panel.
+  The company card's phone and location inputs are dropped (no fields on `AdminUserCreateRequest`);
+  those are filled in by the company profile after activation. A **Supervisor account** card is
+  added (the only way to provision supervisors). Each card collects an initial password or
+  `generate_password: true`; when generated, show it once in a copyable panel.
 
 #### Profile — `/app/platform/profile` (`24:605`)
 - **Layout:** Account information (full name, email, role), “Save changes”, “Change password”.
@@ -780,6 +784,13 @@ The seed must make every screen look alive on the first login.
 - **Directory:** `src/demo/directory.json` covering every seeded user and company id.
 
 Demo password stays `StagelinkDemo!2026`; the account list is documented in `docs/setup.md`.
+
+> **Δ (demo accounts):** §7 says "5 companies" but enumerates 3 verified + 2 pending +
+> 1 rejected (= 6). The seed creates **6** companies so the verification screen has two
+> pending rows and a rejected example; all other counts match the requirement exactly.
+> Ids are `uuid5` values derived from the email local part so the committed directory
+> matches every fresh seed. `VITE_DEMO_DIRECTORY=1` gates all demo-name lookups; unknown
+> ids still degrade to `Role · 3f2a9c` in production.
 
 ---
 
