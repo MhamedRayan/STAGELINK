@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from 'node:url';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // One origin for the browser: /svc/<service>/... is proxied to the matching backend service
 // (production uses the same prefixes in nginx). See design-plan "API origins".
@@ -33,5 +33,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 });

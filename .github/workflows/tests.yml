@@ -203,3 +203,113 @@ jobs:
       - name: Tear down stack
         if: always()
         run: docker compose -f infra/docker/docker-compose.yml down -v
+
+  web-gates:
+    name: Web gates (typecheck/lint/test/build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm run test
+
+      - name: Production build
+        run: npm run build
+
+  web-smoke:
+    name: Web smoke (five role logins)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      VITE_DEMO_DIRECTORY: "1"
+      DJANGO_SECRET_KEY: ci-only-django-secret-key-for-web-smoke-0123456789
+      DJANGO_DEBUG: "true"
+      SECURE_SSL_REDIRECT: "false"
+      JWT_SIGNING_KEY: ci-only-user-jwt-signing-key-for-web-smoke-0123456789
+      INTERNAL_SERVICE_TOKEN: test-service-token
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start stack with the client
+        run: >-
+          docker compose -f infra/docker/docker-compose.yml up -d --build
+          identity offers applications internships notifications web
+
+      - name: Wait for the client and APIs
+        run: |
+          set -euo pipefail
+          for url in \
+            http://localhost:3000 \
+            http://localhost:8001/health/ \
+            http://localhost:8002/health/ \
+            http://localhost:8003/health/ \
+            http://localhost:8004/health/ \
+            http://localhost:8005/health/; do
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent "$url" > /dev/null 2>&1; then
+                echo "$url is ready"
+                break
+              fi
+              if [ "$attempt" -eq 60 ]; then
+                echo "$url did not become healthy" >&2
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+
+      - name: Seed demo accounts
+        run: >-
+          docker compose -f infra/docker/docker-compose.yml
+          exec -T identity python manage.py seed_demo
+
+      - name: Run smoke tests
+        working-directory: frontend
+        run: npx playwright test
+
+      - name: Show stack logs
+        if: failure()
+        run: docker compose -f infra/docker/docker-compose.yml logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/docker/docker-compose.yml down -v

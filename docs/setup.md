@@ -66,6 +66,7 @@ individually revocable.
 
 | Service         | URL                            |
 | --------------- | ------------------------------ |
+| `web`           | http://localhost:3000/         |
 | `identity`      | http://localhost:8001/health/  |
 | `offers`        | http://localhost:8002/health/  |
 | `applications`  | http://localhost:8003/health/  |
@@ -76,7 +77,13 @@ individually revocable.
 for port in 8001 8002 8003 8004 8005; do
   curl --fail "http://localhost:$port/health/"
 done
+curl --fail http://localhost:3000/
 ```
+
+The `web` container serves the built client and proxies `/svc/<service>/` to
+the matching API, so the browser only uses one origin. It is part of the
+default `docker compose up` stack; use `npm run dev` in `frontend/` for local
+development with hot reload (the Vite proxy uses the same `/svc/*` prefixes).
 
 Each response should be similar to:
 
@@ -187,6 +194,35 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml down
 # Stop and remove local database volumes
 docker compose --env-file .env -f infra/docker/docker-compose.yml down -v
 ```
+
+## Run the web client and its checks
+
+```bash
+# Development server on http://localhost:3000 (needs the API stack running)
+cd frontend
+npm ci
+VITE_DEMO_DIRECTORY=1 npm run dev
+```
+
+The four gates must pass before any client change is merged:
+
+```bash
+cd frontend
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+```
+
+A browser smoke test checks that each seeded role can log in and reach its
+dashboard. It needs the Compose stack (including `web`) running and seeded:
+
+```bash
+npx playwright install chromium       # once per machine
+npm run test:e2e
+```
+
+CI runs the gates in the `web-gates` job and the smoke test in `web-smoke`.
 
 ## Run a service outside Docker
 

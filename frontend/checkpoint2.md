@@ -74,9 +74,9 @@ measurements in a throw-away browser harness (deleted afterwards).
    and unread/read notifications per role. **Internships must already be started for evaluation.**
 2. **`useOfferSummary`** in `features/directory` — **done** during B integration as
    `features/directory/offers.ts` (`useOfferSummary` + `useOfferTitle`), used by the Student lane.
-3. **Infra & quality**: frontend `Dockerfile` + nginx (`/svc/*` proxy, SPA fallback),
-   compose service, CI job (lint/typecheck/test/build), Playwright smoke test
-   (login → dashboard per role), `docs/setup.md` + ADRs 015–017.
+3. **Infra & quality — done**: frontend `Dockerfile` + nginx (`/svc/*` proxy, SPA
+   fallback), compose `web` service, CI jobs `web-gates` and `web-smoke`,
+   Playwright role-login smoke test, `docs/setup.md` + ADRs 015–017.
 4. **Live verification**: all 5 demo roles log in, role redirects, refresh after expiry,
    logout, company registration (incl. 400 duplicate + 429), every profile save and
    password-change flow, visual comparison at 1440×900 / 1280 / 1920.
@@ -93,7 +93,9 @@ B's lane has been received as a separate completed frontend and is being integra
   `NotificationBell`; `TopBar` exists but is deliberately not wired (would shift Figma-matched
   pages down). No top nav bar is added.
 - Student lane: 8 pages + one shared `NotificationsPage`, with our hooks/tokens/status maps.
-- Remaining from B's source: University, Supervisor and Company page logic (still stubs here).
+- University, Supervisor and Company page logic ported too (step 4): 8 + 5 + 5 pages,
+  each with our own keys/hooks/strings and Figma/Δ decisions recorded in `merge-inventory.md`.
+  Profiles and notifications keep our shared implementations. All four gates green.
 
 **Handoff notes for B (shared files already changed):**
 - `frontend/tailwind.config.js` was deleted — the canonical `tailwind.config.ts` now wins.
@@ -111,7 +113,7 @@ B's lane has been received as a separate completed frontend and is being integra
 | Gate | Status |
 | --- | --- |
 | G1 Foundation + auth + guest | Done (live-backend check still pending) |
-| G2 All 46 routes render | Blocked by Person B's pages |
-| G3 End-to-end workflow | Blocked by cross-service seed + Person B's pages |
-| G4 Docker/nginx/CI | Not started (Person A) |
+| G2 All 46 routes render | Person B's pages integrated; live render check pending |
+| G3 End-to-end workflow | Blocked by cross-service seed |
+| G4 Docker/nginx/CI | Implemented; live smoke run pending |
 | G5 Freeze (Wed 25 Nov 2026) | At risk until G2/G4 land |
