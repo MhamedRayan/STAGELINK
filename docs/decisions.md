@@ -506,3 +506,45 @@ writes `frontend/src/demo/directory.json`. The client loads it only when
 **Consequences:** A fresh seed always produces the same ids, so the generated
 file matches every demo run. Unknown ids are rendered safely, and production
 builds do not embed demo accounts.
+
+---
+
+## ADR-018: Provisioning, institution scope and user directory
+
+**Status:** accepted
+**Date:** 2026-11-23
+
+**Context:** The original API could not provision students at all, restricted
+all user management to `platform_admin`, and returned only UUIDs for the
+students, supervisors and companies referenced by applications and
+internships. Browser clients cannot call `/api/internal/` routes, so names had
+to come from a demo-only JSON file (ADR-017). University administrators had no
+way to manage their own students or supervisors, and there was no
+institution-scoping field for supervisors or university administrators.
+
+**Decision:** Add `student` to the admin-provisionable roles. Allow
+`university_admin` callers on user provisioning/list/detail endpoints, scoped
+to `student` and `supervisor` accounts whose profile university matches the
+administrator's own university (case-insensitive, trimmed). Introduce
+`UniversityAdminProfile` and `SupervisorProfile.university`; university
+administrators may edit scoped accounts but may not change roles, create
+companies or other administrators, or touch company verification. Expose a
+bearer-authenticated directory (`GET /api/users/`, `GET /api/users/{id}/`) and
+a batch resolver (`GET /api/users/lookup/?ids=...`, max 100) so clients resolve
+UUIDs to display names. Names are resolved at read time by the client and
+never copied into other services' payloads. Any authenticated caller receives
+`id`, `name` and `role`; supervisors and companies also receive a student's
+`university`, `department`, `specialty` and `academic_year`; email, phone and
+`matricule` remain private to the account owner and university/platform
+administrators. Public registration is reduced to `company`. A lightweight
+anonymous endpoint exposes company `verification_status` without exposing
+unverified profile details.
+
+**Consequences:** Identity remains the single source of truth for names and
+academic data; other services keep plain UUID references. Client code can use
+the batch resolver instead of ADR-017's demo directory, but ADR-017 stays in
+place for deterministic demo ids. Relationship-based restriction of academic
+fields (only the supervisor/company actually involved with a student) is not
+enforced by Identity because it has no application or internship context; it
+would require a service-token-backed context check in a later wave. Student
+self-registration is no longer available, so provisioning is mandatory.

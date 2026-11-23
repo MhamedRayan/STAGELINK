@@ -116,6 +116,14 @@ class RealAccountTestCase(unittest.TestCase):
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
+    def patch(self, path, payload, headers=None, base_url=IDENTITY_BASE_URL):
+        return requests.patch(
+            f"{base_url}{path}",
+            json=payload,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+
     def register(self, role, email, name):
         response = self.post(
             "/api/auth/register/",
@@ -144,23 +152,27 @@ class RealAccountTestCase(unittest.TestCase):
             )
         return auth_headers(response.json()["access"])
 
-    def create_provisioned_user(self, admin_headers, *, role, email, name):
-        response = self.post(
-            "/api/admin/users/",
-            {"email": email, "name": name, "role": role, "password": PASSWORD},
-            headers=admin_headers,
-        )
+    def create_provisioned_user(self, admin_headers, *, role, email, name, university=None):
+        payload = {"email": email, "name": name, "role": role, "password": PASSWORD}
+        if university is not None:
+            payload["university"] = university
+        response = self.post("/api/admin/users/", payload, headers=admin_headers)
         self.assert_status(response, 201)
-        payload = response.json()
-        self.assertEqual(payload["role"], role)
-        self.assertTrue(payload["is_active"])
-        return payload
+        created = response.json()
+        self.assertEqual(created["role"], role)
+        self.assertTrue(created["is_active"])
+        return created
 
 
 class IdentityAccountLifecycleTests(RealAccountTestCase):
     def test_registration_login_password_change_logout_and_deactivation(self):
         email = unique_email("student.lifecycle")
-        profile = self.register(ROLE_STUDENT, email, "Lifecycle Student")
+        profile = self.create_provisioned_user(
+            self.admin_headers(),
+            role=ROLE_STUDENT,
+            email=email,
+            name="Lifecycle Student",
+        )
         self.assertEqual(profile["role"], ROLE_STUDENT)
         self.assertTrue(profile["is_active"])
 
@@ -226,6 +238,125 @@ class IdentityAccountLifecycleTests(RealAccountTestCase):
         self.assertEqual(verified.json()["verification_status"], "active")
 
         self.login(email)
+
+
+class ProvisioningAndDirectoryIntegrationTests(RealAccountTestCase):
+    def test_university_admin_provisions_users_and_directory_resolves_uuids(self):
+        platform_headers = self.admin_headers()
+        university = self.create_provisioned_user(
+            platform_headers,
+            role=ROLE_UNIVERSITY_ADMIN,
+            email=unique_email("university.provision"),
+            name="Provisioning University Admin",
+            university="Integration University",
+        )
+        self.assertEqual(university["university"], "Integration University")
+        university_headers = auth_headers(self.login(university["email"])["access"])
+
+        student = self.create_provisioned_user(
+            university_headers,
+            role=ROLE_STUDENT,
+            email=unique_email("student.provision"),
+            name="Provisioned Student",
+            university="integration university",
+        )
+        supervisor = self.create_provisioned_user(
+            university_headers,
+            role=ROLE_SUPERVISOR,
+            email=unique_email("supervisor.provision"),
+            name="Provisioned Supervisor",
+        )
+        self.assertEqual(student["university"], "Integration University")
+        self.assertEqual(supervisor["university"], "Integration University")
+
+        blocked_company = self.post(
+            "/api/admin/users/",
+            {
+                "email": unique_email("blocked.company"),
+                "name": "Blocked Company",
+                "role": ROLE_COMPANY,
+                "password": PASSWORD,
+            },
+            headers=university_headers,
+        )
+        self.assert_status(blocked_company, 403)
+
+        patched = self.patch(
+            f"/api/admin/users/{student['id']}/",
+            {
+                "department": "Computer Science",
+                "specialty": "Software Engineering",
+                "academic_year": "3",
+                "matricule": "INT-2026",
+            },
+            university_headers,
+        )
+        self.assert_status(patched, 200)
+
+        student_headers = auth_headers(self.login(student["email"])["access"])
+        supervisor_headers = auth_headers(self.login(supervisor["email"])["access"])
+        lookup = self.get(
+            f"/api/users/lookup/?ids={student['id']},{supervisor['id']}",
+            supervisor_headers,
+        )
+        self.assert_status(lookup, 200)
+        resolved = {item["id"]: item for item in lookup.json()["results"]}
+        self.assertEqual(resolved[student["id"]]["name"], "Provisioned Student")
+        self.assertEqual(resolved[student["id"]]["university"], "Integration University")
+        self.assertEqual(resolved[student["id"]]["department"], "Computer Science")
+        self.assertNotIn("matricule", resolved[student["id"]])
+        self.assertNotIn("email", resolved[student["id"]])
+        self.assertEqual(resolved[supervisor["id"]]["name"], "Provisioned Supervisor")
+
+        own_profile = self.get(f"/api/users/{student['id']}/", student_headers)
+        self.assert_status(own_profile, 200)
+        self.assertEqual(own_profile.json()["matricule"], "INT-2026")
+        self.assertEqual(own_profile.json()["email"], student["email"])
+
+        directory = self.get(
+            "/api/users/?q=Provisioned%20Student", supervisor_headers
+        )
+        self.assert_status(directory, 200)
+        self.assertEqual(
+            [item["id"] for item in directory.json()["results"]], [student["id"]]
+        )
+
+    def test_public_verification_status_follows_admin_decisions(self):
+        platform_headers = self.admin_headers()
+        company = self.register(
+            ROLE_COMPANY, unique_email("company.public.verification"), "Public Company"
+        )
+        company_id = company["id"]
+
+        pending = self.get(f"/api/companies/{company_id}/verification/")
+        self.assert_status(pending, 200)
+        self.assertEqual(pending.json()["verification_status"], "pending")
+        self.assert_status(
+            self.get(f"/api/companies/{company_id}/profile/"), 404
+        )
+
+        rejected = self.patch(
+            f"/api/admin/users/{company_id}/",
+            {
+                "verification_status": "rejected",
+                "rejection_reason": "Documents could not be confirmed.",
+            },
+            platform_headers,
+        )
+        self.assert_status(rejected, 200)
+        public_rejected = self.get(f"/api/companies/{company_id}/verification/")
+        self.assertEqual(public_rejected.json()["verification_status"], "rejected")
+
+        verified = self.post(
+            f"/api/admin/companies/{company_id}/verify/", {}, platform_headers
+        )
+        self.assert_status(verified, 200)
+        public_active = self.get(f"/api/companies/{company_id}/verification/")
+        self.assertEqual(public_active.json()["verification_status"], "active")
+
+        public_profile = self.get(f"/api/companies/{company_id}/profile/")
+        self.assert_status(public_profile, 200)
+        self.assertEqual(public_profile.json()["verification_status"], "active")
 
 
 class CorsIntegrationTests(RealAccountTestCase):
@@ -321,7 +452,12 @@ class FullDemoFlowTests(RealAccountTestCase):
         self.assert_status(published, 200)
         self.assertEqual(published.json()["status"], "published")
 
-        student = self.register(ROLE_STUDENT, student_email, "Flow Student")
+        student = self.create_provisioned_user(
+            admin_headers,
+            role=ROLE_STUDENT,
+            email=student_email,
+            name="Flow Student",
+        )
         student_tokens = self.login(student_email)
         student_headers = auth_headers(student_tokens["access"])
 

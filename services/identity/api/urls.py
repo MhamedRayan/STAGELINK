@@ -13,7 +13,11 @@ from api.views import (
     LogoutView,
     PasswordChangeView,
     PublicCompanyProfileView,
+    PublicCompanyVerificationView,
+    UserDirectoryDetailView,
+    UserDirectoryListView,
     UserLoginView,
+    UserLookupView,
     UserProfileView,
     UserRegistrationView,
     UserRoleProfileView,
@@ -40,6 +44,26 @@ urlpatterns = [
         "users/me/profile/",
         UserRoleProfileView.as_view(),
         name="user-role-profile",
+    ),
+    path(
+        "users/",
+        UserDirectoryListView.as_view(),
+        name="user-directory-list",
+    ),
+    path(
+        "users/lookup/",
+        UserLookupView.as_view(),
+        name="user-lookup",
+    ),
+    path(
+        "users/<uuid:user_id>/",
+        UserDirectoryDetailView.as_view(),
+        name="user-directory-detail",
+    ),
+    path(
+        "companies/<uuid:company_id>/verification/",
+        PublicCompanyVerificationView.as_view(),
+        name="public-company-verification",
     ),
     path(
         "companies/<uuid:company_id>/profile/",

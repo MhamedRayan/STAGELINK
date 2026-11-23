@@ -38,19 +38,34 @@ class IdentityApiTests(APITestCase):
         response = self.client.post(
             reverse("auth-register"),
             {
-                "email": "NEW.STUDENT@EXAMPLE.EDU",
+                "email": "NEW.COMPANY@EXAMPLE.COM",
                 "password": "RegistrationStrongPassword!2026",
-                "name": "New Student",
-                "role": UserRole.STUDENT,
+                "name": "New Company",
+                "role": UserRole.COMPANY,
             },
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        user = User.objects.get(email="new.student@example.edu")
+        user = User.objects.get(email="new.company@example.com")
         self.assertNotEqual(user.password_hash, "RegistrationStrongPassword!2026")
         self.assertTrue(user.check_password("RegistrationStrongPassword!2026"))
-        self.assertTrue(StudentProfile.objects.filter(user=user).exists())
+        self.assertTrue(CompanyProfile.objects.filter(user=user).exists())
+
+    def test_registration_rejects_students(self):
+        response = self.client.post(
+            reverse("auth-register"),
+            {
+                "email": "self-registered@example.edu",
+                "password": "RegistrationStrongPassword!2026",
+                "name": "Self Registered Student",
+                "role": UserRole.STUDENT,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(User.objects.filter(email="self-registered@example.edu").exists())
 
     def test_company_registration_creates_inactive_account(self):
         response = self.client.post(
@@ -339,7 +354,7 @@ class IdentityApiTests(APITestCase):
         self.assertTrue(self.student.is_active)
 
     def test_roles_without_role_profiles_get_forbidden(self):
-        for role in (UserRole.UNIVERSITY_ADMIN, UserRole.PLATFORM_ADMIN):
+        for role in (UserRole.PLATFORM_ADMIN,):
             user = User.objects.create_user(
                 email=f"{role}-profile@example.edu",
                 password="ProfilePermissionPassword!2026",
@@ -398,7 +413,11 @@ class IdentityApiTests(APITestCase):
         get_response = self.client.get(reverse("user-role-profile"))
         put_response = self.client.put(
             reverse("user-role-profile"),
-            {"department": "Computer Science", "grade": "Associate Professor"},
+            {
+                "university": "University of Example",
+                "department": "Computer Science",
+                "grade": "Associate Professor",
+            },
             format="json",
         )
 
@@ -526,7 +545,6 @@ class IdentityApiTests(APITestCase):
             UserRole.STUDENT,
             UserRole.COMPANY,
             UserRole.SUPERVISOR,
-            UserRole.UNIVERSITY_ADMIN,
         )
 
         for role in non_admin_roles:

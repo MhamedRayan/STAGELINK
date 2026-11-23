@@ -37,3 +37,17 @@ class IsPlatformAdmin(BasePermission):
             and user.is_authenticated
             and user.role == UserRole.PLATFORM_ADMIN
         )
+
+
+class IsUniversityAdmin(BasePermission):
+    """Allow only authenticated accounts with the university_admin role."""
+
+    message = "Only university administrators may perform this action."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.role == UserRole.UNIVERSITY_ADMIN
+        )

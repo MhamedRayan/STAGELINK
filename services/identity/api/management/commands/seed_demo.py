@@ -36,6 +36,7 @@ from api.models import (
     CompanyProfile,
     StudentProfile,
     SupervisorProfile,
+    UniversityAdminProfile,
     User,
     UserRole,
 )
@@ -81,6 +82,7 @@ STUDENT_DEFAULTS = {
     "academic_year": "2026/2027",
 }
 SUPERVISOR_DEFAULTS = {
+    "university": "Demo University",
     "department": "Computer Science",
     "grade": "Senior Lecturer",
 }
@@ -103,6 +105,21 @@ DEMO_ACCOUNTS = (
         "local_part": "university",
         "name": "Demo University Administrator",
         "role": UserRole.UNIVERSITY_ADMIN,
+        "profile": {
+            "university": "Demo University",
+            "department": "Admissions",
+        },
+    },
+    {
+        # A second institution makes university-admin scoping demonstrable.
+        "key": "university_admin_2",
+        "local_part": "university-2",
+        "name": "Second University Administrator",
+        "role": UserRole.UNIVERSITY_ADMIN,
+        "profile": {
+            "university": "Second University",
+            "department": "Registry",
+        },
     },
     {
         "key": "company",
@@ -525,8 +542,14 @@ class Command(BaseCommand):
             profile.save()
         elif user.role == UserRole.SUPERVISOR:
             profile, _ = SupervisorProfile.objects.get_or_create(user=user)
+            profile.university = data.get("university", "")
             profile.department = data.get("department", "")
             profile.grade = data.get("grade", "")
+            profile.save()
+        elif user.role == UserRole.UNIVERSITY_ADMIN:
+            profile, _ = UniversityAdminProfile.objects.get_or_create(user=user)
+            profile.university = data.get("university", "")
+            profile.department = data.get("department", "")
             profile.save()
 
     def _write_directory(self, users, path):
@@ -694,6 +717,7 @@ class Command(BaseCommand):
             "company_vertex": "Company (rejected)",
             "student": "Student",
             "university_admin": "University admin",
+            "university_admin_2": "University admin (second institution)",
             "supervisor": "Supervisor",
         }
         for key, account in result["accounts"].items():

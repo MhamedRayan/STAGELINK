@@ -19,12 +19,19 @@ from rest_framework_simplejwt.token_blacklist.models import (
 )
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from api.admin_scope import (
+    SCOPED_ROLES,
+    admin_university,
+    normalise_university,
+    scope_admin_users,
+)
+from api.directory import user_summary
 from api.models import (
     CompanyProfile,
     User,
     UserRole,
 )
-from api.permissions import IsPlatformAdmin, IsTrustedService
+from api.permissions import IsPlatformAdmin, IsTrustedService, IsUniversityAdmin
 from api.profile_services import ROLE_PROFILE_MODELS, ensure_role_profile
 from api.serializers import (
     AdminUserCreateSerializer,
@@ -37,6 +44,7 @@ from api.serializers import (
     PublicCompanyProfileSerializer,
     StudentProfileSerializer,
     SupervisorProfileSerializer,
+    UniversityAdminProfileSerializer,
     UserLoginSerializer,
     UserProfileSerializer,
     UserRegistrationSerializer,
@@ -224,6 +232,7 @@ class UserRoleProfileView(APIView):
             UserRole.STUDENT: StudentProfileSerializer,
             UserRole.COMPANY: CompanyProfileSerializer,
             UserRole.SUPERVISOR: SupervisorProfileSerializer,
+            UserRole.UNIVERSITY_ADMIN: UniversityAdminProfileSerializer,
         }[user.role]
         return profile, serializer_class
 
@@ -253,6 +262,125 @@ class PublicCompanyProfileView(APIView):
         except CompanyProfile.DoesNotExist as exc:
             raise NotFound("Verified company profile not found.") from exc
         return Response(PublicCompanyProfileSerializer(profile).data)
+
+
+class PublicCompanyVerificationView(APIView):
+    permission_classes = (AllowAny,)
+
+    def get(self, request, company_id):
+        try:
+            profile = CompanyProfile.objects.only("verification_status").get(
+                user_id=company_id,
+                user__role=UserRole.COMPANY,
+            )
+        except CompanyProfile.DoesNotExist as exc:
+            raise NotFound("Company account not found.") from exc
+        return Response(
+            {
+                "id": str(company_id),
+                "verification_status": profile.verification_status,
+            }
+        )
+
+
+class UserDirectoryListView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    allowed_query_params = {"role", "q", "university", "page"}
+
+    def get(self, request):
+        params = request.query_params
+        unknown = set(params.keys()) - self.allowed_query_params
+        if unknown:
+            raise ValidationError(
+                {name: "Unknown query parameter." for name in sorted(unknown)}
+            )
+
+        users = User.objects.filter(is_active=True).select_related(
+            "student_profile",
+            "company_profile",
+            "supervisor_profile",
+            "university_admin_profile",
+        )
+        role = params.get("role")
+        if role is not None:
+            if role not in UserRole.values:
+                raise ValidationError({"role": "Unknown role."})
+            users = users.filter(role=role)
+        query = params.get("q", "").strip()
+        if query:
+            users = users.filter(Q(name__icontains=query) | Q(email__icontains=query))
+        university = params.get("university", "").strip()
+        if university:
+            if not normalise_university(university):
+                raise ValidationError({"university": "This field may not be blank."})
+            users = users.filter(
+                Q(student_profile__university__iexact=university)
+                | Q(supervisor_profile__university__iexact=university)
+                | Q(university_admin_profile__university__iexact=university)
+            )
+        users = users.order_by("email")
+        paginator = ApiPagePagination()
+        page = paginator.paginate_queryset(users, request, view=self)
+        return paginator.get_paginated_response(
+            [user_summary(request.user, user) for user in page]
+        )
+
+
+class UserLookupView(APIView):
+    """Batch resolver for the UUIDs carried by other services."""
+
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        raw_ids = request.query_params.get("ids")
+        if raw_ids is None:
+            raise ValidationError({"ids": "Provide comma-separated user UUIDs."})
+        if set(request.query_params.keys()) != {"ids"}:
+            raise ValidationError(
+                {"ids": "Batch lookup cannot be combined with directory filters."}
+            )
+        raw_values = raw_ids.split(",")
+        if not raw_values or any(not value.strip() for value in raw_values):
+            raise ValidationError({"ids": "Provide comma-separated UUIDs."})
+        if len(raw_values) > 100:
+            raise ValidationError({"ids": "At most 100 IDs may be requested."})
+        try:
+            requested_ids = [str(UUID(value.strip())) for value in raw_values]
+        except (ValueError, AttributeError) as exc:
+            raise ValidationError({"ids": "Every ID must be a valid UUID."}) from exc
+
+        users_by_id = {
+            str(user.id): user
+            for user in User.objects.filter(id__in=set(requested_ids)).select_related(
+                "student_profile",
+                "company_profile",
+                "supervisor_profile",
+                "university_admin_profile",
+            )
+        }
+        results = [
+            user_summary(request.user, users_by_id[user_id])
+            for user_id in requested_ids
+            if user_id in users_by_id
+        ]
+        return Response({"results": results})
+
+
+class UserDirectoryDetailView(APIView):
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request, user_id):
+        try:
+            user = User.objects.select_related(
+                "student_profile",
+                "company_profile",
+                "supervisor_profile",
+                "university_admin_profile",
+            ).get(pk=user_id)
+        except User.DoesNotExist as exc:
+            raise NotFound("User not found.") from exc
+        return Response(user_summary(request.user, user))
 
 
 class InternalUserDirectoryView(APIView):
@@ -368,6 +496,9 @@ def _admin_user_summary(user):
                 "rejection_reason": profile.rejection_reason,
             }
         )
+    elif user.role in (UserRole.STUDENT, UserRole.SUPERVISOR, UserRole.UNIVERSITY_ADMIN):
+        profile = ensure_role_profile(user)
+        result["university"] = getattr(profile, "university", "")
     return result
 
 
@@ -459,21 +590,80 @@ class AdminCompanyRejectView(APIView):
         return Response(_company_admin_summary(profile.user))
 
 
+ADMIN_USER_PERMISSIONS = (IsAuthenticated, IsPlatformAdmin | IsUniversityAdmin)
+
+
+def _provisioned_university(request, role, values):
+    """Validate and normalise the institution for a provisioned account.
+
+    Returns the university to store on the role profile, or None when the
+    account role has no institution field.
+    """
+    caller_university = admin_university(request.user)
+    supplied = values.pop("university", None)
+
+    if caller_university is not None:
+        if role not in SCOPED_ROLES:
+            raise PermissionDenied(
+                "University administrators may provision only students and supervisors."
+            )
+        if not caller_university:
+            raise PermissionDenied(
+                "Your account has no university assigned; contact a platform administrator."
+            )
+        if supplied is not None and (
+            normalise_university(supplied) != normalise_university(caller_university)
+        ):
+            raise ValidationError(
+                {"university": "Students and supervisors must belong to your university."}
+            )
+        return caller_university
+
+    if role not in (
+        UserRole.STUDENT,
+        UserRole.SUPERVISOR,
+        UserRole.UNIVERSITY_ADMIN,
+    ):
+        if supplied is not None:
+            raise ValidationError(
+                {"university": "This role does not have a university."}
+            )
+        return None
+    return (supplied or "").strip()
+
+
 class AdminUserListCreateView(APIView):
-    permission_classes = (IsAuthenticated, IsPlatformAdmin)
+    permission_classes = ADMIN_USER_PERMISSIONS
 
     def get(self, request):
-        unknown_params = set(request.query_params.keys()) - {"role", "page"}
+        unknown_params = set(request.query_params.keys()) - {
+            "role",
+            "q",
+            "university",
+            "page",
+        }
         if unknown_params:
             raise ValidationError(
                 {name: "Unknown query parameter." for name in sorted(unknown_params)}
             )
-        users = User.objects.all().order_by("email")
+        users = scope_admin_users(request.user, User.objects.all()).order_by("email")
         role = request.query_params.get("role")
         if role is not None:
             if role not in UserRole.values:
                 raise ValidationError({"role": "Unknown role."})
             users = users.filter(role=role)
+        query = request.query_params.get("q", "").strip()
+        if query:
+            users = users.filter(Q(name__icontains=query) | Q(email__icontains=query))
+        university = request.query_params.get("university", "").strip()
+        if university:
+            if not normalise_university(university):
+                raise ValidationError({"university": "This field may not be blank."})
+            users = users.filter(
+                Q(student_profile__university__iexact=university)
+                | Q(supervisor_profile__university__iexact=university)
+                | Q(university_admin_profile__university__iexact=university)
+            )
         paginator = ApiPagePagination()
         page = paginator.paginate_queryset(users, request, view=self)
         return paginator.get_paginated_response([_admin_user_summary(user) for user in page])
@@ -483,6 +673,8 @@ class AdminUserListCreateView(APIView):
         serializer = AdminUserCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         values = dict(serializer.validated_data)
+        role = values["role"]
+        university = _provisioned_university(request, role, values)
         one_time_password = None
         if values.pop("generate_password", False):
             one_time_password = secrets.token_urlsafe(24)
@@ -493,7 +685,10 @@ class AdminUserListCreateView(APIView):
             raise ValidationError(
                 {"email": "An account with this email address already exists."}
             ) from exc
-        ensure_role_profile(user)
+        profile = ensure_role_profile(user)
+        if university is not None and profile is not None:
+            profile.university = university
+            profile.save(update_fields=["university"])
         response_data = _admin_user_summary(user)
         if one_time_password:
             response_data["one_time_password"] = one_time_password
@@ -508,23 +703,46 @@ class AdminUserListCreateView(APIView):
 
 
 class AdminUserDetailView(APIView):
-    permission_classes = (IsAuthenticated, IsPlatformAdmin)
+    permission_classes = ADMIN_USER_PERMISSIONS
+
+    def _get_user(self, request, user_id):
+        user = scope_admin_users(request.user, User.objects.all()).filter(pk=user_id).first()
+        if user is None:
+            raise NotFound("User not found.")
+        return user
 
     def get(self, request, user_id):
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist as exc:
-            raise NotFound("User not found.") from exc
-        return Response(_admin_user_summary(user))
+        return Response(_admin_user_summary(self._get_user(request, user_id)))
 
     @transaction.atomic
     def patch(self, request, user_id):
-        try:
-            user = User.objects.get(pk=user_id)
-        except User.DoesNotExist as exc:
-            raise NotFound("User not found.") from exc
+        user = self._get_user(request, user_id)
+        caller_university = admin_university(request.user)
+        data = request.data.copy() if hasattr(request.data, "copy") else dict(request.data)
+        if caller_university is not None:
+            forbidden = set(data) - {
+                "name",
+                "email",
+                "university",
+                "department",
+                "specialty",
+                "academic_year",
+                "matricule",
+                "grade",
+            }
+            if forbidden:
+                raise PermissionDenied(
+                    "University administrators may edit scoped profile details only."
+                )
+            if "university" in data and (
+                normalise_university(data["university"])
+                != normalise_university(caller_university)
+            ):
+                raise ValidationError(
+                    {"university": "Students and supervisors must belong to your university."}
+                )
         serializer = AdminUserUpdateSerializer(
-            data=request.data,
+            data=data,
             context={"user": user},
         )
         serializer.is_valid(raise_exception=True)
@@ -562,7 +780,32 @@ class AdminUserDetailView(APIView):
             elif "rejection_reason" in updates:
                 profile.rejection_reason = updates["rejection_reason"]
                 profile.save(update_fields=("rejection_reason",))
-        if "is_active" in updates:
-            user.is_active = updates["is_active"]
-        user.save(update_fields=("is_active",))
+        else:
+            profile = ensure_role_profile(user)
+            profile_fields = {
+                UserRole.STUDENT: (
+                    "university",
+                    "department",
+                    "specialty",
+                    "academic_year",
+                    "matricule",
+                ),
+                UserRole.SUPERVISOR: ("university", "department", "grade"),
+                UserRole.UNIVERSITY_ADMIN: ("university", "department"),
+            }.get(user.role, ())
+            changed_fields = [field for field in profile_fields if field in updates]
+            for field in changed_fields:
+                setattr(profile, field, updates[field])
+            if changed_fields:
+                profile.save(update_fields=changed_fields)
+        user_fields = [field for field in ("name", "email", "is_active") if field in updates]
+        for field in user_fields:
+            setattr(user, field, updates[field])
+        if user_fields:
+            try:
+                user.save(update_fields=user_fields)
+            except IntegrityError as exc:
+                raise ValidationError(
+                    {"email": "An account with this email address already exists."}
+                ) from exc
         return Response(_admin_user_summary(user))

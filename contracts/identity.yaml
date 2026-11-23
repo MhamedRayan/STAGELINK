@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: STAGELINK Identity API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     HTTP contract for the STAGELINK identity service.
 
@@ -12,8 +12,10 @@ info:
 
     Identifiers are UUID strings. Role values are lowercase snake_case.
     User endpoints require a bearer access token. Internal endpoints require
-    the shared X-Service-Token header. Administrator endpoints require a
-    bearer token belonging to a `platform_admin`.
+    the shared X-Service-Token header. Company verification endpoints require
+    a `platform_admin`. User provisioning and management endpoints accept a
+    `platform_admin` (all roles) or a `university_admin` (students and
+    supervisors of the same university only).
 
     Error responses follow Django REST Framework conventions, not the shared
     `{code, message, details}` envelope used by the other services. Detail
@@ -36,9 +38,9 @@ tags:
   - name: Authentication
     description: Registration, login and token refresh.
   - name: Profiles
-    description: Authenticated user profile and role profile operations.
+    description: Authenticated user profile, role profile and user directory operations.
   - name: Companies
-    description: Public company profile endpoints.
+    description: Public company profile and verification status endpoints.
   - name: Internal
     description: Trusted service-to-service endpoints.
   - name: Admin
@@ -68,11 +70,12 @@ paths:
       tags:
         - Authentication
       operationId: registerUser
-      summary: Register a student or company account
+      summary: Register a company account
       description: |
-        Public registration is limited to the `student` and `company` roles.
-        Company accounts are created inactive until an administrator verifies
-        and activates them. Other roles must be provisioned by an administrator.
+        Public registration is limited to the `company` role. Students,
+        supervisors and administrators must be provisioned by an administrator.
+        Company accounts are created inactive until a platform administrator
+        verifies and activates them.
       security: []
       requestBody:
         required: true
@@ -290,9 +293,9 @@ paths:
       operationId: getCurrentRoleProfile
       summary: Read the authenticated user's role-specific profile
       description: |
-        Returns the profile matching the caller's role. Student, company and
-        supervisor accounts have a role-specific profile; university and
-        platform administrators do not.
+        Returns the profile matching the caller's role. Student, company,
+        supervisor and university-administrator accounts have a role-specific
+        profile; platform administrators do not.
       security:
         - bearerAuth: []
       responses:
@@ -335,6 +338,141 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+
+  /api/users/:
+    get:
+      tags:
+        - Profiles
+      operationId: listDirectoryUsers
+      summary: Search the authenticated user directory
+      description: |
+        Returns active accounts visible to any authenticated user. The payload
+        is visibility-filtered: every caller receives `id`, `name` and `role`;
+        supervisors and companies also receive a student's academic line
+        (`university`, `department`, `specialty`, `academic_year`). Email,
+        phone and `matricule` are returned only to the account owner and to
+        university/platform administrators.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Role'
+        - name: q
+          in: query
+          description: Case-insensitive search over name and email.
+          schema:
+            type: string
+        - name: university
+          in: query
+          description: Case-insensitive exact match on the university field.
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: A page of user summaries.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSummaryPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/lookup/:
+    get:
+      tags:
+        - Profiles
+      operationId: lookupUsersByIds
+      summary: Resolve user UUIDs to display names in one request
+      description: |
+        Accepts up to 100 comma-separated UUIDs. Results follow the requested
+        order; unknown IDs are omitted. Deactivated users are included so
+        historical records can still be rendered. The same field visibility
+        rules as the directory apply.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ids
+          in: query
+          required: true
+          description: Comma-separated user UUIDs (maximum 100).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The resolved users.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchUserLookup'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/{user_id}/:
+    get:
+      tags:
+        - Profiles
+      operationId: getDirectoryUser
+      summary: Read a user from the authenticated directory
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The visibility-filtered user profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserPublicProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/companies/{company_id}/verification/:
+    get:
+      tags:
+        - Companies
+      operationId: getCompanyVerification
+      summary: Read a company's verification status anonymously
+      description: |
+        Public and unauthenticated. Unlike the full public profile, this
+        endpoint works for pending, active and rejected companies.
+      security: []
+      parameters:
+        - name: company_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The verification status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyVerification'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/companies/{company_id}/profile/:
     get:
@@ -587,6 +725,9 @@ paths:
         - Admin
       operationId: listAdminUsers
       summary: List user accounts
+      description: |
+        Platform administrators see all accounts. University administrators
+        see only students and supervisors of their own university.
       security:
         - bearerAuth: []
       parameters:
@@ -596,6 +737,18 @@ paths:
           description: Filter by authoritative role.
           schema:
             $ref: '#/components/schemas/Role'
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive search over name and email.
+          schema:
+            type: string
+        - name: university
+          in: query
+          required: false
+          description: Case-insensitive exact match on the institution.
+          schema:
+            type: string
         - name: page
           in: query
           required: false
@@ -620,11 +773,14 @@ paths:
       tags:
         - Admin
       operationId: createAdminUser
-      summary: Provision a privileged user account
+      summary: Provision a user account
       description: |
-        Creates a `company`, `university_admin` or `supervisor` account. Provide
-        either a password or `generate_password: true`, but not both. The
-        generated password is returned once as `one_time_password`.
+        Creates a `student`, `company`, `university_admin` or `supervisor`
+        account. Platform administrators may create any of these roles;
+        university administrators may create only `student` and `supervisor`
+        accounts in their own university. Provide either a password or
+        `generate_password: true`, but not both. The generated password is
+        returned once as `one_time_password`.
       security:
         - bearerAuth: []
       requestBody:
@@ -760,12 +916,12 @@ components:
     PublicRole:
       type: string
       enum:
-        - student
         - company
 
     ProvisionableRole:
       type: string
       enum:
+        - student
         - company
         - university_admin
         - supervisor
@@ -814,6 +970,106 @@ components:
         name:
           type: string
           maxLength: 255
+
+    UserSummary:
+      type: object
+      required:
+        - id
+        - name
+        - role
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/Role'
+        is_active:
+          type: boolean
+          description: Present only for university and platform administrators.
+        email:
+          type: string
+          format: email
+          description: Present only for the account owner and administrators.
+        phone:
+          type: string
+          description: Present only for the account owner and administrators.
+        university:
+          type: string
+          description: Present for students; also visible to supervisors and companies.
+        department:
+          type: string
+          description: Present for students and supervisors; also visible to supervisors and companies for students.
+        specialty:
+          type: string
+          description: Present for students; also visible to supervisors and companies.
+        academic_year:
+          type: string
+          description: Present for students; also visible to supervisors and companies.
+        matricule:
+          type: string
+          description: Present only for the account owner and administrators.
+
+    UserSummaryPage:
+      type: object
+      required:
+        - count
+        - next
+        - previous
+        - results
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+
+    BatchUserLookup:
+      type: object
+      required:
+        - results
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSummary'
+
+    UserPublicProfile:
+      allOf:
+        - $ref: '#/components/schemas/UserSummary'
+        - type: object
+          properties:
+            grade:
+              type: string
+              description: Present for supervisors.
+            website:
+              type: string
+              description: Present for verified companies.
+            description:
+              type: string
+              description: Present for verified companies.
+
+    CompanyVerification:
+      type: object
+      required:
+        - id
+        - verification_status
+      properties:
+        id:
+          type: string
+          format: uuid
+        verification_status:
+          $ref: '#/components/schemas/VerificationStatus'
 
     UserRegistration:
       type: object
@@ -1013,16 +1269,38 @@ components:
       type: object
       required:
         - id
+        - university
         - department
         - grade
       properties:
         id:
           type: string
           format: uuid
+        university:
+          type: string
+          maxLength: 255
+          description: Institution the supervisor belongs to.
         department:
           type: string
           maxLength: 255
         grade:
+          type: string
+          maxLength: 255
+
+    UniversityAdminRoleProfile:
+      type: object
+      required:
+        - id
+        - university
+        - department
+      properties:
+        id:
+          type: string
+          format: uuid
+        university:
+          type: string
+          maxLength: 255
+        department:
           type: string
           maxLength: 255
 
@@ -1031,6 +1309,7 @@ components:
         - $ref: '#/components/schemas/StudentRoleProfile'
         - $ref: '#/components/schemas/CompanyRoleProfile'
         - $ref: '#/components/schemas/SupervisorRoleProfile'
+        - $ref: '#/components/schemas/UniversityAdminRoleProfile'
 
     StudentProfileUpdate:
       type: object
@@ -1088,13 +1367,30 @@ components:
     SupervisorProfileUpdate:
       type: object
       required:
+        - university
         - department
         - grade
       properties:
+        university:
+          type: string
+          maxLength: 255
         department:
           type: string
           maxLength: 255
         grade:
+          type: string
+          maxLength: 255
+
+    UniversityAdminProfileUpdate:
+      type: object
+      required:
+        - university
+        - department
+      properties:
+        university:
+          type: string
+          maxLength: 255
+        department:
           type: string
           maxLength: 255
 
@@ -1103,6 +1399,7 @@ components:
         - $ref: '#/components/schemas/StudentProfileUpdate'
         - $ref: '#/components/schemas/CompanyProfileUpdate'
         - $ref: '#/components/schemas/SupervisorProfileUpdate'
+        - $ref: '#/components/schemas/UniversityAdminProfileUpdate'
 
     PublicCompanyProfile:
       type: object
@@ -1112,6 +1409,7 @@ components:
         - address
         - website
         - description
+        - verification_status
       properties:
         id:
           type: string
@@ -1126,6 +1424,8 @@ components:
           description: May be empty or a valid URL.
         description:
           type: string
+        verification_status:
+          $ref: '#/components/schemas/VerificationStatus'
 
     InternalUser:
       type: object
@@ -1311,6 +1611,9 @@ components:
           $ref: '#/components/schemas/Role'
         is_active:
           type: boolean
+        university:
+          type: string
+          description: Present for students, supervisors and university administrators.
         verification_status:
           allOf:
             - $ref: '#/components/schemas/VerificationStatus'
@@ -1378,6 +1681,13 @@ components:
           type: boolean
           default: false
           description: Generate a one-time password instead of supplying one.
+        university:
+          type: string
+          maxLength: 255
+          description: |
+            Institution for student/supervisor accounts. University
+            administrators may only use their own university; if omitted it is
+            taken from their profile.
 
     AdminUserCreateResponse:
       allOf:
@@ -1393,16 +1703,49 @@ components:
       minProperties: 1
       additionalProperties: false
       properties:
+        name:
+          type: string
+          maxLength: 255
+          description: University administrators may update scoped students/supervisors.
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          description: University administrators may update scoped students/supervisors.
         is_active:
           type: boolean
+        university:
+          type: string
+          maxLength: 255
+          description: Students, supervisors and university administrators only.
+        department:
+          type: string
+          maxLength: 255
+          description: Students, supervisors and university administrators only.
+        specialty:
+          type: string
+          maxLength: 255
+          description: Students only.
+        academic_year:
+          type: string
+          maxLength: 64
+          description: Students only.
+        matricule:
+          type: string
+          maxLength: 128
+          description: Students only.
+        grade:
+          type: string
+          maxLength: 255
+          description: Supervisors only.
         verification_status:
           allOf:
             - $ref: '#/components/schemas/VerificationStatus'
-          description: Company accounts only.
+          description: Company accounts only; platform administrators only.
         rejection_reason:
           type: string
           minLength: 1
-          description: Company accounts only. Required when rejecting.
+          description: Company accounts only; platform administrators only. Required when rejecting.
 
     Error:
       type: object

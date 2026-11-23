@@ -10,6 +10,7 @@ from api.models import (
     PUBLIC_REGISTRATION_ROLES,
     StudentProfile,
     SupervisorProfile,
+    UniversityAdminProfile,
     User,
     UserRole,
 )
@@ -260,16 +261,34 @@ class CompanyProfileSerializer(StrictModelSerializer):
 class PublicCompanyProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = CompanyProfile
-        fields = ("id", "legal_name", "address", "website", "description")
+        fields = (
+            "id",
+            "legal_name",
+            "address",
+            "website",
+            "description",
+            "verification_status",
+        )
 
 
 class SupervisorProfileSerializer(StrictModelSerializer):
+    university = serializers.CharField(max_length=255, required=True, allow_blank=True)
     department = serializers.CharField(max_length=255, required=True, allow_blank=True)
     grade = serializers.CharField(max_length=255, required=True, allow_blank=True)
 
     class Meta:
         model = SupervisorProfile
-        fields = ("id", "department", "grade")
+        fields = ("id", "university", "department", "grade")
+        read_only_fields = ("id",)
+
+
+class UniversityAdminProfileSerializer(StrictModelSerializer):
+    university = serializers.CharField(max_length=255, required=True, allow_blank=True)
+    department = serializers.CharField(max_length=255, required=True, allow_blank=True)
+
+    class Meta:
+        model = UniversityAdminProfile
+        fields = ("id", "university", "department")
         read_only_fields = ("id",)
 
 
@@ -288,6 +307,7 @@ class CompanyRejectSerializer(serializers.Serializer):
 
 class AdminUserCreateSerializer(serializers.Serializer):
     PROVISIONABLE_ROLES = (
+        UserRole.STUDENT,
         UserRole.COMPANY,
         UserRole.UNIVERSITY_ADMIN,
         UserRole.SUPERVISOR,
@@ -303,8 +323,18 @@ class AdminUserCreateSerializer(serializers.Serializer):
         trim_whitespace=False,
     )
     generate_password = serializers.BooleanField(required=False, default=False)
+    university = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, trim_whitespace=True
+    )
 
-    ALLOWED_FIELDS = {"email", "name", "role", "password", "generate_password"}
+    ALLOWED_FIELDS = {
+        "email",
+        "name",
+        "role",
+        "password",
+        "generate_password",
+        "university",
+    }
 
     def to_internal_value(self, data):
         if hasattr(data, "keys"):
@@ -349,7 +379,27 @@ class AdminUserCreateSerializer(serializers.Serializer):
 
 
 class AdminUserUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=255, required=False, trim_whitespace=True)
+    email = serializers.EmailField(max_length=254, required=False)
     is_active = serializers.BooleanField(required=False)
+    university = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, trim_whitespace=True
+    )
+    department = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, trim_whitespace=True
+    )
+    specialty = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, trim_whitespace=True
+    )
+    academic_year = serializers.CharField(
+        max_length=64, required=False, allow_blank=True, trim_whitespace=True
+    )
+    matricule = serializers.CharField(
+        max_length=128, required=False, allow_blank=True, trim_whitespace=True
+    )
+    grade = serializers.CharField(
+        max_length=255, required=False, allow_blank=True, trim_whitespace=True
+    )
     verification_status = serializers.ChoiceField(
         choices=CompanyProfile.VerificationStatus.choices,
         required=False,
@@ -360,7 +410,49 @@ class AdminUserUpdateSerializer(serializers.Serializer):
         trim_whitespace=True,
     )
 
-    ALLOWED_FIELDS = {"is_active", "verification_status", "rejection_reason"}
+    ALLOWED_FIELDS = {
+        "name",
+        "email",
+        "is_active",
+        "university",
+        "department",
+        "specialty",
+        "academic_year",
+        "matricule",
+        "grade",
+        "verification_status",
+        "rejection_reason",
+    }
+
+    ROLE_FIELDS = {
+        UserRole.COMPANY: {"is_active", "verification_status", "rejection_reason"},
+        UserRole.STUDENT: {
+            "name",
+            "email",
+            "is_active",
+            "university",
+            "department",
+            "specialty",
+            "academic_year",
+            "matricule",
+        },
+        UserRole.SUPERVISOR: {
+            "name",
+            "email",
+            "is_active",
+            "university",
+            "department",
+            "grade",
+        },
+        UserRole.UNIVERSITY_ADMIN: {
+            "name",
+            "email",
+            "is_active",
+            "university",
+            "department",
+        },
+        UserRole.PLATFORM_ADMIN: {"name", "email", "is_active"},
+    }
 
     def to_internal_value(self, data):
         if hasattr(data, "keys"):
@@ -371,14 +463,25 @@ class AdminUserUpdateSerializer(serializers.Serializer):
                 )
         return super().to_internal_value(data)
 
+    def validate_email(self, value):
+        normalized = value.strip().lower()
+        user = self.context["user"]
+        if User.objects.filter(email__iexact=normalized).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError(
+                "An account with this email address already exists."
+            )
+        return normalized
+
     def validate(self, attrs):
         user = self.context["user"]
-        if user.role != UserRole.COMPANY and {
-            "verification_status",
-            "rejection_reason",
-        }.intersection(attrs):
+        allowed = self.ROLE_FIELDS.get(user.role, set())
+        invalid = set(attrs) - allowed
+        if invalid:
             raise serializers.ValidationError(
-                {"verification_status": "Verification fields apply only to company accounts."}
+                {
+                    field: f"This field cannot be updated on a {user.role} account."
+                    for field in sorted(invalid)
+                }
             )
         if user.role == UserRole.COMPANY:
             profile = ensure_role_profile(user)

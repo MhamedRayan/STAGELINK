@@ -17,7 +17,7 @@ class UserRole(models.TextChoices):
     PLATFORM_ADMIN = "platform_admin", "Platform administrator"
 
 
-PUBLIC_REGISTRATION_ROLES = (UserRole.STUDENT, UserRole.COMPANY)
+PUBLIC_REGISTRATION_ROLES = (UserRole.COMPANY,)
 
 
 class UserManager(BaseUserManager):
@@ -171,8 +171,21 @@ class SupervisorProfile(models.Model):
     user = models.OneToOneField(
         User, on_delete=models.CASCADE, related_name="supervisor_profile"
     )
+    university = models.CharField(max_length=255, blank=True, default="")
     department = models.CharField(max_length=255, blank=True, default="")
     grade = models.CharField(max_length=255, blank=True, default="")
 
     class Meta:
         db_table = "users_supervisor_profile"
+
+
+class UniversityAdminProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="university_admin_profile"
+    )
+    university = models.CharField(max_length=255, blank=True, default="")
+    department = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        db_table = "users_university_admin_profile"

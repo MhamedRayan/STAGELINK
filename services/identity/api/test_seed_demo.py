@@ -22,6 +22,7 @@ from api.models import (
     CompanyProfile,
     StudentProfile,
     SupervisorProfile,
+    UniversityAdminProfile,
     User,
     UserRole,
 )
@@ -81,7 +82,7 @@ class SeedDemoCommandTests(TestCase):
         ) as mock_post:
             call_command("seed_demo", stdout=stdout)
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
 
         admin = User.objects.get(email="admin@stagelink.demo")
         self.assertEqual(str(admin.id), demo_user_id("admin"))
@@ -144,13 +145,21 @@ class SeedDemoCommandTests(TestCase):
 
         university_admin = User.objects.get(email="university@stagelink.demo")
         self.assertEqual(university_admin.role, UserRole.UNIVERSITY_ADMIN)
+        self.assertEqual(
+            UniversityAdminProfile.objects.get(user=university_admin).university,
+            "Demo University",
+        )
+        second_admin = User.objects.get(email="university-2@stagelink.demo")
+        self.assertEqual(
+            UniversityAdminProfile.objects.get(user=second_admin).university,
+            "Second University",
+        )
 
         supervisor = User.objects.get(email="supervisor@stagelink.demo")
         self.assertEqual(supervisor.role, UserRole.SUPERVISOR)
-        self.assertEqual(
-            SupervisorProfile.objects.get(user=supervisor).department,
-            "Computer Science",
-        )
+        supervisor_profile = SupervisorProfile.objects.get(user=supervisor)
+        self.assertEqual(supervisor_profile.department, "Computer Science")
+        self.assertEqual(supervisor_profile.university, "Demo University")
         self.assertEqual(User.objects.filter(role=UserRole.SUPERVISOR).count(), 3)
         self.assertEqual(User.objects.filter(role=UserRole.STUDENT).count(), 5)
         self.assertEqual(User.objects.filter(role=UserRole.COMPANY).count(), 6)
@@ -158,7 +167,7 @@ class SeedDemoCommandTests(TestCase):
         # The directory is written from the ids actually stored, for the
         # front-end demo-only name resolver (design-plan §6.1).
         directory = json.loads(self.directory_file.read_text(encoding="utf-8"))
-        self.assertEqual(len(directory["users"]), 16)
+        self.assertEqual(len(directory["users"]), 17)
         self.assertEqual(directory["users"][str(student.id)]["matricule"], "DEMO-2026-001")
         self.assertEqual(directory["users"][str(supervisor.id)]["role"], "supervisor")
         self.assertEqual(
@@ -231,7 +240,7 @@ class SeedDemoCommandTests(TestCase):
 
             call_command("seed_demo", stdout=StringIO())
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
         self.assertEqual(CompanyProfile.objects.count(), 6)
         self.assertEqual(StudentProfile.objects.count(), 5)
         self.assertEqual(SupervisorProfile.objects.count(), 3)
@@ -250,14 +259,14 @@ class SeedDemoCommandTests(TestCase):
                 stdout=StringIO(),
             )
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
         mock_get.assert_not_called()
         mock_post.assert_not_called()
 
     def test_skip_directory_leaves_the_file_untouched(self):
         call_command("seed_demo", "--skip-offer", "--skip-directory", stdout=StringIO())
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
         self.assertFalse(self.directory_file.exists())
 
     def test_repo_root_is_detected_from_a_local_checkout(self):
@@ -273,7 +282,7 @@ class SeedDemoCommandTests(TestCase):
             stdout = StringIO()
             call_command("seed_demo", "--skip-offer", stdout=stdout)
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
         self.assertFalse(self.directory_file.exists())
         self.assertIn("skipping the demo directory", stdout.getvalue())
 
@@ -318,6 +327,7 @@ class SeedDemoCommandTests(TestCase):
             {
                 "platform_admin",
                 "university_admin",
+                "university_admin_2",
                 "company",
                 "company_abc",
                 "company_farissia",
@@ -350,7 +360,7 @@ class SeedDemoCommandTests(TestCase):
             with self.assertRaisesMessage(CommandError, "Accounts were created"):
                 call_command("seed_demo", stdout=StringIO())
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)
 
     def test_closed_offer_is_not_silently_recreated(self):
         closed = _offer_payload(status="closed")
@@ -389,4 +399,4 @@ class SeedDemoCommandTests(TestCase):
             stdout=StringIO(),
         )
 
-        self.assertEqual(User.objects.count(), 16)
+        self.assertEqual(User.objects.count(), 17)

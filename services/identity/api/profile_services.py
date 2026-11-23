@@ -2,6 +2,7 @@ from api.models import (
     CompanyProfile,
     StudentProfile,
     SupervisorProfile,
+    UniversityAdminProfile,
     UserRole,
 )
 
@@ -10,6 +11,7 @@ ROLE_PROFILE_MODELS = {
     UserRole.STUDENT: StudentProfile,
     UserRole.COMPANY: CompanyProfile,
     UserRole.SUPERVISOR: SupervisorProfile,
+    UserRole.UNIVERSITY_ADMIN: UniversityAdminProfile,
 }
 
 
