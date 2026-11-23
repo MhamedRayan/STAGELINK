@@ -431,11 +431,10 @@ Each page lists its frame, content, data sources, actions and deviations.
 #### Students — `/app/university/students` (`28:184`)
 - **Layout:** title + “Manage student accounts and academic information”; table (Student,
   Student ID, …).
-- **Data:** derived client-side from distinct `student_user_id` in applications and
-  internships; names from the demo directory.
-- **Δ** “+ Add student” is hidden — only `platform_admin` may create accounts, and the
-  platform admin cannot create `student` accounts either. Show the note “Accounts are
-  provisioned by the platform administrator.”
+- **Data:** `GET /api/admin/users/?role=student` (university-admin token), filtered to the
+  admin's university; names via `GET /api/users/lookup/?ids=...`.
+- **Δ** “+ Add student” calls `POST /api/admin/users/` with `role: "student"` and the
+  university-admin token; the backend fills in the caller's university.
 - **Δ** Student ID (matricule) is not readable for other users; show the short UUID or the
   directory value in demo mode.
 
@@ -702,7 +701,7 @@ Terminal: `CONFIRMED`, `COMPANY_REJECTED`, `UNIVERSITY_REJECTED`, `STUDENT_DECLI
 | --- | --- | --- | --- |
 | 1 | Forgot password / verification code / reset password | No Identity endpoints exist | “Forgot password?” link removed from Login |
 | 2 | Student self-registration | Product decision; only companies self-register | Students are provisioned (seed/demo) and login only |
-| 3 | University admin creating students or supervisors | `/api/admin/*` requires `platform_admin`; students cannot be created through any endpoint | “+ Add student” / “+ Add supervisor” hidden with an explanatory note |
+| 3 | ~~University admin creating students or supervisors~~ | **No longer excluded:** university admins can provision students/supervisors in their own university | “+ Add student” / “+ Add supervisor” use `POST /api/admin/users/` with the caller's token |
 | 4 | Company legal form, registration number, industry | No model fields | Fields removed from Register and Company Profile |
 | 5 | Company location/phone at registration | Registration accepts only `email/name/password/role` | Collected later on Company Profile (location, phone) |
 | 6 | Offer start/end dates, workplace type, field/specialty, contact email | Not part of the offer model | Offer shows deadline, capacity, location, requirements |
@@ -722,7 +721,7 @@ Terminal: `CONFIRMED`, `COMPANY_REJECTED`, `UNIVERSITY_REJECTED`, `STUDENT_DECLI
 | 20 | Audit-log export / printing / PDF reports | Out of scope | On-screen history only |
 | 21 | Two-factor auth, session management | No API | Password change only |
 | 22 | Student academic transcript import | No API | Manual profile fields |
-| 23 | University admin editing student/supervisor profiles | No permission and no read access | Read-only derived lists |
+| 23 | ~~University admin editing student/supervisor profiles~~ | **No longer excluded:** scoped `PATCH /api/admin/users/{id}/` is available | Edit the academic fields of students/supervisors in the admin's university |
 | 24 | Company-wide cancellation listing endpoint | API is per-internship | Client-side aggregation with a load-more cap |
 | 25 | “Mark all notifications read” control | Not designed (API exists) | Per-notification read only |
 
@@ -732,16 +731,21 @@ Terminal: `CONFIRMED`, `COMPANY_REJECTED`, `UNIVERSITY_REJECTED`, `STUDENT_DECLI
 
 These are binding design decisions caused by the fixed API surface.
 
-1. **Names are not in the API.** Offers, applications and internships return UUIDs only.
-   Company names resolve through the public company profile endpoint; **student and supervisor
-   names have no endpoint** for user tokens (`/api/internal/users/` requires the service token
-   and `/api/admin/users/` is platform-admin only).
-   *Workaround:* in demo mode the seed command writes `src/demo/directory.json`
-   (`{users: {uuid: {name, email, role, matricule?, department?}}}`) loaded only when
-   `VITE_DEMO_DIRECTORY=1`; unknown ids render `Role · 3f2a9c`. Production behaviour stays
-   honest and degrades to short ids.
-2. **University admin has no user directory.** Student and supervisor lists are derived from
-   distinct ids in applications and internships; creation and editing are impossible.
+1. **Names are not copied into service payloads.** Offers, applications and internships still
+   return UUIDs only. Company names resolve through the public company profile endpoint.
+   Student and supervisor names now resolve through the bearer-authenticated Identity
+   directory: `GET /api/users/lookup/?ids=<uuid,...>` (max 100, order preserved, unknown ids
+   omitted) and `GET /api/users/{id}/`. Supervisors and companies also receive a student's
+   `university`, `department`, `specialty` and `academic_year`; email, phone and `matricule`
+   stay private. `/api/internal/users/` remains service-token-only.
+   `useUserLabel`/`useDirectoryUser` call the live lookup first. *Legacy demo fallback:*
+   `src/demo/directory.json` is still written by `seed_demo` and loaded when
+   `VITE_DEMO_DIRECTORY=1` only when the live lookup finds no match.
+2. **University admin directory is now available.** `GET /api/admin/users/` and
+   `POST /api/admin/users/` accept a university-admin token and are scoped to students and
+   supervisors of that admin's university; `PATCH /api/admin/users/{id}/` edits those profiles.
+   Student/supervisor lists can still be derived from applications and internships, but
+   creation and editing no longer need a platform-admin token.
 3. **No aggregate endpoints.** Dashboard figures are computed client-side from list responses;
    keep page sizes small and cache with TanStack Query. Figures that cannot be derived are
    relabelled (“Students with activity”, “Active students”).
@@ -789,8 +793,8 @@ Demo password stays `StagelinkDemo!2026`; the account list is documented in `doc
 > 1 rejected (= 6). The seed creates **6** companies so the verification screen has two
 > pending rows and a rejected example; all other counts match the requirement exactly.
 > Ids are `uuid5` values derived from the email local part so the committed directory
-> matches every fresh seed. `VITE_DEMO_DIRECTORY=1` gates all demo-name lookups; unknown
-> ids still degrade to `Role · 3f2a9c` in production.
+> matches every fresh seed. `VITE_DEMO_DIRECTORY=1` gates the legacy fallback only; the live
+> directory is authoritative and unknown ids still degrade to `Role · 3f2a9c`.
 
 ---
 

@@ -129,6 +129,31 @@ sent to the browser or included in a public contract example.
 Permissions are checked in the owning service. A gateway or frontend must not
 be the only place where authorization is enforced.
 
+### Identity directory and provisioning
+
+Identity is the source of truth for names. Other services keep plain UUID
+references and clients resolve them through the bearer-authenticated directory:
+
+- `GET /api/users/lookup/?ids=<uuid,...>` (max 100, order preserved, unknown ids
+  omitted, deactivated users included) for joining records to display names.
+- `GET /api/users/?q=&role=&university=&page=` for search (active users only,
+  20 per page) and `GET /api/users/{id}/` for a single record.
+- `GET /api/companies/{company_id}/verification/` is anonymous and returns only
+  `id` and `verification_status`; the full company profile remains restricted
+  to verified, active companies.
+
+Directory payloads are visibility-filtered: `id`, `name` and `role` go to every
+signed-in user; supervisors and companies additionally see a student's
+`university`, `department`, `specialty` and `academic_year`; email, phone and
+`matricule` go only to the owner and university/platform administrators.
+
+User provisioning is an administrator operation. `platform_admin` may manage
+all provisionable roles (`student`, `company`, `university_admin`,
+`supervisor`); `university_admin` may manage only `student` and `supervisor`
+accounts in the same institution. `/api/internal/users/` remains
+service-token-only and must never be called from a browser. Public registration
+is limited to `company`.
+
 ## File uploads and downloads
 
 - Uploads use `multipart/form-data` with a single `file` field unless the

@@ -62,6 +62,56 @@ Refresh tokens rotate on use: always store the new `refresh` value returned by
 `POST /api/auth/refresh/`. Access tokens last 15 minutes by default and are not
 individually revocable.
 
+## Provisioning and user directory
+
+Public registration is limited to `company`. Students, supervisors and
+administrators must be provisioned:
+
+| Caller | May create / edit | Scope |
+| --- | --- | --- |
+| `platform_admin` | `student`, `company`, `university_admin`, `supervisor` | All accounts; company verification allowed |
+| `university_admin` | `student`, `supervisor` | Only accounts whose `university` matches their own profile (case-insensitive, trimmed) |
+
+```bash
+# Bootstrap platform admin token (the seeded admin is the bootstrap account)
+ACCESS=$(curl -s -X POST http://localhost:8001/api/auth/login/ \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@stagelink.demo","password":"StagelinkDemo!2026"}' \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["access"])')
+
+# Provision a university admin with an institution; their token can then create
+# students and supervisors for that institution only.
+curl -s -X POST http://localhost:8001/api/admin/users/ \
+  -H "Authorization: Bearer $ACCESS" -H 'Content-Type: application/json' \
+  -d '{"email":"admin@university.demo","name":"University Admin",
+       "role":"university_admin","generate_password":true,
+       "university":"Demo University"}'
+```
+
+`POST /api/admin/users/` accepts either `password` or `generate_password: true`;
+a generated password is returned **once** as `one_time_password`. The same
+endpoint supports `GET /api/admin/users/` (`role`, `q`, `university`, `page`)
+and `PATCH /api/admin/users/{id}/` for name, email, profile fields and
+activation. Platform admin may also verify/reject companies via
+`POST /api/admin/companies/{id}/verify/` and `/reject/`.
+
+Any signed-in user can resolve the UUIDs carried by applications and
+internships:
+
+- `GET /api/users/lookup/?ids=<uuid,uuid,...>` — up to 100 ids, requested order
+  preserved, unknown ids omitted, deactivated users included.
+- `GET /api/users/?q=&role=&university=&page=` — searchable directory, 20 per
+  page (active accounts only).
+- `GET /api/users/{id}/` — one visibility-filtered account.
+
+Every caller receives `id`, `name` and `role`. Supervisors and companies also
+receive a student's `university`, `department`, `specialty` and
+`academic_year`. Email, phone and `matricule` are returned only to the account
+owner and to university/platform administrators. Anonymous callers can read a
+company's verification state from `GET /api/companies/{id}/verification/`
+(`pending`, `active` or `rejected`); the full public profile remains available
+only for verified, active companies.
+
 ## 4. Verify the services
 
 | Service         | URL                            |
@@ -93,7 +143,7 @@ Each response should be similar to:
 
 ## Seed demo data
 
-One command creates the full demo tenant: 16 accounts, all role profiles, the
+One command creates the full demo tenant: 17 accounts, all role profiles, the
 verification states needed by the platform screens, a published offer and the
 front-end name directory:
 
@@ -105,7 +155,8 @@ docker compose --env-file .env -f infra/docker/docker-compose.yml \
 | Role                            | Email                            | Verification |
 | ------------------------------- | -------------------------------- | ------------ |
 | Platform admin                  | `admin@stagelink.demo`           | —            |
-| University admin                | `university@stagelink.demo`      | —            |
+| University admin                | `university@stagelink.demo`      | — (Demo University) |
+| University admin (2nd institution) | `university-2@stagelink.demo` | — (Second University) |
 | Company (Demo Company Ltd)      | `company@stagelink.demo`         | active       |
 | Company (ABC Company)           | `abc-company@stagelink.demo`     | active       |
 | Company (EURL FARISSIA)         | `eurl-farissia@stagelink.demo`   | active       |
@@ -123,8 +174,11 @@ and the active `company` account owns a published
 
 The command also rewrites `frontend/src/demo/directory.json` with the actual
 user ids. Set `VITE_DEMO_DIRECTORY=1` (already in `.env.example`) when running
-the client so student and supervisor ids resolve to names; without it the UI
-degrades to `Role · 3f2a9c`, as in production.
+the client so student and supervisor ids resolve to names. New clients should
+use the live directory instead: `GET /api/users/lookup/?ids=<uuid,uuid,...>`
+returns names and a student's academic line to any signed-in user (max 100 ids
+per request), and `GET /api/users/?q=&role=&university=` searches it. The demo
+file remains a fallback for the existing client.
 
 The command is idempotent. Rerunning it resets the demo account passwords,
 converges profiles and verification states, and leaves an already-published
