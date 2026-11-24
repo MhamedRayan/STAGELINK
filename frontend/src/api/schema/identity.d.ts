@@ -59,7 +59,10 @@ export interface paths {
         /**
          * Authenticate and issue a token pair
          * @description Inactive accounts cannot log in. Company accounts stay inactive until a
-         *     platform administrator verifies them.
+         *     platform administrator verifies them. The issued access and refresh
+         *     tokens carry a `university` claim (empty when the role has no
+         *     institution) so other services can enforce institution scope without a
+         *     per-request directory call.
          */
         post: operations["loginUser"];
         delete?: never;
@@ -81,6 +84,9 @@ export interface paths {
          * Exchange a refresh token for a new access token
          * @description Refresh tokens rotate: the response also contains a new refresh token,
          *     and the submitted token is blacklisted. Reusing it returns `401`.
+         *     The rotated tokens re-read the current `university` claim from the
+         *     account's role profile, so institution changes take effect on refresh
+         *     without waiting for the next login.
          */
         post: operations["refreshAccessToken"];
         delete?: never;
@@ -323,13 +329,15 @@ export interface paths {
          * List or batch-look up users for trusted services
          * @description Two mutually exclusive modes:
          *
-         *     * Directory mode (`role`, `department`, `page`): paginated list of
-         *       **active** accounts only. Used to resolve recipients such as
-         *       university administrators.
+         *     * Directory mode (`role`, `department`, `university`, `page`):
+         *       paginated list of **active** accounts only. Used to resolve recipients
+         *       such as university administrators, and to resolve the students
+         *       belonging to one institution for tenant scoping.
          *     * Batch mode (`ids`): resolves up to 100 comma-separated UUIDs in the
          *       requested order. Accounts are returned regardless of `is_active`, so
          *       display names keep working for historical records. Unknown IDs are
-         *       omitted.
+         *       omitted. Each result also includes the account's role and institution
+         *       so callers can scope cross-service notifications.
          *
          *     Pairing `ids` with any other query parameter is a validation error.
          *     This endpoint is only available with the shared service token; user
@@ -693,6 +701,8 @@ export interface components {
             name: string;
             role: components["schemas"]["Role"];
             is_active: boolean;
+            /** @description Empty when the role has no institution profile. */
+            university: string;
         };
         DirectoryUser: {
             /** Format: uuid */
@@ -701,6 +711,8 @@ export interface components {
             /** Format: email */
             email: string;
             role: components["schemas"]["Role"];
+            /** @description Empty when the role has no institution profile. */
+            university: string;
         };
         DirectoryUserPage: {
             count: number;
@@ -714,6 +726,9 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+            role: components["schemas"]["Role"];
+            /** @description Empty when the role has no institution profile. */
+            university: string;
         };
         DirectoryBatchResult: {
             /** @description Requested IDs that exist, in the requested order. */
@@ -793,9 +808,10 @@ export interface components {
              */
             generate_password: boolean;
             /**
-             * @description Institution for student/supervisor accounts. University
-             *     administrators may only use their own university; if omitted it is
-             *     taken from their profile.
+             * @description Institution for student, supervisor and university administrator
+             *     accounts; required for all three roles. University administrators
+             *     may only use their own university and may omit the field, in which
+             *     case it is taken from their profile.
              */
             university?: string;
         };
@@ -1314,11 +1330,17 @@ export interface operations {
                  *     department.
                  */
                 department?: string;
+                /**
+                 * @description Directory mode only. Case-insensitive exact match on the
+                 *     institution stored on a student, supervisor or university
+                 *     administrator profile.
+                 */
+                university?: string;
                 /** @description Directory mode only. Page number, 20 results per page. */
                 page?: number;
                 /**
                  * @description Batch mode only. Comma-separated UUIDs, at most 100. Cannot be
-                 *     combined with `role`, `department` or `page`.
+                 *     combined with `role`, `department`, `university` or `page`.
                  * @example 1c2d3e4f-0000-0000-0000-000000000001,1c2d3e4f-0000-0000-0000-000000000002
                  */
                 ids?: string;

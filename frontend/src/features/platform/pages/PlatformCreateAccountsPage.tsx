@@ -12,7 +12,11 @@ import {
 import type { AdminUserCreateResponse, ProvisionableRole } from '@/api/identity';
 import { normalizeError } from '@/lib/errors';
 import { useCreateAccount } from '../hooks';
-import { provisionAccountSchema, type ProvisionAccountFormValues } from '../schemas';
+import {
+  provisionAccountSchema,
+  universityAccountSchema,
+  type ProvisionAccountFormValues,
+} from '../schemas';
 import { S } from '../strings';
 
 interface CardCopy {
@@ -22,6 +26,7 @@ interface CardCopy {
   email: string;
   submit: string;
   note?: string;
+  institution?: boolean;
 }
 
 const CARDS: CardCopy[] = [
@@ -31,6 +36,7 @@ const CARDS: CardCopy[] = [
     name: S.accounts.university.name,
     email: S.accounts.university.email,
     submit: S.accounts.university.submit,
+    institution: true,
   },
   {
     role: 'company',
@@ -60,8 +66,16 @@ function ProvisionCard({
     watch,
     formState: { errors, isSubmitting },
   } = useForm<ProvisionAccountFormValues>({
-    resolver: zodResolver(provisionAccountSchema),
-    defaultValues: { name: '', email: '', password: '', generatePassword: false },
+    resolver: zodResolver(
+      copy.institution ? universityAccountSchema : provisionAccountSchema,
+    ),
+    defaultValues: {
+      name: '',
+      email: '',
+      university: '',
+      password: '',
+      generatePassword: false,
+    },
   });
   const generatePassword = watch('generatePassword');
 
@@ -73,6 +87,7 @@ function ProvisionCard({
         role: copy.role,
         generate_password: values.generatePassword,
         ...(values.generatePassword ? {} : { password: values.password }),
+        ...(copy.institution ? { university: values.university } : {}),
       });
       toast.success(S.accounts.created);
       onCreated(result);
@@ -80,7 +95,7 @@ function ProvisionCard({
     } catch (error) {
       const apiError = normalizeError(error);
       let fieldShown = false;
-      for (const field of ['name', 'email', 'password'] as const) {
+      for (const field of ['name', 'email', 'university', 'password'] as const) {
         const message = apiError.fieldErrors[field];
         if (message) {
           setError(field, { message });
@@ -114,6 +129,21 @@ function ProvisionCard({
               autoComplete="email"
             />
           </Field>
+          {copy.institution && (
+            <Field
+              label={S.accounts.institutionName}
+              error={errors.university?.message}
+              controlGap="md"
+              className="mt-2"
+            >
+              <Input
+                {...register('university')}
+                hasError={!!errors.university}
+                className="h-10 px-[14px] text-[13px]"
+                autoComplete="organization"
+              />
+            </Field>
+          )}
           <Field
             label={S.accounts.password}
             error={errors.password?.message}

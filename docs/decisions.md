@@ -230,8 +230,8 @@ services, and irreversible state, so their rules must be explicit.
 - Notifications are best effort and scheduled with `transaction.on_commit`.
   Failures are logged and never roll back the internship change. Recipient IDs
   are UUIDs and deduplication keys are stable per event and recipient.
-  University-administrator recipients come from
-  `UNIVERSITY_ADMIN_USER_IDS` until Identity exposes a role directory.
+  University-administrator recipients come from the Identity role directory
+  and are filtered to the student's institution.
 - Approving a cancellation queues a call to
   `POST /api/internal/applications/{source_application_id}/release-place/` on
   the Applications service. That endpoint is owned by Applications and is
@@ -345,14 +345,14 @@ failed.
   `transaction.on_commit`, and use stable deduplication keys of the form
   `application:<id>:<event>:recipient:<user_id>`. University-administrator
   recipients are resolved from the Identity role directory
-  (`GET /api/internal/users/?role=university_admin`, active accounts only) and
-  the recorded `university_user_id`. The directory lookup runs inside the
-  after-commit callback, never inside the application transaction, so Identity
-  latency never extends row locks. When Identity is unavailable, recipients
-  fall back to `UNIVERSITY_ADMIN_USER_IDS` plus the recorded administrator;
-  the business action never fails because Identity is down. Successful and
-  failed directory lookups are cached briefly to avoid one call per
-  notification.
+  (`GET /api/internal/users/?role=university_admin`, active accounts only),
+  filtered to the student's institution, plus the recorded
+  `university_user_id`. The directory lookup runs inside the after-commit
+  callback, never inside the application transaction, so Identity latency never
+  extends row locks. When Identity is unavailable, university administrators
+  are skipped rather than broadcast globally; the business action never fails
+  because Identity is down. Successful and failed directory lookups are cached
+  briefly to avoid one call per notification.
 
 **Consequences:** Applications now depends on Offers for intake and acceptance
 and on Notifications for delivery; both are best effort except intake and
@@ -412,14 +412,17 @@ account directory and requires a redeploy whenever staff change.
 **Decision:** Both services resolve active university administrators from the
 Identity directory (`GET /api/internal/users/?role=university_admin`) after the
 business transaction commits. Successful lookups are cached briefly and failed
-lookups are cached for a shorter period. If Identity is unavailable, the
-service falls back to `UNIVERSITY_ADMIN_USER_IDS`; an empty directory result is
-authoritative and is not replaced by the fallback. An unavailable directory
+lookups are cached for a shorter period. Recipients are always filtered to the
+student's institution, so one university's event is never delivered to another
+university's administrators. If Identity is unavailable, the notification is
+skipped; an empty directory result is authoritative. An unavailable directory
 never fails the business action.
 
 **Consequences:** Identity becomes a soft dependency of notification fan-out,
-not of the state transition. Notifications may be delayed during an Identity
-outage but are delivered to the configured fallback administrators.
+not of the state transition. Notifications may be delayed or dropped during an
+Identity outage, but they are never broadcast across institutions. The
+`UNIVERSITY_ADMIN_USER_IDS` setting is no longer used as a fallback because a
+global list cannot preserve tenant isolation.
 
 ---
 
@@ -548,3 +551,33 @@ fields (only the supervisor/company actually involved with a student) is not
 enforced by Identity because it has no application or internship context; it
 would require a service-token-backed context check in a later wave. Student
 self-registration is no longer available, so provisioning is mandatory.
+
+---
+
+## ADR-019: Tenant isolation for university administrators
+
+**Status:** accepted
+**Date:** 2026-11-24
+
+**Context:** University administrators could list every application and
+internship, and notifications resolved a global administrator list. A
+university administrator provisioned without an institution therefore saw the
+whole platform. Identity is the only service that knows which institution an
+account belongs to.
+
+**Decision:** Add a `university` claim to access and refresh tokens, re-read
+from the account's role profile on refresh. Applications and Internships scope
+university-administrator reads, detail lookups and decisions to students of the
+caller's institution. The student IDs are resolved through the Identity
+internal directory (`?role=student&university=...`) and cached briefly. A
+missing or blank claim means an empty result, never a global roster. When
+Identity is unavailable the request fails closed with `503` after the cache
+expires. Supervisor assignment verifies that the supervisor belongs to the
+caller's institution. Platform provisioning requires a non-blank university for
+`student`, `supervisor` and `university_admin` accounts.
+
+**Consequences:** Cross-institution data is invisible even when an ID is known.
+Identity is a hard dependency for scoped reads; an outage degrades to `503`
+rather than leaking data. Notifications are skipped during an outage, as
+recorded in ADR-013. Existing accounts with a blank institution must be
+corrected before they can use the university portal.

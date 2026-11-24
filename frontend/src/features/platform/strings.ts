@@ -57,9 +57,11 @@ export const S = {
     emailRequired: 'Enter an email address.',
     emailInvalid: 'Enter a valid email address.',
     passwordMin: 'Use at least 8 characters.',
+    universityRequired: 'Enter the university this administrator belongs to.',
+    institutionName: 'University name',
     university: {
       title: 'University account',
-      name: 'University name',
+      name: 'Administrator name',
       email: 'Contact email',
       submit: 'Create university account',
     },

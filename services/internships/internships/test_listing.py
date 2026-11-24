@@ -5,7 +5,13 @@ from rest_framework.test import APIClient
 
 from .models import InternshipStatus
 from .roles import Role
-from .testing_utils import TEST_JWT_KEY, make_internship, make_token, new_id
+from .testing_utils import (
+    TEST_JWT_KEY,
+    make_internship,
+    make_token,
+    new_id,
+    scope_all_students,
+)
 
 LIST_URL = "/api/internships/"
 
@@ -14,7 +20,10 @@ LIST_URL = "/api/internships/"
 class ListingTests(TestCase):
     def setUp(self):
         self.api = APIClient()
-        self.university = make_token(new_id(), Role.UNIVERSITY_ADMIN)
+        scope_all_students(self)
+        self.university = make_token(
+            new_id(), Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
         self.student = new_id()
         self.company = new_id()
         self.supervisor = new_id()
@@ -124,6 +133,31 @@ class ListingTests(TestCase):
         response = self._get("?mine=true", token=token)
 
         self.assertEqual([row["id"] for row in response.data["results"]], [str(self.mine.pk)])
+
+    # Institution isolation
+
+    def test_university_admin_sees_only_its_institutions_students(self):
+        from unittest.mock import patch
+
+        token = make_token(
+            new_id(), Role.UNIVERSITY_ADMIN, university="Other University"
+        )
+        with patch(
+            "internships.selectors.list_student_ids_for_university",
+            return_value=[str(self.other.student_user_id)],
+        ):
+            response = self._get(token=token)
+
+        self.assertEqual(
+            [row["id"] for row in response.data["results"]], [str(self.other.pk)]
+        )
+
+    def test_blank_university_claim_sees_nothing(self):
+        token = make_token(new_id(), Role.UNIVERSITY_ADMIN)
+
+        response = self._get(token=token)
+
+        self.assertEqual(response.data["results"], [])
 
 
 @override_settings(JWT_SIGNING_KEY=TEST_JWT_KEY)

@@ -6,7 +6,14 @@ from rest_framework.test import APIClient
 from .exceptions import IdentityUnavailable
 from .models import InternshipAudit, InternshipAuditAction
 from .roles import Role
-from .testing_utils import TEST_JWT_KEY, identity_user, make_internship, make_token, new_id
+from .testing_utils import (
+    TEST_JWT_KEY,
+    identity_user,
+    make_internship,
+    make_token,
+    new_id,
+    scope_all_students,
+)
 
 SERVICE = "internships.services.fetch_identity_user"
 
@@ -15,7 +22,10 @@ SERVICE = "internships.services.fetch_identity_user"
 class SupervisorAssignmentTests(TestCase):
     def setUp(self):
         self.api = APIClient()
-        self.admin = make_token(new_id(), Role.UNIVERSITY_ADMIN)
+        scope_all_students(self)
+        self.admin = make_token(
+            new_id(), Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
         self.supervisor_id = new_id()
         self.internship = make_internship()
         self.url = f"/api/internships/{self.internship.pk}/assign-supervisor/"
@@ -93,6 +103,20 @@ class SupervisorAssignmentTests(TestCase):
             response = self._post(self.admin, {"supervisor_user_id": str(self.supervisor_id)})
 
         self.assertEqual(response.status_code, 400)
+
+    def test_supervisor_from_another_university_is_rejected(self):
+        with patch(
+            SERVICE,
+            return_value=identity_user(
+                self.supervisor_id, university="Other University"
+            ),
+        ):
+            response = self._post(self.admin, {"supervisor_user_id": str(self.supervisor_id)})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["code"], "invalid_supervisor")
+        self.internship.refresh_from_db()
+        self.assertIsNone(self.internship.supervisor_user_id)
 
     def test_identity_outage_returns_503_and_changes_nothing(self):
         with patch(SERVICE, side_effect=IdentityUnavailable()):

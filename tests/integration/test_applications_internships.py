@@ -8,10 +8,9 @@ Run them against the Docker Compose stack:
 
     python -m unittest discover -s tests/integration -v
 
-The tests mint user JWTs directly with the shared signing key. Identity is the
-only service allowed to issue production tokens, but minting here keeps the
-tests independent of registration throttles and privileged account
-provisioning while still exercising the exact claim format the services accept.
+The main flow users are real accounts created through Identity so tenant scope
+can be resolved from its directory. A minted token is still used for the one
+unrelated student needed to exercise a capacity conflict.
 """
 
 import os
@@ -22,6 +21,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import jwt
 import requests
+
+from integration_accounts import create_flow_accounts
 
 DEFAULT_IDENTITY_BASE_URL = "http://localhost:8001"
 DEFAULT_OFFERS_BASE_URL = "http://localhost:8002"
@@ -97,19 +98,16 @@ class ApplicationsToInternshipsIntegrationTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.student_id = uuid.uuid4()
-        self.company_id = uuid.uuid4()
-        self.university_id = uuid.uuid4()
+        # Applications resolves university-administrator scope through Identity,
+        # so the three principals must be real accounts from one institution.
+        accounts = create_flow_accounts()
+        self.student_id = accounts["student_id"]
+        self.company_id = accounts["company_id"]
+        self.university_id = accounts["university_id"]
 
-        self.student_headers = auth_headers(
-            make_token(self.student_id, ROLE_STUDENT)
-        )
-        self.company_headers = auth_headers(
-            make_token(self.company_id, ROLE_COMPANY)
-        )
-        self.university_headers = auth_headers(
-            make_token(self.university_id, ROLE_UNIVERSITY_ADMIN)
-        )
+        self.student_headers = accounts["student_headers"]
+        self.company_headers = accounts["company_headers"]
+        self.university_headers = accounts["university_headers"]
 
         # Keep the internship period in the future regardless of when the
         # suite runs.

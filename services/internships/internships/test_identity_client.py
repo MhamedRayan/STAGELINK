@@ -6,7 +6,12 @@ from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 
 from .exceptions import IdentityUnavailable
-from .identity_client import fetch_identity_user, list_university_admin_ids
+from .identity_client import (
+    fetch_identity_user,
+    list_student_ids_for_university,
+    list_university_admin_ids,
+    user_universities,
+)
 
 USER_ID = uuid.uuid4()
 ADMIN_ID = uuid.uuid4()
@@ -168,4 +173,65 @@ class UniversityAdminDirectoryTests(SimpleTestCase):
         with self.assertRaises(IdentityUnavailable):
             list_university_admin_ids()
 
+        mock_get.assert_not_called()
+
+
+@override_settings(
+    IDENTITY_BASE_URL="http://identity.test",
+    INTERNAL_SERVICE_TOKEN="test-service-token",
+    IDENTITY_TIMEOUT_SECONDS=2.0,
+    IDENTITY_DIRECTORY_CACHE_SECONDS=60,
+    IDENTITY_DIRECTORY_ERROR_CACHE_SECONDS=60,
+)
+class UniversityScopeClientTests(SimpleTestCase):
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    @patch("internships.identity_client.requests.get")
+    def test_students_are_filtered_by_university(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            json=lambda: {"results": [{"id": str(USER_ID)}], "next": None},
+        )
+
+        result = list_student_ids_for_university(" Demo University ")
+
+        self.assertEqual(result, [str(USER_ID)])
+        _, kwargs = mock_get.call_args
+        self.assertEqual(
+            kwargs["params"],
+            {"role": "student", "university": "Demo University"},
+        )
+
+    @patch("internships.identity_client.requests.get")
+    def test_blank_university_returns_empty_without_a_request(self, mock_get):
+        self.assertEqual(list_student_ids_for_university(""), [])
+        mock_get.assert_not_called()
+
+    @patch("internships.identity_client.requests.get")
+    def test_batch_lookup_exposes_university(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            json=lambda: {
+                "results": [
+                    {
+                        "id": str(USER_ID),
+                        "role": "student",
+                        "university": " Demo University ",
+                    }
+                ],
+                "next": None,
+            },
+        )
+
+        result = user_universities([str(USER_ID)])
+
+        self.assertEqual(result, {str(USER_ID): "Demo University"})
+
+    @patch("internships.identity_client.requests.get")
+    def test_batch_lookup_of_no_valid_ids_skips_the_request(self, mock_get):
+        self.assertEqual(user_universities(["not-a-uuid"]), {})
         mock_get.assert_not_called()

@@ -25,9 +25,8 @@ DIRECTORY_ADMIN_ID = uuid.uuid4()
 
 @override_settings(
     INTERNAL_SERVICE_TOKEN='test-service-token',
-    UNIVERSITY_ADMIN_USER_IDS=[str(ADMIN_ID)],
-    # Unit tests must never reach a real Identity instance. Existing tests use
-    # the configured fallback; directory-specific tests patch the client.
+    # Unit tests must never reach a real Identity instance. Directory-specific
+    # tests patch the client.
     IDENTITY_BASE_URL='',
     IDENTITY_DIRECTORY_CACHE_SECONDS=0,
 )
@@ -37,7 +36,21 @@ class NotificationEmissionTests(TestCase):
         self.client = APIClient()
         self.company = DummyUser(COMPANY_ID, Role.COMPANY)
         self.student = DummyUser(STUDENT_ID, Role.STUDENT)
-        self.university = DummyUser(UNIVERSITY_ID, Role.UNIVERSITY_ADMIN)
+        self.university = DummyUser(
+            UNIVERSITY_ID, Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
+        self.student_scope = patch(
+            'applications.views.list_student_ids_for_university',
+            return_value=[str(STUDENT_ID)],
+        )
+        self.student_scope.start()
+        self.addCleanup(self.student_scope.stop)
+        self.user_universities = patch(
+            'applications.identity_client.user_universities',
+            return_value={str(STUDENT_ID): "Demo University"},
+        )
+        self.user_universities.start()
+        self.addCleanup(self.user_universities.stop)
         self.offer = make_offer(capacity=2)
         self.offer_id = uuid.UUID(self.offer['id'])
         self.application = make_application(offer_id=self.offer_id)
@@ -51,7 +64,11 @@ class NotificationEmissionTests(TestCase):
 
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
-    def test_company_acceptance_notifies_university_admins(self, mock_get_offer, mock_send):
+    @patch('applications.identity_client.list_university_admin_ids')
+    def test_company_acceptance_notifies_university_admins(
+        self, mock_directory, mock_get_offer, mock_send
+    ):
+        mock_directory.return_value = [str(ADMIN_ID)]
         mock_get_offer.return_value = self.offer
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -62,6 +79,7 @@ class NotificationEmissionTests(TestCase):
                 format='json',
             )
 
+        mock_directory.assert_called_once_with("Demo University")
         mock_send.assert_called_once()
         payload = mock_send.call_args.args[0]
         self.assertEqual(payload['recipient_user_id'], str(ADMIN_ID))
@@ -69,7 +87,6 @@ class NotificationEmissionTests(TestCase):
         self.assertEqual(payload['related_object_id'], str(self.application.id))
         self.assertIn(':pending_validation:recipient:', payload['deduplication_key'])
 
-    @override_settings(UNIVERSITY_ADMIN_USER_IDS=[])
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
     @patch('applications.identity_client.list_university_admin_ids')
@@ -98,7 +115,7 @@ class NotificationEmissionTests(TestCase):
         'applications.identity_client.list_university_admin_ids',
         side_effect=IdentityUnavailable('down'),
     )
-    def test_identity_outage_falls_back_to_configured_admin(
+    def test_identity_outage_skips_admin_notification(
         self, mock_directory, mock_get_offer, mock_send
     ):
         mock_get_offer.return_value = self.offer
@@ -112,21 +129,17 @@ class NotificationEmissionTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        mock_send.assert_called_once()
-        self.assertEqual(
-            mock_send.call_args.args[0]['recipient_user_id'], str(ADMIN_ID)
-        )
+        mock_send.assert_not_called()
 
-    @override_settings(UNIVERSITY_ADMIN_USER_IDS=[])
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
     @patch('applications.identity_client.list_university_admin_ids')
-    def test_directory_and_recorded_admin_are_deduplicated(
+    def test_recorded_admin_from_another_institution_is_not_added(
         self, mock_directory, mock_get_offer, mock_send
     ):
         mock_directory.return_value = [str(DIRECTORY_ADMIN_ID)]
         mock_get_offer.return_value = self.offer
-        self.application.university_user_id = DIRECTORY_ADMIN_ID
+        self.application.university_user_id = ADMIN_ID
         self.application.save(update_fields=['university_user_id'])
 
         with self.captureOnCommitCallbacks(execute=True):
@@ -137,13 +150,15 @@ class NotificationEmissionTests(TestCase):
                 format='json',
             )
 
+        # Only the student's institution is notified; the administrator merely
+        # recorded on the application is not appended blindly.
+        mock_directory.assert_called_once_with("Demo University")
         mock_send.assert_called_once()
         self.assertEqual(
             mock_send.call_args.args[0]['recipient_user_id'],
             str(DIRECTORY_ADMIN_ID),
         )
 
-    @override_settings(UNIVERSITY_ADMIN_USER_IDS=[])
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
     @patch('applications.identity_client.list_university_admin_ids', return_value=[])
@@ -169,7 +184,6 @@ class NotificationEmissionTests(TestCase):
         mock_directory.assert_called_once()
         mock_send.assert_not_called()
 
-    @override_settings(UNIVERSITY_ADMIN_USER_IDS=[])
     @patch('applications.services.create_official_internship_record')
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
@@ -223,8 +237,9 @@ class NotificationEmissionTests(TestCase):
     @patch('applications.services.create_official_internship_record')
     @patch('applications.notifications_client.send')
     @patch('applications.services.get_offer')
+    @patch('applications.identity_client.list_university_admin_ids', return_value=[str(ADMIN_ID)])
     def test_confirmation_notifies_company_and_university_once(
-        self, mock_get_offer, mock_send, mock_create
+        self, mock_directory, mock_get_offer, mock_send, mock_create
     ):
         mock_get_offer.return_value = self.offer
         mock_create.return_value = object()

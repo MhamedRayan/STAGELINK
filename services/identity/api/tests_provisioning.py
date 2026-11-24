@@ -113,6 +113,28 @@ class ProvisioningTests(APITestCase):
         )
         self.assertFalse(User.objects.get(email="new-company@example.com").is_active)
 
+    def test_platform_admin_must_supply_a_university_for_profile_roles(self):
+        self.client.force_authenticate(user=self.platform_admin)
+
+        responses = {
+            role: self._provision(f"missing-university-{role}@example.edu", role)
+            for role in (
+                UserRole.STUDENT,
+                UserRole.SUPERVISOR,
+                UserRole.UNIVERSITY_ADMIN,
+            )
+        }
+
+        for role, response in responses.items():
+            with self.subTest(role=role):
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("university", response.data)
+                self.assertFalse(
+                    User.objects.filter(
+                        email=f"missing-university-{role}@example.edu"
+                    ).exists()
+                )
+
     def test_no_role_can_provision_platform_admin(self):
         self.client.force_authenticate(user=self.platform_admin)
         response = self._provision("sneaky@example.edu", UserRole.PLATFORM_ADMIN)

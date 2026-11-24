@@ -9,8 +9,6 @@ retries, so the Notifications service can safely ignore a repeated delivery.
 import logging
 import uuid
 
-from django.conf import settings
-
 from . import identity_client
 from .notifications_client import schedule_notification, schedule_notifications
 
@@ -44,34 +42,33 @@ def _send(internship, *, recipient_user_id, event_key, notification_type, title,
     )
 
 
-def _configured_university_admin_ids():
-    """UNIVERSITY_ADMIN_USER_IDS as UUIDs, ignoring invalid values."""
-    configured = []
-    for raw in settings.UNIVERSITY_ADMIN_USER_IDS:
-        try:
-            configured.append(uuid.UUID(str(raw)))
-        except (TypeError, ValueError):
-            logger.warning("Ignoring invalid UNIVERSITY_ADMIN_USER_IDS value: %r", raw)
-    return configured
-
-
-def university_admin_user_ids():
+def university_admin_user_ids(internship):
     """
-    Active university administrators.
+    Active university administrators of the internship student's institution.
 
-    The Identity directory is authoritative. When it is unavailable, fall back
-    to the configured UUID list so notifications keep flowing during an outage.
-    An empty directory result means there are genuinely no administrators and is
-    not replaced by the fallback.
+    Notifications are tenant-scoped. When Identity is unavailable the event is
+    skipped rather than broadcast to administrators of other universities.
     """
+    student_id = str(internship.student_user_id)
     try:
-        return [uuid.UUID(value) for value in identity_client.list_university_admin_ids()]
+        universities = identity_client.user_universities([student_id])
+        university = universities.get(student_id, "")
+        if not university:
+            logger.warning(
+                "Student %s has no institution; skipping university-admin notification.",
+                student_id,
+            )
+            return []
+        return [
+            uuid.UUID(value)
+            for value in identity_client.list_university_admin_ids(university)
+        ]
     except identity_client.IdentityUnavailable as exc:
         logger.warning(
-            "Identity directory unavailable; using configured university admins: %s",
+            "Identity directory unavailable; skipping university-admin notification: %s",
             exc,
         )
-        return _configured_university_admin_ids()
+        return []
 
 
 def notify_internship_created(internship):
@@ -123,7 +120,7 @@ def notify_cancellation_requested(internship, cancellation):
     # Administrators are resolved from Identity after commit. The directory
     # lookup must never run inside the business transaction.
     schedule_notifications(
-        resolve_recipients=university_admin_user_ids,
+        resolve_recipients=lambda: university_admin_user_ids(internship),
         deduplication_key_for=lambda user_id: _key(
             internship, event_key, _recipient_key(user_id)
         ),

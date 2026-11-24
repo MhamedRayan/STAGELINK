@@ -18,12 +18,14 @@ from rest_framework_simplejwt.token_blacklist.models import (
     OutstandingToken,
 )
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenRefreshView
 
 from api.admin_scope import (
     SCOPED_ROLES,
     admin_university,
     normalise_university,
     scope_admin_users,
+    university_for_user,
 )
 from api.directory import user_summary
 from api.models import (
@@ -45,6 +47,7 @@ from api.serializers import (
     StudentProfileSerializer,
     SupervisorProfileSerializer,
     UniversityAdminProfileSerializer,
+    UniversityTokenRefreshSerializer,
     UserLoginSerializer,
     UserProfileSerializer,
     UserRegistrationSerializer,
@@ -90,6 +93,7 @@ class UserLoginView(APIView):
         refresh_token = RefreshToken.for_user(user)
         refresh_token["email"] = user.email
         refresh_token["role"] = user.role
+        refresh_token["university"] = university_for_user(user)
         access_token = refresh_token.access_token
 
         return Response(
@@ -102,6 +106,10 @@ class UserLoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class UniversityTokenRefreshView(TokenRefreshView):
+    serializer_class = UniversityTokenRefreshSerializer
 
 
 class UserProfileView(APIView):
@@ -197,14 +205,33 @@ class DeactivateAccountView(APIView):
         return Response({"detail": "Account deactivated."})
 
 
+def _user_university(user):
+    """Return the institution on a role profile, or an empty string.
+
+    Reverse one-to-one access raises an AttributeError subclass when the
+    profile has not been created yet, so ``getattr`` with a default is safe.
+    """
+    for attribute in (
+        "student_profile",
+        "supervisor_profile",
+        "university_admin_profile",
+    ):
+        profile = getattr(user, attribute, None)
+        if profile is not None:
+            return (profile.university or "").strip()
+    return ""
+
+
 class InternalUserLookupView(APIView):
     authentication_classes = ()
     permission_classes = (IsTrustedService,)
 
     def get(self, request, user_id):
         try:
-            user = User.objects.only(
-                "id", "email", "name", "role", "is_active"
+            user = User.objects.select_related(
+                "student_profile",
+                "supervisor_profile",
+                "university_admin_profile",
             ).get(pk=user_id)
         except User.DoesNotExist as exc:
             raise NotFound("User not found.") from exc
@@ -216,6 +243,7 @@ class InternalUserLookupView(APIView):
                 "name": user.name,
                 "role": user.role,
                 "is_active": user.is_active,
+                "university": _user_university(user),
             }
         )
 
@@ -387,7 +415,7 @@ class InternalUserDirectoryView(APIView):
     authentication_classes = ()
     permission_classes = (IsTrustedService,)
 
-    allowed_query_params = {"role", "department", "page", "ids"}
+    allowed_query_params = {"role", "department", "university", "page", "ids"}
 
     @staticmethod
     def _directory_user(user):
@@ -396,6 +424,7 @@ class InternalUserDirectoryView(APIView):
             "name": user.name,
             "email": user.email,
             "role": user.role,
+            "university": _user_university(user),
         }
 
     def get(self, request):
@@ -423,12 +452,19 @@ class InternalUserDirectoryView(APIView):
 
             users_by_id = {
                 str(user.id): user
-                for user in User.objects.filter(id__in=set(requested_ids)).only(
-                    "id", "name"
+                for user in User.objects.filter(id__in=set(requested_ids)).select_related(
+                    "student_profile",
+                    "supervisor_profile",
+                    "university_admin_profile",
                 )
             }
             results = [
-                {"id": user_id, "name": users_by_id[user_id].name}
+                {
+                    "id": user_id,
+                    "name": users_by_id[user_id].name,
+                    "role": users_by_id[user_id].role,
+                    "university": _user_university(users_by_id[user_id]),
+                }
                 for user_id in requested_ids
                 if user_id in users_by_id
             ]
@@ -436,8 +472,10 @@ class InternalUserDirectoryView(APIView):
 
         # Directory recipients must be usable accounts. Batch lookup stays
         # unfiltered so callers can still render historical display names.
-        users = User.objects.filter(is_active=True).only(
-            "id", "name", "email", "role"
+        users = User.objects.filter(is_active=True).select_related(
+            "student_profile",
+            "supervisor_profile",
+            "university_admin_profile",
         )
         role = params.get("role")
         if role is not None:
@@ -452,6 +490,16 @@ class InternalUserDirectoryView(APIView):
             users = users.filter(
                 Q(student_profile__department=department.strip())
                 | Q(supervisor_profile__department=department.strip())
+            )
+
+        university = params.get("university")
+        if university is not None:
+            if not university.strip():
+                raise ValidationError({"university": "This field may not be blank."})
+            users = users.filter(
+                Q(student_profile__university__iexact=university.strip())
+                | Q(supervisor_profile__university__iexact=university.strip())
+                | Q(university_admin_profile__university__iexact=university.strip())
             )
 
         users = users.order_by("email")
@@ -629,7 +677,18 @@ def _provisioned_university(request, role, values):
                 {"university": "This role does not have a university."}
             )
         return None
-    return (supplied or "").strip()
+
+    university = (supplied or "").strip()
+    if not university:
+        raise ValidationError(
+            {
+                "university": (
+                    "A university is required for student, supervisor and "
+                    "university administrator accounts."
+                )
+            }
+        )
+    return university
 
 
 class AdminUserListCreateView(APIView):

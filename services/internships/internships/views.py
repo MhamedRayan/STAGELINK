@@ -129,6 +129,7 @@ class InternshipSupervisorView(APIView):
             supervisor_user_id=serializer.validated_data["supervisor_user_id"],
             actor_user_id=request.user.user_id,
             reason=serializer.validated_data["reason"],
+            actor_university=request.user.university,
         )
         return Response(InternshipSerializer(updated).data)
 

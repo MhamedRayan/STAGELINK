@@ -28,10 +28,45 @@ class TemporaryMediaMixin:
         shutil.rmtree(cls._media_dir, ignore_errors=True)
 
 
-def make_token(user_id, role, *, ttl=timedelta(minutes=15)):
+def make_token(user_id, role, *, university="", ttl=timedelta(minutes=15)):
     now = datetime.now(timezone.utc)
-    payload = {"user_id": str(user_id), "role": role, "iat": now, "exp": now + ttl}
+    payload = {
+        "user_id": str(user_id),
+        "role": role,
+        "university": university,
+        "iat": now,
+        "exp": now + ttl,
+    }
     return jwt.encode(payload, TEST_JWT_KEY, algorithm="HS256")
+
+
+SCOPE_TARGET = "internships.selectors.list_student_ids_for_university"
+
+
+def scope_all_students(testcase):
+    """
+    Patch the Identity scope lookup to the fixture roster.
+
+    University-admin reads now resolve their students through Identity. Unit
+    tests must not reach a real Identity instance, so this helper scopes the
+    caller to every student currently in the test database. Tests that assert
+    isolation override the patch with an explicit subset.
+    """
+    from unittest.mock import patch
+
+    from .models import Internship
+
+    def students(university):
+        return [
+            str(value)
+            for value in Internship.objects.values_list(
+                "student_user_id", flat=True
+            ).distinct()
+        ]
+
+    patcher = patch(SCOPE_TARGET, side_effect=students)
+    patcher.start()
+    testcase.addCleanup(patcher.stop)
 
 
 def new_id():
@@ -76,13 +111,14 @@ def make_internship(
     return internship
 
 
-def identity_user(user_id, role="supervisor", is_active=True):
+def identity_user(user_id, role="supervisor", is_active=True, university="Demo University"):
     return {
         "id": str(user_id),
         "email": "user@example.test",
         "name": "Test User",
         "role": role,
         "is_active": is_active,
+        "university": university,
     }
 
 

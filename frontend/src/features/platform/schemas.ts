@@ -11,6 +11,7 @@ export const provisionAccountSchema = z
       .min(1, S.accounts.emailRequired)
       .max(254)
       .email(S.accounts.emailInvalid),
+    university: z.string().trim().max(255).default(''),
     generatePassword: z.boolean(),
     password: z.string().max(128),
   })
@@ -18,6 +19,15 @@ export const provisionAccountSchema = z
     path: ['password'],
     message: S.accounts.passwordMin,
   });
+
+/** University administrators must carry an institution from the start. */
+export const universityAccountSchema = provisionAccountSchema.refine(
+  (values) => values.university.length >= 1,
+  {
+    path: ['university'],
+    message: S.accounts.universityRequired,
+  },
+);
 
 export type ProvisionAccountFormValues = z.infer<typeof provisionAccountSchema>;
 

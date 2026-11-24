@@ -16,9 +16,10 @@ OTHER_STUDENT_ID = uuid.uuid4()
 
 
 class DummyUser:
-    def __init__(self, user_id, role):
+    def __init__(self, user_id, role, university=""):
         self.id = user_id
         self.role = role
+        self.university = university
         self.is_authenticated = True
 
     @property

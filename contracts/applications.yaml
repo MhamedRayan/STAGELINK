@@ -62,9 +62,14 @@ paths:
       summary: List applications visible to the caller
       description: |
         Students see their own applications, companies see applications owned by
-        their company, and university or platform administrators see all
-        applications. Results are paginated and can be filtered. A university
-        administrator uses `?status=COMPANY_ACCEPTED` as the validation queue.
+        their company, university administrators see applications submitted by
+        students of their own institution, and platform administrators see all
+        applications. Results are paginated and can be filtered; filters only
+        narrow the visible set. A university administrator uses
+        `?status=COMPANY_ACCEPTED` as the validation queue. The institution
+        scope is resolved from Identity and cached briefly; when Identity is
+        unavailable the request fails with `503 IDENTITY_UNAVAILABLE` rather
+        than widening the result.
       security:
         - bearerAuth: []
       parameters:
@@ -88,6 +93,8 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
     post:
       tags:
         - Applications
@@ -147,6 +154,9 @@ paths:
         - Applications
       operationId: getApplication
       summary: Read an application
+      description: |
+        University administrators can read only applications from their own
+        institution; another institution's application returns `404`.
       security:
         - bearerAuth: []
       responses:
@@ -160,6 +170,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /api/applications/{id}/history/:
     parameters:
@@ -171,7 +183,8 @@ paths:
       summary: Read the transition history of an application
       description: |
         Append-only audit trail. Visible to the student, the owning company,
-        university administrators and platform administrators.
+        university administrators of the student's institution and platform
+        administrators.
       security:
         - bearerAuth: []
       parameters:
@@ -188,6 +201,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /api/applications/{id}/company-decision/:
     parameters:
@@ -249,8 +264,10 @@ paths:
       operationId: decideAsUniversity
       summary: Validate or reject an application as a university administrator
       description: |
-        Allowed only while the application is `COMPANY_ACCEPTED`. Rejection
-        releases the provisional reservation.
+        Allowed only while the application is `COMPANY_ACCEPTED`, and only when
+        the student belongs to the caller's institution. Another institution's
+        application returns `404`. Rejection releases the provisional
+        reservation.
       security:
         - bearerAuth: []
       requestBody:
@@ -274,6 +291,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
         '409':
           description: The application is not `COMPANY_ACCEPTED` (`INVALID_STATE`).
           content:

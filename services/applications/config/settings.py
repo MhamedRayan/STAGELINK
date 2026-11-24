@@ -155,12 +155,6 @@ NOTIFICATIONS_BASE_URL = env(
 NOTIFICATIONS_TIMEOUT_SECONDS = env.float("NOTIFICATIONS_TIMEOUT_SECONDS", default=5.0)
 NOTIFICATIONS_MAX_ATTEMPTS = env.int("NOTIFICATIONS_MAX_ATTEMPTS", default=3)
 
-# Fallback university administrators who receive validation notifications when
-# the Identity directory is unavailable, as a list of UUIDs. The directory is
-# the primary source; the application's recorded university_user_id is always
-# included.
-UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
-
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True

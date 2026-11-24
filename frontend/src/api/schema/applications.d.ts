@@ -34,9 +34,14 @@ export interface paths {
         /**
          * List applications visible to the caller
          * @description Students see their own applications, companies see applications owned by
-         *     their company, and university or platform administrators see all
-         *     applications. Results are paginated and can be filtered. A university
-         *     administrator uses `?status=COMPANY_ACCEPTED` as the validation queue.
+         *     their company, university administrators see applications submitted by
+         *     students of their own institution, and platform administrators see all
+         *     applications. Results are paginated and can be filtered; filters only
+         *     narrow the visible set. A university administrator uses
+         *     `?status=COMPANY_ACCEPTED` as the validation queue. The institution
+         *     scope is resolved from Identity and cached briefly; when Identity is
+         *     unavailable the request fails with `503 IDENTITY_UNAVAILABLE` rather
+         *     than widening the result.
          */
         get: operations["listApplications"];
         put?: never;
@@ -65,7 +70,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Read an application */
+        /**
+         * Read an application
+         * @description University administrators can read only applications from their own
+         *     institution; another institution's application returns `404`.
+         */
         get: operations["getApplication"];
         put?: never;
         post?: never;
@@ -88,7 +97,8 @@ export interface paths {
         /**
          * Read the transition history of an application
          * @description Append-only audit trail. Visible to the student, the owning company,
-         *     university administrators and platform administrators.
+         *     university administrators of the student's institution and platform
+         *     administrators.
          */
         get: operations["listApplicationHistory"];
         put?: never;
@@ -138,8 +148,10 @@ export interface paths {
         put?: never;
         /**
          * Validate or reject an application as a university administrator
-         * @description Allowed only while the application is `COMPANY_ACCEPTED`. Rejection
-         *     releases the provisional reservation.
+         * @description Allowed only while the application is `COMPANY_ACCEPTED`, and only when
+         *     the student belongs to the caller's institution. Another institution's
+         *     application returns `404`. Rejection releases the provisional
+         *     reservation.
          */
         post: operations["decideAsUniversity"];
         delete?: never;
@@ -555,6 +567,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     createApplication: {
@@ -636,6 +649,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     listApplicationHistory: {
@@ -664,6 +678,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     decideAsCompany: {
@@ -757,6 +772,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     decideAsStudent: {
