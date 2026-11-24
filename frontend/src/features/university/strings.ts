@@ -39,9 +39,13 @@ export const S = {
     name: 'Full name',
     email: 'Email address',
     password: 'Initial password',
+    institutionNote: 'Students and supervisors inherit your university.',
+    grade: 'Grade',
     studentSubmit: 'Create student account',
     supervisorSubmit: 'Create supervisor account',
     created: 'Account created.',
+    profileIncomplete:
+      'Account created — profile details could not be saved. Use Edit to complete them.',
   },
   edit: {
     studentTitle: 'Edit student',

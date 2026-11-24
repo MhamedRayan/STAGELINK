@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import type { AdminUserUpdateRequest } from '@/api/identity';
 import { Button, Field, Input, Modal, useToast } from '@/components/ui';
 import { normalizeError } from '@/lib/errors';
 import { isUniversityScopeError, useProvisionUniversityUser } from '../hooks';
@@ -16,13 +17,19 @@ interface ProvisionAccountModalProps {
   onClose(): void;
 }
 
-const DEFAULTS: ProvisionAccountFormValues = {
+const DEFAULTS = (role: ProvisionAccountModalProps['role']): ProvisionAccountFormValues => ({
   name: '',
   email: '',
   password: '',
-};
+  role,
+  matricule: '',
+  department: '',
+  specialty: '',
+  academicYear: '',
+  grade: '',
+});
 
-/** University-admin account creation with an explicit initial password. */
+/** University-admin account creation with all academic profile fields. */
 export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountModalProps) {
   const toast = useToast();
   const create = useProvisionUniversityUser();
@@ -35,30 +42,46 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
     formState: { errors, isSubmitting },
   } = useForm<ProvisionAccountFormValues>({
     resolver: zodResolver(provisionAccountSchema),
-    defaultValues: DEFAULTS,
+    defaultValues: DEFAULTS(role),
   });
 
   useEffect(() => {
     if (!open) return;
     setScopeError(false);
-    reset(DEFAULTS);
-  }, [open, reset]);
+    reset(DEFAULTS(role));
+  }, [open, reset, role]);
 
   const close = () => {
     if (!create.isPending) onClose();
   };
 
   const onSubmit = handleSubmit(async (values) => {
+    const profile: AdminUserUpdateRequest =
+      role === 'student'
+        ? {
+            matricule: values.matricule,
+            department: values.department,
+            specialty: values.specialty,
+            academic_year: values.academicYear,
+          }
+        : {
+            department: values.department,
+            grade: values.grade,
+          };
     try {
-      await create.mutateAsync({
-        name: values.name,
-        email: values.email,
-        role,
-        password: values.password,
-        generate_password: false,
+      const result = await create.mutateAsync({
+        create: {
+          name: values.name,
+          email: values.email,
+          role,
+          password: values.password,
+          generate_password: false,
+        },
+        profile,
       });
-      toast.success(S.provision.created);
       setScopeError(false);
+      if (result.profileSaved) toast.success(S.provision.created);
+      else toast.error(S.provision.profileIncomplete);
       onClose();
     } catch (error) {
       const apiError = normalizeError(error);
@@ -104,12 +127,11 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
             {S.common.universityScopeHint}
           </p>
         )}
+        <p className="rounded-card border border-line bg-mint px-3 py-2 text-[12px] leading-4 text-muted">
+          {S.provision.institutionNote}
+        </p>
         <Field label={S.provision.name} error={errors.name?.message}>
-          <Input
-            {...register('name')}
-            hasError={!!errors.name}
-            autoComplete="name"
-          />
+          <Input {...register('name')} hasError={!!errors.name} autoComplete="name" />
         </Field>
         <Field label={S.provision.email} error={errors.email?.message}>
           <Input
@@ -119,6 +141,31 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
             autoComplete="email"
           />
         </Field>
+        {role === 'student' ? (
+          <>
+            <Field label={S.edit.matricule} error={errors.matricule?.message}>
+              <Input {...register('matricule')} hasError={!!errors.matricule} />
+            </Field>
+            <Field label={S.edit.department} error={errors.department?.message}>
+              <Input {...register('department')} hasError={!!errors.department} />
+            </Field>
+            <Field label={S.edit.specialty} error={errors.specialty?.message}>
+              <Input {...register('specialty')} hasError={!!errors.specialty} />
+            </Field>
+            <Field label={S.edit.academicYear} error={errors.academicYear?.message}>
+              <Input {...register('academicYear')} hasError={!!errors.academicYear} />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field label={S.edit.department} error={errors.department?.message}>
+              <Input {...register('department')} hasError={!!errors.department} />
+            </Field>
+            <Field label={S.provision.grade} error={errors.grade?.message}>
+              <Input {...register('grade')} hasError={!!errors.grade} />
+            </Field>
+          </>
+        )}
         <Field label={S.provision.password} error={errors.password?.message}>
           <Input
             {...register('password')}

@@ -479,13 +479,34 @@ export function useRejectCancellation() {
   });
 }
 
+export interface ProvisionUniversityUserInput {
+  create: AdminUserCreateRequest;
+  profile: AdminUserUpdateRequest;
+}
+
+export interface ProvisionUniversityUserResult {
+  created: AdminUserCreateResponse;
+  profileSaved: boolean;
+}
+
+/** Create the account, then apply the academic profile captured on the same form. */
 export function useProvisionUniversityUser() {
   const invalidate = useInvalidateUniversity();
-  return useMutation<AdminUserCreateResponse, unknown, AdminUserCreateRequest>({
-    mutationFn: (input) => createAdminUser(input),
-    onSuccess: () => {
-      invalidate();
+  return useMutation<
+    ProvisionUniversityUserResult,
+    unknown,
+    ProvisionUniversityUserInput
+  >({
+    mutationFn: async ({ create, profile }) => {
+      const created = await createAdminUser(create);
+      try {
+        await updateAdminUser(created.id, profile);
+        return { created, profileSaved: true };
+      } catch {
+        return { created, profileSaved: false };
+      }
     },
+    onSuccess: invalidate,
   });
 }
 
