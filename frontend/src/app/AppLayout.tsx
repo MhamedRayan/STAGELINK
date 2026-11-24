@@ -22,6 +22,7 @@ import {
   XCircle,
   type LucideIcon,
 } from 'lucide-react';
+import { Avatar } from '@/components/ui/Avatar';
 import { Logo } from '@/components/ui/Logo';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { cn } from '@/lib/cn';
@@ -237,7 +238,7 @@ export function AppLayout({ role }: { role: Role }) {
               isRail ? 'justify-center px-2' : 'px-[28px]',
             )}
           >
-            <span aria-hidden="true" className="h-9 w-9 shrink-0 rounded-full bg-sage" />
+            <Avatar name={user?.name} className="h-9 w-9" />
             {!isRail && (
               <span className="min-w-0">
                 <span className="block truncate text-[12px] font-semibold leading-4 text-inverse">
