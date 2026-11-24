@@ -167,11 +167,14 @@ export const S = {
     success: 'Supervisor assigned.',
     empty: 'No confirmed internships currently active.',
     loadError: 'Failed to load internships.',
+    unavailable: 'This internship is no longer available for supervisor assignment.',
     optionsError: 'Could not load supervisors. Enter a supervisor UUID instead.',
   },
   internships: {
     title: 'Internships',
     subtitle: 'Comprehensive lifecycle monitoring of all active, completed and cancelled placements.',
+    assignSupervisor: 'Assign supervisor',
+    reassignSupervisor: 'Reassign supervisor',
     empty: 'No internships found.',
   },
   cancellations: {

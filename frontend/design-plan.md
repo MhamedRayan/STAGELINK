@@ -478,6 +478,8 @@ Each page lists its frame, content, data sources, actions and deviations.
 - **Δ** The supervisor picker lists the live, university-scoped supervisor roster from
   `GET /api/admin/users/?role=supervisor`. The custom-UUID input remains only as a fallback for
   legacy assigned ids that are no longer in the roster. Reassignments prompt for a reason.
+- **Δ** This screen is reached from the Internships table row action (`?internship={id}` opens
+  that placement's modal once, then clears the param); it has no sidebar entry.
 
 #### Internships — `/app/university/internships` (`28:1043`)
 - **Layout:** title + “All internships and their lifecycle status”; status filter; table
@@ -486,6 +488,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   above.
 - **Notes:** supervisor column shows “Unassigned” when null; period rendered `dd/mm/yyyy →
   dd/mm/yyyy`.
+- **Δ** Live rows (`confirmed` / `in_progress`) carry an “Assign supervisor” / “Reassign
+  supervisor” action linking to `/app/university/assignments?internship={id}`; other statuses show
+  a dash. The assignment screen opens that row's modal once and then removes the query param.
 
 #### Cancellation Requests — `/app/university/cancellations` (`28:1215`)
 - **Layout:** title + explanation; table (Internship, Requested by, On, Status); “Request

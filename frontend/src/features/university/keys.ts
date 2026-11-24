@@ -15,6 +15,7 @@ export const universityKeys = {
   application: (id: string) => ['university', 'application', id] as const,
   history: (id: string) => ['university', 'application-history', id] as const,
   internships: (params: ListInternshipsParams) => ['university', 'internships', params] as const,
+  internship: (id: string) => ['university', 'internship', id] as const,
   assignments: ['university', 'assignments'] as const,
   cancellations: ['university', 'cancellations'] as const,
   cancellationRequests: (internshipId: string) =>

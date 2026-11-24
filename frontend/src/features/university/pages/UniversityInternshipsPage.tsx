@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ROUTES } from '@/app/routes';
 import {
   DataTable,
   EmptyState,
@@ -14,7 +16,7 @@ import { formatDate } from '@/lib/format';
 import { INTERNSHIP_STATUS } from '@/lib/status';
 import type { Internship } from '@/api/internships';
 import { StudentNameCell, SupervisorNameCell } from '../components/NameCells';
-import { useUniversityInternships } from '../hooks';
+import { isAssignableInternship, useUniversityInternships } from '../hooks';
 import { S } from '../strings';
 
 const STATUSES = Object.keys(INTERNSHIP_STATUS) as Internship['status'][];
@@ -92,6 +94,25 @@ export function UniversityInternshipsPage() {
                       fallback={S.common.unassigned}
                     />
                   ),
+                },
+                {
+                  key: 'action',
+                  header: S.common.action,
+                  align: 'right',
+                  width: '170px',
+                  render: (row) =>
+                    isAssignableInternship(row.status) ? (
+                      <Link
+                        to={`${ROUTES.university.assignments}?internship=${row.id}`}
+                        className="text-[13px] font-medium text-surface-600 hover:underline"
+                      >
+                        {row.supervisor_user_id
+                          ? S.internships.reassignSupervisor
+                          : S.internships.assignSupervisor}
+                      </Link>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    ),
                 },
               ]}
               rows={internships.data?.items ?? []}

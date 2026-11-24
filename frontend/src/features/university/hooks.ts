@@ -22,6 +22,7 @@ import {
 import {
   approveCancellationRequest,
   assignSupervisor,
+  getInternship,
   listCancellationRequests,
   listInternships,
   rejectCancellationRequest,
@@ -339,6 +340,21 @@ export function useUniversitySupervisorOptions() {
       return [first, ...rest].flatMap((page) => page.results);
     },
     staleTime: 5 * 60_000,
+  });
+}
+
+/** Assignments only make sense for live placements. */
+export function isAssignableInternship(status: Internship['status']): boolean {
+  return status === 'confirmed' || status === 'in_progress';
+}
+
+/** Single internship for deep links that point outside the aggregated assignment list. */
+export function useUniversityInternship(id: string | undefined) {
+  return useQuery({
+    queryKey: universityKeys.internship(id ?? ''),
+    queryFn: () => getInternship(id as string),
+    enabled: Boolean(id),
+    retry: false,
   });
 }
 

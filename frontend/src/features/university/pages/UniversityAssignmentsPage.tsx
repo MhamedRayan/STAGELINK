@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Button,
   DataTable,
@@ -21,8 +22,10 @@ import { fallbackLabel } from '@/lib/ids';
 import type { Internship } from '@/api/internships';
 import { StudentNameCell } from '../components/NameCells';
 import {
+  isAssignableInternship,
   useAssignSupervisor,
   useUniversityAssignments,
+  useUniversityInternship,
   useUniversitySupervisorOptions,
 } from '../hooks';
 import { S } from '../strings';
@@ -33,22 +36,62 @@ export function UniversityAssignmentsPage() {
   const assignments = useUniversityAssignments();
   const assign = useAssignSupervisor();
   const supervisorOptions = useUniversitySupervisorOptions();
-  const supervisors = supervisorOptions.data ?? [];
+  const supervisors = useMemo(() => supervisorOptions.data ?? [], [supervisorOptions.data]);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetId = searchParams.get('internship') ?? undefined;
+  const isTargetListed = Boolean(
+    targetId && assignments.data?.some((item) => item.id === targetId),
+  );
+  const fallback = useUniversityInternship(
+    targetId && assignments.data && !isTargetListed ? targetId : undefined,
+  );
   const [selected, setSelected] = useState<Internship | null>(null);
   const [supervisorId, setSupervisorId] = useState('');
   const [customId, setCustomId] = useState('');
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const handledTarget = useRef<string | null>(null);
 
-  const open = (internship: Internship) => {
-    setSelected(internship);
-    setSupervisorId(
-      internship.supervisor_user_id ?? (supervisors[0] ? supervisors[0].id : 'custom'),
-    );
-    setCustomId('');
-    setReason('');
-    setError(null);
-  };
+  const open = useCallback(
+    (internship: Internship) => {
+      setSelected(internship);
+      setSupervisorId(
+        internship.supervisor_user_id ?? (supervisors[0] ? supervisors[0].id : 'custom'),
+      );
+      setCustomId('');
+      setReason('');
+      setError(null);
+    },
+    [supervisors],
+  );
+
+  // Deep link from an Internships row: open that placement once, then drop the param.
+  useEffect(() => {
+    if (!targetId || handledTarget.current === targetId) return;
+    if (!assignments.data || !supervisorOptions.isFetched) return;
+    if (!isTargetListed && !fallback.isFetched) return;
+    handledTarget.current = targetId;
+    const row = assignments.data.find((item) => item.id === targetId) ?? fallback.data;
+    if (row && isAssignableInternship(row.status)) {
+      open(row);
+    } else {
+      toast.error(S.assignments.unavailable);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('internship');
+    setSearchParams(next, { replace: true });
+  }, [
+    targetId,
+    assignments.data,
+    supervisorOptions.isFetched,
+    isTargetListed,
+    fallback.isFetched,
+    fallback.data,
+    open,
+    searchParams,
+    setSearchParams,
+    toast,
+  ]);
 
   const close = () => {
     if (!assign.isPending) setSelected(null);

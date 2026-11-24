@@ -4,6 +4,7 @@ import type { Internship } from '@/api/internships';
 import {
   buildStudentActivity,
   buildSupervisorActivity,
+  isAssignableInternship,
   mergeStudentRows,
   mergeSupervisorRows,
 } from './hooks';
@@ -81,5 +82,12 @@ describe('university roster helpers', () => {
     expect(mergeSupervisorRows([supervisor], counts)).toEqual([
       { user: supervisor, assignedCount: 2 },
     ]);
+  });
+
+  it('only allows assignments on live placements', () => {
+    expect(isAssignableInternship('confirmed')).toBe(true);
+    expect(isAssignableInternship('in_progress')).toBe(true);
+    expect(isAssignableInternship('completed')).toBe(false);
+    expect(isAssignableInternship('cancelled')).toBe(false);
   });
 });
