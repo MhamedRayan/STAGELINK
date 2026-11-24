@@ -117,24 +117,24 @@ export function SupervisorStudentProfilePage() {
       </div>
 
       {tab === 'overview' && (
-        <div className="mt-5 grid grid-cols-2 gap-[42px]">
+        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-[42px]">
           <section className="rounded-panel border border-line bg-mint p-5">
             <h2 className="text-[16px] font-semibold text-forest-900">{S.profile.placementTitle}</h2>
             <dl className="mt-4 space-y-3 text-[13px]">
               <div className="flex gap-3">
-                <dt className="w-[130px] text-muted">{S.profile.period}</dt>
+                <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.period}</dt>
                 <dd>{formatDate(data.start_date)} → {formatDate(data.end_date)}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-[130px] text-muted">{S.profile.host}</dt>
+                <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.host}</dt>
                 <dd>{companyName}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-[130px] text-muted">{S.profile.role}</dt>
+                <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.role}</dt>
                 <dd>{offerTitle}</dd>
               </div>
               <div className="flex gap-3">
-                <dt className="w-[130px] text-muted">{S.profile.assignedOn}</dt>
+                <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.assignedOn}</dt>
                 <dd>{formatDate(data.created_at)}</dd>
               </div>
             </dl>
@@ -157,15 +157,15 @@ export function SupervisorStudentProfilePage() {
           <h2 className="text-[16px] font-semibold text-forest-900">{S.profile.internship}</h2>
           <dl className="mt-4 space-y-3 text-[13px]">
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.profile.period}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.period}</dt>
               <dd>{formatDate(data.start_date)} → {formatDate(data.end_date)}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.profile.host}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.profile.host}</dt>
               <dd>{companyName}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.common.status}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.common.status}</dt>
               <dd><StatusPill domain="internship" value={data.status} /></dd>
             </div>
           </dl>
@@ -175,7 +175,7 @@ export function SupervisorStudentProfilePage() {
           >
             {S.profile.openProgress} →
           </Link>
-          <div className="mt-6 grid grid-cols-2 gap-[42px]">
+          <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-[42px]">
             <div>
               <h3 className="text-[13px] font-semibold text-forest-900">{S.profile.studentContact}</h3>
               <p className="mt-2 text-[13px] text-ink">{studentName}</p>

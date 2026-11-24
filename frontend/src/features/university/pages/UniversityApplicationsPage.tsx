@@ -31,7 +31,7 @@ export function UniversityApplicationsPage() {
     <div className="max-w-content">
       <PageHeader title={S.applications.title} subtitle={S.applications.subtitle} />
 
-      <div className="mt-[24px] flex justify-end">
+      <div className="mt-[24px] flex flex-wrap justify-start sm:justify-end">
         <Select
           aria-label={S.common.status}
           value={status}
@@ -39,7 +39,7 @@ export function UniversityApplicationsPage() {
             setStatus(event.target.value as ApplicationStatus | '');
             setPage(1);
           }}
-          className="h-10 w-[300px]"
+          className="h-10 w-full max-w-full sm:w-[300px]"
         >
           <option value="COMPANY_ACCEPTED">{S.applications.filterPending}</option>
           <option value="">{S.applications.filterAll}</option>

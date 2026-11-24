@@ -32,13 +32,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div aria-live="polite" className="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col gap-2">
+      <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[calc(100vw-2rem)] flex-col gap-2 sm:bottom-6 sm:right-6 sm:w-auto">
         {items.map((item) => (
           <div
             key={item.id}
             role="status"
             className={cn(
-              'pointer-events-auto max-w-[360px] rounded-[10px] px-4 py-3 text-[13px] font-medium shadow-lg',
+              'pointer-events-auto w-full max-w-[360px] rounded-[10px] px-4 py-3 text-[13px] font-medium shadow-lg sm:w-auto',
               item.kind === 'success'
                 ? 'bg-forest-900 text-inverse'
                 : 'border border-pill-danger-fg bg-pill-danger-bg text-pill-danger-fg',

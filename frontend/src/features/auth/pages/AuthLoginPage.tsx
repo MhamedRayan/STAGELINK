@@ -46,15 +46,15 @@ export function AuthLoginPage() {
   });
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-canvas">
+    <main className="relative flex min-h-screen items-start justify-center bg-canvas p-4 pb-16 sm:items-center sm:p-6">
       <Link
         to={ROUTES.guest.offers}
-        className="absolute left-10 top-8 inline-flex items-center gap-2 text-[13px] font-medium text-surface-600 hover:underline"
+        className="absolute left-4 top-4 inline-flex items-center gap-2 text-[13px] font-medium text-surface-600 hover:underline sm:left-10 sm:top-8"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         {S.login.browseOffers}
       </Link>
-      <div className="relative h-[600px] w-[500px] rounded-[20px] border border-line bg-mint px-10 pt-9">
+      <div className="relative flex min-h-[600px] w-full max-w-[500px] flex-col rounded-[20px] border border-line bg-mint px-5 pb-8 pt-20 sm:px-10 sm:pt-9">
         <div className="flex justify-center">
           <Logo size="md" />
         </div>
@@ -105,11 +105,11 @@ export function AuthLoginPage() {
           </Button>
         </form>
 
-        <p className="mt-8 text-[12px] leading-[15px] text-muted">{S.login.note}</p>
+        <p className="mt-auto pt-8 text-[12px] leading-[15px] text-muted">{S.login.note}</p>
 
         <Link
           to={ROUTES.registerCompany}
-          className="absolute bottom-[44px] left-10 text-[13px] font-medium leading-4 text-surface-600 hover:underline"
+          className="mt-2 inline-block text-[13px] font-medium leading-4 text-surface-600 hover:underline"
         >
           {S.login.newCompany}
         </Link>

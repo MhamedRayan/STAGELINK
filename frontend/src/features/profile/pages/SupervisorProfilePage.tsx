@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
+import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -18,11 +19,18 @@ import { accountChanges } from '../utils';
 export function SupervisorProfilePage() {
   const { user } = useAuth();
   const query = useSupervisorProfile();
-  if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.error) {
+    return (
+      <>
+        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      </>
+    );
+  }
   if (!user || !query.data) {
     return (
       <>
-        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} />
+        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
         <ProfileLoading />
       </>
     );
@@ -32,9 +40,9 @@ export function SupervisorProfilePage() {
 
 function SummaryBox({ label, value }: { label: string; value: number | undefined }) {
   return (
-    <div className="relative h-16 rounded-[10px] border border-line bg-canvas">
-      <span className="absolute left-5 top-4 text-[13px] font-medium leading-4 text-forest-900">{label}</span>
-      <span className="absolute left-[418px] top-3.5 text-[20px] font-bold leading-6 text-forest-900">{value ?? '–'}</span>
+    <div className="flex h-16 items-center justify-between gap-4 rounded-[10px] border border-line bg-canvas px-5">
+      <span className="text-[13px] font-medium leading-4 text-forest-900">{label}</span>
+      <span className="shrink-0 text-[20px] font-bold leading-6 text-forest-900">{value ?? '–'}</span>
     </div>
   );
 }
@@ -82,10 +90,10 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
 
   return (
     <>
-      <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} />
+      <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.supervisor.personal}</CardTitle>
             <div className="mt-[27px] space-y-2">
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
@@ -94,7 +102,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
               <TextField label={S.supervisor.department} error={errors.department?.message} {...register('department')} />
               <TextField label={S.supervisor.grade} error={errors.grade?.message} {...register('grade')} />
             </div>
-            <div className="absolute left-5 top-[430px] flex gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>
@@ -104,7 +112,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
             </div>
           </ProfileCard>
 
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.supervisor.summary}</CardTitle>
             <div className="mt-[27px] space-y-4">
               <SummaryBox label={S.supervisor.assigned} value={summary.data?.assigned} />
@@ -112,7 +120,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
               <SummaryBox label={S.supervisor.pending} value={summary.data?.pendingReviews} />
               <SummaryBox label={S.supervisor.evaluations} value={summary.data?.evaluationsRecorded} />
             </div>
-            <p className="absolute left-5 top-[410px] w-[500px] text-[12px] leading-[15px] text-muted">{S.supervisor.note}</p>
+            <p className="mt-8 text-[12px] leading-[15px] text-muted">{S.supervisor.note}</p>
           </ProfileCard>
         </ProfileRow>
       </form>

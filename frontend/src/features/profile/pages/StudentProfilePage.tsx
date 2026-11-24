@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
+import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -18,11 +19,18 @@ import { accountChanges } from '../utils';
 export function StudentProfilePage() {
   const { user } = useAuth();
   const query = useStudentProfile();
-  if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.error) {
+    return (
+      <>
+        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
+        <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+      </>
+    );
+  }
   if (!user || !query.data) {
     return (
       <>
-        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} />
+        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
         <ProfileLoading />
       </>
     );
@@ -82,16 +90,16 @@ function StudentProfileForm({ user, profile }: { user: AuthUser; profile: Studen
 
   return (
     <>
-      <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} />
+      <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.student.personal}</CardTitle>
             <div className="mt-[27px] space-y-2">
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
             </div>
-            <div className="absolute left-[71px] top-[510px] flex gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>
@@ -101,7 +109,7 @@ function StudentProfileForm({ user, profile }: { user: AuthUser; profile: Studen
             </div>
           </ProfileCard>
 
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.student.academic}</CardTitle>
             <div className="mt-[27px]">
               <TextField controlGap="sm" label={S.student.studentId} error={errors.matricule?.message} {...register('matricule')} />

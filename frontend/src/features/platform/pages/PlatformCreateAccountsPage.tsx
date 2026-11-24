@@ -40,17 +40,9 @@ const CARDS: CardCopy[] = [
     submit: S.accounts.company.submit,
     note: S.accounts.company.note,
   },
-  {
-    role: 'supervisor',
-    title: S.accounts.supervisor.title,
-    name: S.accounts.supervisor.name,
-    email: S.accounts.supervisor.email,
-    submit: S.accounts.supervisor.submit,
-    note: S.accounts.supervisor.note,
-  },
 ];
 
-/** One provisioning card: 540 x 610 in 24:447 (the supervisor card is an approved addition). */
+/** One provisioning card: 540 x 610 in 24:447. Platform provisions company and university accounts only. */
 function ProvisionCard({
   copy,
   onCreated,

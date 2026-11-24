@@ -121,7 +121,7 @@ export function PlatformCompanyVerificationPage() {
         action={
           <Select
             aria-label={S.verification.filterAria}
-            className="h-10 w-[220px] text-[13px]"
+            className="h-10 w-full max-w-full text-[13px] sm:w-[220px]"
             value={status}
             onChange={(event) => changeStatus(event.target.value as VerificationStatus)}
           >
@@ -139,7 +139,8 @@ export function PlatformCompanyVerificationPage() {
           {companies.isError ? (
             <ErrorState error={companies.error} onRetry={() => void companies.refetch()} />
           ) : (
-            <table className="w-full border-collapse text-left">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] border-collapse text-left">
               <colgroup>
                 <col className="w-[27%]" />
                 <col className="w-[18%]" />
@@ -183,7 +184,7 @@ export function PlatformCompanyVerificationPage() {
                         setSelectedId(company.id);
                       }
                     }}
-                    className="h-[60px] cursor-pointer"
+                    className="h-[60px] cursor-pointer hover:bg-line/40 focus-visible:bg-line/40 focus-visible:outline-none"
                   >
                       <td className="text-table-body text-forest-900">{company.name}</td>
                       <td className="text-table-body text-forest-900">
@@ -195,7 +196,8 @@ export function PlatformCompanyVerificationPage() {
                     </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           )}
 
           {total > PAGE_SIZE && (

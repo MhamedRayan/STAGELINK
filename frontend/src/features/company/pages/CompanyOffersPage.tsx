@@ -88,7 +88,7 @@ export function CompanyOffersPage() {
         }
       />
 
-      <div className="mt-[24px] flex justify-end">
+      <div className="mt-[24px] flex flex-wrap justify-start sm:justify-end">
         <Select
           aria-label={S.common.filter}
           value={status}
@@ -96,7 +96,7 @@ export function CompanyOffersPage() {
             setStatus(event.target.value as Offer['status'] | '');
             setPage(1);
           }}
-          className="h-10 w-[220px]"
+          className="h-10 w-full max-w-full sm:w-[220px]"
         >
           <option value="">{S.common.allStatuses}</option>
           {STATUSES.map((value) => (

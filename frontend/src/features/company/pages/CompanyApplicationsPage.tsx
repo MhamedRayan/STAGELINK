@@ -52,7 +52,7 @@ export function CompanyApplicationsPage() {
     <div className="max-w-content">
       <PageHeader title={S.applications.title} subtitle={S.applications.subtitle} />
 
-      <div className="mt-[24px] flex justify-end">
+      <div className="mt-[24px] flex flex-wrap justify-start sm:justify-end">
         <Select
           aria-label={S.common.filter}
           value={status}
@@ -60,7 +60,7 @@ export function CompanyApplicationsPage() {
             setStatus(event.target.value as ApplicationStatus | '');
             setPage(1);
           }}
-          className="h-10 w-[280px]"
+          className="h-10 w-full max-w-full sm:w-[280px]"
         >
           <option value="SUBMITTED">{S.applications.filterSubmitted}</option>
           <option value="">{S.common.allStatuses}</option>

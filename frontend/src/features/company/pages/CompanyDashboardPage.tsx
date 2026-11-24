@@ -40,7 +40,7 @@ export function CompanyDashboardPage() {
         </div>
       ) : dashboard.isLoading ? (
         <div className="mt-[26px] space-y-5">
-          <div className="grid grid-cols-4 gap-[13px]">
+          <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((item) => (
               <StatCard key={item} label="" value="" isLoading />
             ))}
@@ -49,26 +49,30 @@ export function CompanyDashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-[26px] grid grid-cols-4 gap-[13px]">
+          <div className="mt-[26px] grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label={S.dashboard.statActive}
               value={dashboard.data?.activeCount ?? 0}
               hint={S.dashboard.statActiveHint}
+              to={ROUTES.company.offers}
             />
             <StatCard
               label={S.dashboard.statPlaces}
               value={dashboard.data?.totalPlaces ?? 0}
               hint={S.dashboard.statPlacesHint}
+              to={ROUTES.company.offers}
             />
             <StatCard
               label={S.dashboard.statPending}
               value={dashboard.data?.pendingValidation ?? 0}
               hint={S.dashboard.statPendingHint}
+              to={ROUTES.company.applications}
             />
             <StatCard
               label={S.dashboard.statAwaiting}
               value={dashboard.data?.awaitingStudent ?? 0}
               hint={S.dashboard.statAwaitingHint}
+              to={ROUTES.company.applications}
             />
           </div>
 

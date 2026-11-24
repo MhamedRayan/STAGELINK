@@ -28,7 +28,7 @@ export function GuestBrowseOffersPage() {
   return (
     <>
       <PublicHeader />
-      <main className="px-[60px] pb-12 pt-8">
+      <main className="px-4 pb-12 pt-6 sm:px-[60px] sm:pt-8">
         <h1 className="text-page-title font-bold leading-[34px] text-forest-900">{S.browse.title}</h1>
         <p className="mt-1 text-[14px] leading-[17px] text-muted">{S.browse.subtitle}</p>
         <div className="mt-[21px]">
@@ -39,14 +39,14 @@ export function GuestBrowseOffersPage() {
           {error ? (
             <ErrorState error={error} onRetry={() => void refetch()} />
           ) : isLoading ? (
-            <div className="grid grid-cols-3 gap-x-10 gap-y-[30px]">
+            <div className="grid grid-cols-1 gap-x-5 gap-y-[30px] sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }, (_, i) => (
                 <Skeleton key={i} className="h-[270px] rounded-panel" />
               ))}
             </div>
           ) : data && data.items.length > 0 ? (
             <>
-              <div className="grid grid-cols-3 gap-x-10 gap-y-[30px]">
+              <div className="grid grid-cols-1 gap-x-5 gap-y-[30px] sm:grid-cols-2 xl:grid-cols-3">
                 {data.items.map((offer) => (
                   <OfferCard
                     key={offer.id}

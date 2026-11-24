@@ -10,16 +10,16 @@ export function OfferFilters({ value, onChange }: { value: OfferFilterValue; onC
   const { data: locations = [] } = useOfferLocations();
   const options = value.location && !locations.includes(value.location) ? [value.location, ...locations] : locations;
   return (
-    <div className="flex gap-5">
+    <div className="flex flex-col gap-3 sm:flex-row sm:gap-5">
       <input
         type="search"
         aria-label="Search offers"
         placeholder="Search offers..."
         value={value.search}
         onChange={(e) => onChange({ ...value, search: e.target.value })}
-        className="h-10 w-[600px] rounded-[10px] border border-line bg-mint px-5 text-[13px] text-forest-900 placeholder:text-muted"
+        className="h-10 w-full rounded-[10px] border border-line bg-mint px-5 text-[13px] text-forest-900 placeholder:text-muted sm:w-[600px] sm:max-w-full"
       />
-      <div className="relative h-10 w-[200px] rounded-[10px] border border-line bg-mint focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-surface-600">
+      <div className="relative h-10 w-full shrink-0 rounded-[10px] border border-line bg-mint focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-surface-600 sm:w-[200px]">
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center whitespace-pre px-5 text-[13px] text-forest-900">
           {`${value.location || 'All Places'}  ▾`}
         </span>
