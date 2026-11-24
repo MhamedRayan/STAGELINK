@@ -32,7 +32,7 @@ export function StudentBrowseOffersPage() {
           <ErrorState error={offers.error} onRetry={() => void offers.refetch()} />
         </div>
       ) : offers.isLoading ? (
-        <div className="mt-6 grid grid-cols-3 gap-[20px]">
+        <div className="mt-6 grid grid-cols-1 gap-[20px] sm:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2, 3, 4, 5].map((key) => (
             <Skeleton key={key} className="h-[270px] rounded-panel" />
           ))}
@@ -43,7 +43,7 @@ export function StudentBrowseOffersPage() {
         </div>
       ) : (
         <>
-          <div className="mt-6 grid grid-cols-3 gap-[20px]">
+          <div className="mt-6 grid grid-cols-1 gap-[20px] sm:grid-cols-2 xl:grid-cols-3">
             {offers.data?.items.map((offer) => (
               <OfferCard
                 key={offer.id}

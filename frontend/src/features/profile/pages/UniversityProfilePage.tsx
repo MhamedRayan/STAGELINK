@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -35,7 +36,7 @@ export function UniversityProfilePage() {
   if (!user) {
     return (
       <>
-        <ProfileHeader title={S.university.title} subtitle={S.university.subtitle} />
+        <ProfileHeader title={S.university.title} subtitle={S.university.subtitle} action={<ProfileLogoutButton />} />
         <ProfileLoading />
       </>
     );
@@ -53,29 +54,29 @@ export function UniversityProfilePage() {
 
   return (
     <>
-      <ProfileHeader title={S.university.title} subtitle={S.university.subtitle} />
+      <ProfileHeader title={S.university.title} subtitle={S.university.subtitle} action={<ProfileLogoutButton />} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.university.info}</CardTitle>
             <div className="mt-[21px] space-y-2">
               <TextField label={S.university.universityName} autoComplete="organization" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
             </div>
-            <Button type="submit" isLoading={isSubmitting} className={`${ACTION_BUTTON} absolute left-5 top-[370px]`}>
+            <Button type="submit" isLoading={isSubmitting} className={`${ACTION_BUTTON} mt-8`}>
               {S.common.save}
             </Button>
           </ProfileCard>
 
-          <ProfileCard className="h-[640px] w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
             <CardTitle>{S.university.faculties}</CardTitle>
-            <p className="mt-[21px] w-[500px] text-[12px] leading-[15px] text-muted">{S.university.facultiesNote}</p>
-            <div className="absolute left-5 top-[270px]">
+            <p className="mt-[21px] text-[12px] leading-[15px] text-muted">{S.university.facultiesNote}</p>
+            <div className="mt-[39px]">
               <CardTitle>{S.university.accountSettings}</CardTitle>
             </div>
             <Button
               variant="secondary"
-              className="absolute left-[42px] top-[306px] h-10 w-[220px] rounded-[10px] text-[13px] font-medium"
+              className="mt-5 h-10 w-full rounded-[10px] text-[13px] font-medium sm:w-[220px]"
               onClick={() => setPasswordOpen(true)}
             >
               {S.common.changePassword}

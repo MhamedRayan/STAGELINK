@@ -134,7 +134,7 @@ export function CompanyOfferFormPage() {
       <form onSubmit={(event) => void onPublishSubmit(event)} noValidate>
         <section className="mt-5 rounded-panel border border-line bg-mint p-5">
           <h2 className="text-[16px] font-semibold text-forest-900">{S.form.basicsTitle}</h2>
-          <div className="mt-4 grid grid-cols-2 gap-x-[42px] gap-y-4">
+          <div className="mt-4 grid grid-cols-1 gap-x-[42px] gap-y-4 sm:grid-cols-2">
             <Field label={S.form.titleLabel} error={errors.title?.message}>
               <Input
                 {...register('title')}

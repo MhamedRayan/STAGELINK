@@ -53,7 +53,7 @@ export function StudentOfferDetailPage() {
     return <ErrorState error={offer.error} onRetry={() => void offer.refetch()} />;
   }
   if (offer.isLoading || !offer.data) {
-    return <Skeleton className="h-[700px] w-[1100px] rounded-panel" />;
+    return <Skeleton className="h-[420px] w-full rounded-panel sm:h-[700px]" />;
   }
 
   const data = offer.data;
@@ -105,13 +105,13 @@ export function StudentOfferDetailPage() {
         {S.offerDetail.back}
       </Link>
 
-      <div className="mt-[14px] flex items-start gap-10">
-        <article className="min-h-[700px] w-[820px] rounded-panel bg-mint px-6 pb-6 pt-[30px]">
+      <div className="mt-[14px] flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-10">
+        <article className="min-h-[560px] w-full rounded-panel bg-mint px-4 pb-6 pt-[30px] sm:px-6 lg:w-[820px]">
           <h1 className="text-[24px] font-bold leading-[29px] text-forest-900">{data.title}</h1>
           <p className="mt-[7px] text-[14px] leading-[17px] text-muted">
             {companyName}  •  {data.location}
           </p>
-          <div className="mt-[27px] w-[760px] space-y-0">
+          <div className="mt-[27px] w-full max-w-[760px] space-y-0">
             <Section title={S.offerDetail.description}>{data.description}</Section>
             <Section title={S.offerDetail.requirements}>{data.requirements}</Section>
             <Section title={S.offerDetail.datesPlaces}>{`${places}  •  ${data.location}`}</Section>
@@ -122,7 +122,7 @@ export function StudentOfferDetailPage() {
           </div>
         </article>
 
-        <aside className="relative h-[300px] w-[260px] shrink-0 rounded-panel bg-mint px-[22px] pt-[26px]">
+        <aside className="relative flex min-h-[300px] w-full flex-col rounded-panel bg-mint px-[22px] pb-[26px] pt-[26px] lg:w-[260px] lg:shrink-0">
           <h2 className="text-[16px] font-semibold leading-[19px] text-forest-900">
             {S.offerDetail.applyTitle}
           </h2>
@@ -130,7 +130,7 @@ export function StudentOfferDetailPage() {
             {S.offerDetail.applyHint}
           </p>
           {hasApplied ? (
-            <div className="absolute bottom-[26px] left-[22px] right-[22px] space-y-3">
+            <div className="mt-auto space-y-3 pt-8">
               <p className="text-[12px] text-muted">{S.offerDetail.applied}</p>
               <Button
                 variant="secondary"
@@ -143,7 +143,7 @@ export function StudentOfferDetailPage() {
               </Button>
             </div>
           ) : (
-            <div className="absolute bottom-[26px] left-[22px] right-[22px] space-y-2">
+            <div className="mt-auto space-y-2 pt-8">
               {deadlinePassed && (
                 <p className="text-[12px] text-pill-danger-fg">{S.offerDetail.deadlinePassed}</p>
               )}

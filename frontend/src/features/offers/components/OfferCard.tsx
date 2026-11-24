@@ -18,7 +18,7 @@ export function OfferCard({ offer, to, ctaLabel, ctaTo }: OfferCardProps) {
   const company = useCompanyLabel(offer.company_user_id);
   const places = offer.capacity === 1 ? '1 place' : `${offer.capacity} places`;
   return (
-    <article className="relative h-[270px] rounded-panel bg-mint px-[18px] pt-[18px]">
+    <article className="clickable relative h-[270px] rounded-panel bg-mint px-[18px] pt-[18px]">
       <Pill tone="success" className="w-24 px-0">
         Internship
       </Pill>
@@ -36,7 +36,7 @@ export function OfferCard({ offer, to, ctaLabel, ctaTo }: OfferCardProps) {
       </p>
       <Link
         to={ctaTo ?? to}
-        className="absolute bottom-5 left-[18px] z-10 flex h-9 w-[220px] items-center rounded-[10px] bg-pill-neutral-bg pl-[22px] text-[12px] font-medium text-muted hover:brightness-95"
+        className="absolute bottom-5 left-[18px] z-10 flex h-9 w-[220px] max-w-[calc(100%-36px)] items-center rounded-[10px] bg-pill-neutral-bg pl-[22px] text-[12px] font-medium text-muted hover:brightness-95"
       >
         {ctaLabel}
       </Link>

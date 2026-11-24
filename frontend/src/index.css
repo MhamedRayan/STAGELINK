@@ -17,3 +17,30 @@
     outline-offset: 2px;
   }
 }
+
+@layer components {
+  /**
+   * Shared affordance for any surface that behaves like a control (linked stat cards,
+   * offer cards, clickable table rows…): a sage halo on hover and a tiny press.
+   * Colours come from tokens only; motion is dropped for reduced-motion users.
+   */
+  .clickable {
+    @apply transition-[box-shadow,background-color,transform] duration-150 ease-out;
+  }
+  .clickable:hover {
+    box-shadow:
+      0 0 0 2px theme('colors.sage'),
+      0 10px 20px -14px theme('colors.forest-900');
+  }
+  .clickable:active {
+    transform: scale(0.995);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .clickable {
+      @apply transition-none;
+    }
+    .clickable:active {
+      transform: none;
+    }
+  }
+}

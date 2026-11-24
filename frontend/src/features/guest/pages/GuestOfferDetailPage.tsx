@@ -29,26 +29,26 @@ export function GuestOfferDetailPage() {
   return (
     <>
       <PublicHeader minimal />
-      <main className="px-[60px] pb-12 pt-7">
+      <main className="px-4 pb-12 pt-6 sm:px-[60px] sm:pt-7">
         <Link to={ROUTES.guest.offers} className="whitespace-pre text-[13px] leading-4 text-muted hover:underline">
           {S.detail.back}
         </Link>
 
-        <div className="mt-[14px] flex items-start gap-10">
+        <div className="mt-[14px] flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-10">
           {error ? (
-            <div className="w-[820px]">
+            <div className="w-full lg:w-[820px]">
               <ErrorState error={error} onRetry={() => void refetch()} />
             </div>
           ) : isLoading || !offer ? (
-            <Skeleton className="h-[700px] w-[820px] rounded-panel" />
+            <Skeleton className="h-[420px] w-full rounded-panel sm:h-[700px] lg:w-[820px]" />
           ) : (
             <>
-              <article className="min-h-[700px] w-[820px] rounded-panel bg-mint px-6 pb-6 pt-[30px]">
+              <article className="min-h-[560px] w-full rounded-panel bg-mint px-4 pb-6 pt-[30px] sm:px-6 lg:w-[820px]">
                 <h1 className="text-[24px] font-bold leading-[29px] text-forest-900">{offer.title}</h1>
                 <p className="mt-[7px] text-[14px] leading-[17px] text-muted">
                   {company?.legal_name?.trim() || 'Company'}  •  {offer.location}
                 </p>
-                <div className="mt-[27px] w-[760px] space-y-0">
+                <div className="mt-[27px] w-full max-w-[760px] space-y-0">
                   <Section title={S.detail.description}>{offer.description}</Section>
                   <Section title={S.detail.skills}>{offer.requirements}</Section>
                   <Section title={S.detail.datesPlaces}>{`${places}  •  ${offer.location}`}</Section>
@@ -57,12 +57,12 @@ export function GuestOfferDetailPage() {
                 </div>
               </article>
 
-              <aside className="relative h-[300px] w-[460px] rounded-panel bg-mint px-[22px] pt-[26px]">
+              <aside className="flex min-h-[300px] w-full flex-col rounded-panel bg-mint px-[22px] pb-[26px] pt-[26px] lg:w-[460px]">
                 <h2 className="text-[16px] font-semibold leading-[19px] text-forest-900">{S.detail.applyTitle}</h2>
-                <p className="mt-[15px] w-[420px] text-[12px] leading-[15px] text-muted">{S.detail.applyBody}</p>
+                <p className="mt-[15px] text-[12px] leading-[15px] text-muted">{S.detail.applyBody}</p>
                 <Link
                   to={ROUTES.login}
-                  className="absolute left-[22px] top-[160px] flex h-11 w-[420px] items-center rounded-[10px] bg-pill-neutral-bg pl-32 text-[13px] font-medium text-muted hover:brightness-95"
+                  className="clickable mt-auto flex h-11 w-full max-w-[420px] items-center rounded-[10px] bg-pill-neutral-bg px-4 text-[13px] font-medium text-muted hover:brightness-95 sm:pl-32"
                 >
                   {S.detail.cta}
                 </Link>

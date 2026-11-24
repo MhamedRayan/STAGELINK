@@ -95,7 +95,7 @@ export function UniversityApplicationDetailPage() {
         <section className="mt-5 rounded-panel border border-line bg-mint p-5">
           <h2 className="text-[16px] font-semibold text-forest-900">{S.detail.decisionTitle}</h2>
           <p className="mt-2 max-w-[820px] text-[13px] leading-5 text-ink">{S.detail.decisionBody}</p>
-          <div className="mt-4 flex gap-3">
+          <div className="mt-4 flex flex-wrap gap-3">
             <Button onClick={() => void validate()} isLoading={decision.isPending}>
               {S.detail.validate}
             </Button>
@@ -104,26 +104,26 @@ export function UniversityApplicationDetailPage() {
         </section>
       )}
 
-      <div className="mt-5 grid grid-cols-2 gap-[42px]">
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2 lg:gap-[42px]">
         <section className="rounded-panel border border-line bg-mint p-5">
           <h2 className="text-[16px] font-semibold text-forest-900">{S.detail.studentBlock}</h2>
           <dl className="mt-4 space-y-3 text-[13px]">
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.common.student}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.common.student}</dt>
               <dd className="font-medium text-forest-900">{studentName}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.detail.id}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.detail.id}</dt>
               <dd className="text-forest-900">{shortId(data.student_user_id)}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.detail.proposedPeriod}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.detail.proposedPeriod}</dt>
               <dd className="text-forest-900">
                 {formatDate(data.start_date)} → {formatDate(data.end_date)}
               </dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.detail.appliedOn}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.detail.appliedOn}</dt>
               <dd className="text-forest-900">{formatDate(data.created_at)}</dd>
             </div>
           </dl>
@@ -136,15 +136,15 @@ export function UniversityApplicationDetailPage() {
           </p>
           <dl className="mt-3 space-y-3 text-[13px]">
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.common.company}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.common.company}</dt>
               <dd className="text-forest-900">{companyName}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.detail.location}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.detail.location}</dt>
               <dd className="text-forest-900">{offerData?.location?.trim() || S.common.notProvided}</dd>
             </div>
             <div className="flex gap-3">
-              <dt className="w-[130px] text-muted">{S.detail.places}</dt>
+              <dt className="w-[110px] shrink-0 text-muted sm:w-[130px]">{S.detail.places}</dt>
               <dd className="text-forest-900">{offerData?.capacity ?? '—'}</dd>
             </div>
           </dl>

@@ -49,7 +49,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   if (!open) return null;
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-forest-900/50"
+      className="fixed inset-0 z-40 flex items-center justify-center bg-forest-900/50 p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -59,7 +59,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-[460px] rounded-panel border border-line bg-mint p-6"
+        className="flex w-full max-w-[460px] flex-col rounded-panel border border-line bg-mint p-5 sm:p-6"
       >
         <h2 className="text-[18px] font-semibold leading-[22px] text-forest-900">{title}</h2>
         <div className="mt-5">{children}</div>

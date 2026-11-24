@@ -81,9 +81,20 @@ export function DataTable<T>({
             <tr
               key={getRowKey(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      event.preventDefault();
+                      onRowClick(row);
+                    }
+                  : undefined
+              }
+              tabIndex={onRowClick ? 0 : undefined}
               className={cn(
                 'text-table-body text-forest-900',
-                onRowClick && 'cursor-pointer hover:bg-line/30',
+                onRowClick &&
+                  'cursor-pointer hover:bg-line/40 focus-visible:bg-line/40 focus-visible:outline-none',
                 rowClassName,
               )}
             >

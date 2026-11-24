@@ -33,7 +33,7 @@ export function UniversitySupervisorsPage() {
         title={S.supervisors.title}
         subtitle={S.supervisors.subtitle}
         action={
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             <Input
               type="search"
               value={query}
@@ -43,7 +43,7 @@ export function UniversitySupervisorsPage() {
               }}
               placeholder={S.supervisors.searchPlaceholder}
               aria-label={S.supervisors.searchPlaceholder}
-              className="h-9 w-[240px] rounded-full text-[12px]"
+              className="h-9 w-full max-w-full rounded-full text-[12px] sm:w-[240px]"
             />
             <Button onClick={() => setCreateOpen(true)}>{S.supervisors.add}</Button>
           </div>

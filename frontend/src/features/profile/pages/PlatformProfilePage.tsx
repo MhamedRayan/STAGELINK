@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth } from '@/features/auth/AuthProvider';
+import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -32,7 +33,7 @@ export function PlatformProfilePage() {
   if (!user) {
     return (
       <>
-        <ProfileHeader title={S.platform.title} subtitle={S.platform.subtitle} />
+        <ProfileHeader title={S.platform.title} subtitle={S.platform.subtitle} action={<ProfileLogoutButton />} />
         <ProfileLoading />
       </>
     );
@@ -50,17 +51,17 @@ export function PlatformProfilePage() {
 
   return (
     <>
-      <ProfileHeader title={S.platform.title} subtitle={S.platform.subtitle} />
+      <ProfileHeader title={S.platform.title} subtitle={S.platform.subtitle} action={<ProfileLogoutButton />} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="h-[500px] w-[700px]">
+          <ProfileCard className="min-h-[500px] w-full pb-8 lg:w-[700px]">
             <CardTitle>{S.platform.account}</CardTitle>
             <div className="mt-[27px] space-y-2">
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
               <TextField label={S.platform.role} readOnly tabIndex={-1} value={S.platform.roleValue} className="text-muted" />
             </div>
-            <div className="absolute left-5 top-[310px] flex gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>

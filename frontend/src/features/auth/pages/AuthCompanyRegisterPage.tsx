@@ -66,8 +66,8 @@ export function AuthCompanyRegisterPage() {
   });
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas">
-      <div className="w-[840px] rounded-[20px] border border-line bg-mint px-20 pb-[127px] pt-[54px]">
+    <main className="flex min-h-screen items-start justify-center bg-canvas p-4 pb-12 sm:items-center sm:p-6">
+      <div className="w-full max-w-[840px] rounded-[20px] border border-line bg-mint px-5 pb-10 pt-8 sm:px-10 sm:pb-16 sm:pt-[54px] lg:px-20 lg:pb-[127px]">
         <div className="flex justify-center">
           <Logo size="md" />
         </div>
@@ -77,7 +77,7 @@ export function AuthCompanyRegisterPage() {
         <p className="mt-1.5 text-center text-[12px] leading-4 text-muted">{S.register.subtitle}</p>
 
         <form onSubmit={onSubmit} noValidate>
-          <div className="mt-[18px] grid grid-cols-2 gap-x-10 gap-y-[14px]">
+          <div className="mt-[18px] grid grid-cols-1 gap-x-10 gap-y-[14px] sm:grid-cols-2">
             <Field label={S.register.nameLabel} controlGap="md" error={errors.name?.message}>
               <Input
                 className="h-10 rounded-[8px] text-[13px]"
@@ -172,7 +172,7 @@ export function AuthCompanyRegisterPage() {
           <Button
             type="submit"
             isLoading={isSubmitting}
-            className="mx-auto flex h-11 w-[360px] rounded-xl text-[14px] font-medium"
+            className="mx-auto flex h-11 w-full max-w-[360px] rounded-xl text-[14px] font-medium"
           >
             {S.register.submit}
           </Button>

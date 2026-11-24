@@ -70,13 +70,6 @@ export const S = {
       submit: 'Create company account',
       note: 'The company account stays inactive until it is verified.',
     },
-    supervisor: {
-      title: 'Supervisor account',
-      name: 'Supervisor name',
-      email: 'Contact email',
-      submit: 'Create supervisor account',
-      note: 'The university assigns supervisors to students.',
-    },
     password: 'Initial password',
     generatePassword: 'Generate a one-time password',
     created: 'Account created.',

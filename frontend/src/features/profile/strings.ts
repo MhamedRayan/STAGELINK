@@ -11,6 +11,9 @@ export const S = {
     emailInvalid: 'Enter a valid email address',
     required: 'This field is required',
     loadFailed: 'Could not load your profile',
+    logout: 'Log out',
+    logoutTitle: 'Log out of STAGLINK?',
+    logoutConfirm: 'You will need to sign in again to access your account.',
   },
   student: {
     title: 'Profile',

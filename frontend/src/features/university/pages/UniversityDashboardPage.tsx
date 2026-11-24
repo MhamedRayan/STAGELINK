@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/app/routes';
 import {
   DataTable,
@@ -18,6 +18,7 @@ import { S } from '../strings';
 
 /** University Admin dashboard — Figma 28:2. */
 export function UniversityDashboardPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const dashboard = useUniversityDashboard();
 
@@ -33,7 +34,7 @@ export function UniversityDashboardPage() {
         </div>
       ) : dashboard.isLoading ? (
         <div className="mt-[26px] space-y-5">
-          <div className="grid grid-cols-4 gap-[13px]">
+          <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((item) => (
               <StatCard key={item} label="" value="" isLoading />
             ))}
@@ -42,26 +43,30 @@ export function UniversityDashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-[26px] grid grid-cols-4 gap-[13px]">
+          <div className="mt-[26px] grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label={S.dashboard.statStudents}
               value={dashboard.data?.studentCount ?? 0}
               hint={S.dashboard.statStudentsHint}
+              to={ROUTES.university.students}
             />
             <StatCard
               label={S.dashboard.statPending}
               value={dashboard.data?.pendingApplications.length ?? 0}
               hint={S.dashboard.statPendingHint}
+              to={ROUTES.university.applications}
             />
             <StatCard
               label={S.dashboard.statUnassigned}
               value={dashboard.data?.unassignedCount ?? 0}
               hint={S.dashboard.statUnassignedHint}
+              to={ROUTES.university.assignments}
             />
             <StatCard
               label={S.dashboard.statActive}
               value={dashboard.data?.activeCount ?? 0}
               hint={S.dashboard.statActiveHint}
+              to={ROUTES.university.internships}
             />
           </div>
 
@@ -124,6 +129,7 @@ export function UniversityDashboardPage() {
               ]}
               rows={dashboard.data?.pendingApplications ?? []}
               getRowKey={(row) => row.id}
+              onRowClick={(row) => navigate(ROUTES.university.applicationDetail(row.id))}
               emptyState={<EmptyState title={S.dashboard.panelTitle} message={S.dashboard.empty} />}
             />
           </section>

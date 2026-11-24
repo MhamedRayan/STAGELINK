@@ -69,7 +69,7 @@ export function UniversityCancellationsPage() {
           <EmptyState title={S.cancellations.title} message={S.cancellations.empty} />
         </div>
       ) : (
-        <div className="mt-6 grid grid-cols-[700px_380px] gap-[42px]">
+        <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-[42px]">
           <div className="min-w-0">
             <DataTable
               columns={[

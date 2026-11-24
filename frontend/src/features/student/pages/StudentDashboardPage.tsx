@@ -13,7 +13,7 @@ const ACTIVE = ['SUBMITTED', 'COMPANY_ACCEPTED', 'UNIVERSITY_VALIDATED'];
 
 function LoadingStats() {
   return (
-    <div className="grid grid-cols-4 gap-[13px]">
+    <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
       {[0, 1, 2, 3].map((key) => (
         <div key={key} className="h-[110px] rounded-[14px] bg-mint px-[18px] py-[18px]">
           <Skeleton className="h-3 w-24" />
@@ -71,23 +71,31 @@ export function StudentDashboardPage() {
         {isLoading ? (
           <LoadingStats />
         ) : (
-          <div className="grid grid-cols-4 gap-[13px]">
+          <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label={S.dashboard.activeApplications}
               value={rows.filter((row) => ACTIVE.includes(row.status)).length}
               hint={S.dashboard.activeHint}
+              to={ROUTES.student.applications}
             />
             <StatCard
               label={S.dashboard.awaitingDecision}
               value={rows.filter((row) => row.status === 'UNIVERSITY_VALIDATED').length}
               hint={rows.some((row) => row.status === 'UNIVERSITY_VALIDATED') ? S.dashboard.awaitingHint : S.dashboard.awaitingNone}
+              to={ROUTES.student.applications}
             />
             <StatCard
               label={S.dashboard.currentInternship}
               value={internshipLabel}
               hint={internship ? S.dashboard.internshipHint : S.dashboard.internshipNone}
+              to={ROUTES.student.internship}
             />
-            <StatCard label={S.dashboard.unreadNotifications} value={unreadCount} hint={S.dashboard.unreadHint} />
+            <StatCard
+              label={S.dashboard.unreadNotifications}
+              value={unreadCount}
+              hint={S.dashboard.unreadHint}
+              to={ROUTES.student.notifications}
+            />
           </div>
         )}
       </div>
@@ -105,6 +113,7 @@ export function StudentDashboardPage() {
           ]}
           rows={filtered}
           getRowKey={(row) => row.id}
+          onRowClick={(row) => navigate(ROUTES.student.applicationDetail(row.id))}
           isLoading={isLoading}
           rowClassName="h-[56px]"
           emptyState={
@@ -117,9 +126,9 @@ export function StudentDashboardPage() {
         <h3 className="mb-[20px] text-[16px] font-semibold leading-5 text-forest-900">
           {S.dashboard.quickActions}
         </h3>
-        <div className="flex gap-[20px]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-[20px]">
           <Button
-            className="h-[40px] w-[240px] rounded-[10px] text-[13px]"
+            className="h-[40px] w-full rounded-[10px] text-[13px] sm:w-[240px]"
             onClick={() => navigate(ROUTES.student.offers)}
           >
             <Briefcase aria-hidden="true" className="h-4 w-4" />
@@ -127,7 +136,7 @@ export function StudentDashboardPage() {
           </Button>
           <Button
             variant="secondary"
-            className="h-[40px] w-[240px] rounded-[10px] text-[13px]"
+            className="h-[40px] w-full rounded-[10px] text-[13px] sm:w-[240px]"
             onClick={() => navigate(ROUTES.student.applications)}
           >
             <FileText aria-hidden="true" className="h-4 w-4" />
@@ -135,7 +144,7 @@ export function StudentDashboardPage() {
           </Button>
           <Button
             variant="secondary"
-            className="h-[40px] w-[240px] rounded-[10px] text-[13px]"
+            className="h-[40px] w-full rounded-[10px] text-[13px] sm:w-[240px]"
             onClick={() => navigate(ROUTES.student.submission)}
           >
             <ClipboardCheck aria-hidden="true" className="h-4 w-4" />

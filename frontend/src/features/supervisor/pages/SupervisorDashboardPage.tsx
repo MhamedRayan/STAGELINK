@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/app/routes';
 import {
   DataTable,
@@ -24,6 +24,7 @@ const REVIEW_STATE = {
 
 /** Supervisor dashboard — Figma 27:2. */
 export function SupervisorDashboardPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const dashboard = useSupervisorDashboard();
   const name = user?.name?.trim() || S.dashboard.welcomeFallback;
@@ -38,7 +39,7 @@ export function SupervisorDashboardPage() {
         </div>
       ) : dashboard.isLoading ? (
         <div className="mt-[26px] space-y-5">
-          <div className="grid grid-cols-4 gap-[13px]">
+          <div className="grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((item) => (
               <StatCard key={item} label="" value="" isLoading />
             ))}
@@ -47,26 +48,30 @@ export function SupervisorDashboardPage() {
         </div>
       ) : (
         <>
-          <div className="mt-[26px] grid grid-cols-4 gap-[13px]">
+          <div className="mt-[26px] grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
             <StatCard
               label={S.dashboard.statStudents}
               value={dashboard.data?.studentCount ?? 0}
               hint={S.dashboard.statStudentsHint}
+              to={ROUTES.supervisor.students}
             />
             <StatCard
               label={S.dashboard.statActive}
               value={dashboard.data?.activeCount ?? 0}
               hint={S.dashboard.statActiveHint}
+              to={ROUTES.supervisor.students}
             />
             <StatCard
               label={S.dashboard.statReviews}
               value={dashboard.data?.pendingReviews ?? 0}
               hint={S.dashboard.statReviewsHint}
+              to={ROUTES.supervisor.students}
             />
             <StatCard
               label={S.dashboard.statEvaluations}
               value={dashboard.data?.evaluationsToComplete ?? 0}
               hint={S.dashboard.statEvaluationsHint}
+              to={ROUTES.supervisor.students}
             />
           </div>
 
@@ -132,6 +137,7 @@ export function SupervisorDashboardPage() {
               ]}
               rows={dashboard.data?.rows ?? []}
               getRowKey={(row) => row.internship.id}
+              onRowClick={(row) => navigate(ROUTES.supervisor.studentProfile(row.internship.id))}
               emptyState={<EmptyState title={S.dashboard.panelTitle} message={S.dashboard.empty} />}
             />
           </section>

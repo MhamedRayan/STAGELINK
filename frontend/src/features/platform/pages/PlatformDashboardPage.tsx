@@ -36,6 +36,7 @@ export function PlatformDashboardPage() {
       count: pendingCompanies.data?.total,
       isLoading: pendingCompanies.isLoading,
       isError: pendingCompanies.isError,
+      to: ROUTES.platform.companies,
     },
     {
       key: 'active',
@@ -43,6 +44,7 @@ export function PlatformDashboardPage() {
       count: activeCompanies.data,
       isLoading: activeCompanies.isLoading,
       isError: activeCompanies.isError,
+      to: ROUTES.platform.companies,
     },
     {
       key: 'universities',
@@ -50,6 +52,7 @@ export function PlatformDashboardPage() {
       count: universities.data,
       isLoading: universities.isLoading,
       isError: universities.isError,
+      to: ROUTES.platform.createAccounts,
     },
     {
       key: 'students',
@@ -57,6 +60,7 @@ export function PlatformDashboardPage() {
       count: students.data,
       isLoading: students.isLoading,
       isError: students.isError,
+      to: ROUTES.platform.createAccounts,
     },
   ];
 
@@ -70,7 +74,7 @@ export function PlatformDashboardPage() {
         {S.dashboard.welcome}, {user?.name ?? 'Platform Administrator'}
       </h2>
 
-      <div className="mt-[39px] grid grid-cols-2 gap-[13px] lg:grid-cols-4">
+      <div className="mt-[39px] grid grid-cols-1 gap-[13px] sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <StatCard
             key={stat.key}
@@ -78,6 +82,7 @@ export function PlatformDashboardPage() {
             hint={stat.hint}
             value={stat.isError ? '—' : (stat.count ?? 0)}
             isLoading={stat.isLoading}
+            to={stat.to}
           />
         ))}
       </div>
@@ -96,49 +101,51 @@ export function PlatformDashboardPage() {
               />
             </div>
           ) : (
-            <table className="mt-5 w-full border-collapse text-left">
-              <colgroup>
-                <col className="w-[25%]" />
-                <col className="w-[19.5%]" />
-                <col className="w-[22%]" />
-                <col />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-line text-[13px] font-medium text-muted">
-                  <th className="pb-[7px] font-medium">{S.dashboard.columns.company}</th>
-                  <th className="pb-[7px] font-medium">{S.dashboard.columns.location}</th>
-                  <th className="pb-[7px] font-medium">{S.dashboard.columns.legalName}</th>
-                  <th className="pb-[7px] font-medium">{S.dashboard.columns.status}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingCompanies.isLoading && <LoadingRows />}
-                {!pendingCompanies.isLoading && companies.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-16 text-center">
-                      <p className="text-table-body font-semibold text-forest-900">
-                        {S.dashboard.emptyTitle}
-                      </p>
-                      <p className="mt-1 text-[12px] text-muted">{S.dashboard.emptyMessage}</p>
-                    </td>
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[560px] border-collapse text-left">
+                <colgroup>
+                  <col className="w-[25%]" />
+                  <col className="w-[19.5%]" />
+                  <col className="w-[22%]" />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr className="border-b border-line text-[13px] font-medium text-muted">
+                    <th className="pb-[7px] font-medium">{S.dashboard.columns.company}</th>
+                    <th className="pb-[7px] font-medium">{S.dashboard.columns.location}</th>
+                    <th className="pb-[7px] font-medium">{S.dashboard.columns.legalName}</th>
+                    <th className="pb-[7px] font-medium">{S.dashboard.columns.status}</th>
                   </tr>
-                )}
-                {companies.map((company) => (
-                  <tr key={company.id}>
-                    <td className="h-14 text-table-body text-forest-900">{company.name}</td>
-                    <td className="h-14 text-table-body text-forest-900">
-                      <CompanyLocation company={company} />
-                    </td>
-                    <td className="h-14 text-table-body text-forest-900">
-                      {company.legal_name?.trim() || S.common.notProvided}
-                    </td>
-                    <td className="h-14">
-                      <StatusPill domain="verification" value={company.verification_status} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {pendingCompanies.isLoading && <LoadingRows />}
+                  {!pendingCompanies.isLoading && companies.length === 0 && (
+                    <tr>
+                      <td colSpan={4} className="py-16 text-center">
+                        <p className="text-table-body font-semibold text-forest-900">
+                          {S.dashboard.emptyTitle}
+                        </p>
+                        <p className="mt-1 text-[12px] text-muted">{S.dashboard.emptyMessage}</p>
+                      </td>
+                    </tr>
+                  )}
+                  {companies.map((company) => (
+                    <tr key={company.id}>
+                      <td className="h-14 text-table-body text-forest-900">{company.name}</td>
+                      <td className="h-14 text-table-body text-forest-900">
+                        <CompanyLocation company={company} />
+                      </td>
+                      <td className="h-14 text-table-body text-forest-900">
+                        {company.legal_name?.trim() || S.common.notProvided}
+                      </td>
+                      <td className="h-14">
+                        <StatusPill domain="verification" value={company.verification_status} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </section>
 
