@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import type { AdminUserCreateResponse } from '@/api/identity';
 import { Button, Field, Input, Modal, useToast } from '@/components/ui';
 import { normalizeError } from '@/lib/errors';
-import { useProvisionUniversityUser } from '../hooks';
+import { isUniversityScopeError, useProvisionUniversityUser } from '../hooks';
 import {
   provisionAccountSchema,
   type ProvisionAccountFormValues,
@@ -29,6 +29,7 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
   const toast = useToast();
   const create = useProvisionUniversityUser();
   const [created, setCreated] = useState<AdminUserCreateResponse | null>(null);
+  const [scopeError, setScopeError] = useState(false);
   const {
     register,
     handleSubmit,
@@ -45,6 +46,7 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
   useEffect(() => {
     if (!open) return;
     setCreated(null);
+    setScopeError(false);
     reset(DEFAULTS);
   }, [open, reset]);
 
@@ -62,9 +64,11 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
         ...(values.generatePassword ? {} : { password: values.password }),
       });
       toast.success(S.provision.created);
+      setScopeError(false);
       setCreated(result);
     } catch (error) {
       const apiError = normalizeError(error);
+      setScopeError(isUniversityScopeError(error));
       let fieldShown = false;
       for (const field of ['name', 'email', 'password'] as const) {
         const message = apiError.fieldErrors[field];
@@ -137,6 +141,14 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
         </div>
       ) : (
         <form id="provision-account-form" onSubmit={onSubmit} noValidate className="space-y-4">
+          {scopeError && (
+            <p
+              role="alert"
+              className="rounded-card border border-pill-danger-fg bg-pill-danger-bg px-3 py-2 text-[12px] leading-4 text-pill-danger-fg"
+            >
+              {S.common.universityScopeHint}
+            </p>
+          )}
           <Field label={S.provision.name} error={errors.name?.message}>
             <Input
               {...register('name')}

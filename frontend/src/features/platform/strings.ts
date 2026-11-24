@@ -50,6 +50,27 @@ export const S = {
     notProvided: 'Not provided',
     selectPrompt: 'Select a company to see its details.',
   },
+  universities: {
+    title: 'Universities',
+    subtitle: 'Registered university accounts and the institutions they manage.',
+    columns: {
+      account: 'University account',
+      institution: 'Institution',
+      email: 'Contact email',
+      status: 'Status',
+      action: 'Action',
+    },
+    active: 'Active',
+    inactive: 'Inactive',
+    empty: 'No university accounts found yet.',
+    editTitle: 'Edit university account',
+    editName: 'Account name',
+    editInstitution: 'Institution name',
+    institutionRequired: 'Enter the institution name.',
+    editHint:
+      'This institution name must match the one assigned to the university’s students and supervisors.',
+    saved: 'University account updated.',
+  },
   accounts: {
     title: 'Create Accounts',
     subtitle: 'Create university and company accounts.',
@@ -57,12 +78,12 @@ export const S = {
     emailRequired: 'Enter an email address.',
     emailInvalid: 'Enter a valid email address.',
     passwordMin: 'Use at least 8 characters.',
-    universityRequired: 'Enter the university this administrator belongs to.',
-    institutionName: 'University name',
     university: {
       title: 'University account',
-      name: 'Administrator name',
+      name: 'University name',
       email: 'Contact email',
+      institution: 'Institution name',
+      institutionHint: 'Students and supervisors created by this account inherit this institution.',
       submit: 'Create university account',
     },
     company: {
@@ -83,6 +104,7 @@ export const S = {
   common: {
     cancel: 'Cancel',
     close: 'Close',
+    edit: 'Edit',
     previous: 'Previous',
     next: 'Next',
     page: 'Page',

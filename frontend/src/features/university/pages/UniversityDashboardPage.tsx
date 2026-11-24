@@ -47,7 +47,10 @@ export function UniversityDashboardPage() {
             <StatCard
               label={S.dashboard.statStudents}
               value={dashboard.data?.studentCount ?? 0}
-              hint={S.dashboard.statStudentsHint}
+              hint={S.dashboard.statStudentsHint.replace(
+                '{count}',
+                String(dashboard.data?.activityStudentCount ?? 0),
+              )}
               to={ROUTES.university.students}
             />
             <StatCard

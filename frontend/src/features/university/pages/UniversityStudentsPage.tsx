@@ -16,7 +16,7 @@ import { getStatusInfo } from '@/lib/status';
 import { EditUniversityUserModal } from '../components/EditUniversityUserModal';
 import { ProvisionAccountModal } from '../components/ProvisionAccountModal';
 import { StudentMatriculeCell, StudentNameCell } from '../components/NameCells';
-import { useUniversityStudents } from '../hooks';
+import { isUniversityScopeError, useUniversityStudents } from '../hooks';
 import { S } from '../strings';
 
 /** University Students — Figma 28:184. Scoped Identity roster plus placement activity. */
@@ -27,6 +27,7 @@ export function UniversityStudentsPage() {
   const [editing, setEditing] = useState<AdminUserSummary | null>(null);
   const students = useUniversityStudents({ page, q: query });
   const details = useDirectoryUser(editing?.id);
+  const scopeError = isUniversityScopeError(students.error);
 
   return (
     <div className="max-w-content">
@@ -54,6 +55,15 @@ export function UniversityStudentsPage() {
       <p className="mt-4 rounded-card border border-line bg-mint px-4 py-3 text-[13px] text-ink">
         {S.students.note}
       </p>
+
+      {scopeError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-card border border-pill-danger-fg bg-pill-danger-bg px-4 py-3 text-[13px] text-pill-danger-fg"
+        >
+          {S.common.universityScopeHint}
+        </p>
+      )}
 
       <div className="mt-5">
         {students.isError ? (

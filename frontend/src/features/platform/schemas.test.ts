@@ -1,10 +1,12 @@
-import { provisionAccountSchema, universityAccountSchema } from './schemas';
+import { editUniversityAccountSchema, provisionAccountSchema } from './schemas';
 
 const base = {
   name: 'University of Algiers',
   email: 'contact@univ.dz',
   generatePassword: false,
   password: '',
+  role: 'university_admin' as const,
+  university: 'University of Algiers',
 };
 
 describe('platform schemas', () => {
@@ -23,12 +25,32 @@ describe('platform schemas', () => {
     expect(provisionAccountSchema.safeParse({ ...base, email: 'not-an-email' }).success).toBe(false);
   });
 
-  it('requires an institution for a university administrator', () => {
-    const admin = { ...base, generatePassword: true };
-    expect(universityAccountSchema.safeParse(admin).success).toBe(false);
-    expect(universityAccountSchema.safeParse({ ...admin, university: '  ' }).success).toBe(false);
+  it('requires an institution for university accounts but not for companies', () => {
+    expect(provisionAccountSchema.safeParse({ ...base, university: '' }).success).toBe(false);
     expect(
-      universityAccountSchema.safeParse({ ...admin, university: 'Demo University' }).success,
+      provisionAccountSchema.safeParse({
+        ...base,
+        role: 'company',
+        university: '',
+        generatePassword: true,
+      }).success,
+    ).toBe(true);
+  });
+
+  it('requires both a name and an institution when editing a university account', () => {
+    expect(
+      editUniversityAccountSchema.safeParse({ name: 'University of Algiers', university: '  ' })
+        .success,
+    ).toBe(false);
+    expect(
+      editUniversityAccountSchema.safeParse({ name: '  ', university: 'University of Algiers' })
+        .success,
+    ).toBe(false);
+    expect(
+      editUniversityAccountSchema.safeParse({
+        name: 'University of Algiers',
+        university: 'University of Algiers',
+      }).success,
     ).toBe(true);
   });
 });

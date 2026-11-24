@@ -31,6 +31,7 @@ import {
   type ListInternshipsParams,
 } from '@/api/internships';
 import { userKeys } from '@/features/directory/users';
+import { normalizeError } from '@/lib/errors';
 import {
   normalizeDrfPage,
   normalizeOffsetPage,
@@ -49,6 +50,12 @@ type InternshipActivity = Pick<
 
 const NO_STUDENT_ACTIVITY = new Map<string, UniversityStudentActivity>();
 const NO_SUPERVISOR_ACTIVITY = new Map<string, number>();
+
+/** Identity rejects scoped writes when the caller's own university is empty. */
+export function isUniversityScopeError(error: unknown): boolean {
+  const apiError = normalizeError(error);
+  return apiError.status === 403 && /no university assigned/i.test(apiError.message);
+}
 
 function useInvalidateUniversity() {
   const client = useQueryClient();
@@ -114,30 +121,43 @@ export function useUniversityInternships({ page, status }: UniversityInternshipP
 export interface UniversityDashboardData {
   pendingApplications: Application[];
   studentCount: number;
+  activityStudentCount: number;
   unassignedCount: number;
   activeCount: number;
 }
 
-/** Distinct student ids across applications and internships (design-plan §3.4 Δ). */
+/** Registered count drives the stat; activity is retained as supporting detail. */
+export function buildUniversityDashboard(
+  pendingApplications: Application[],
+  internships: Internship[],
+  registeredStudentCount: number,
+): UniversityDashboardData {
+  const studentsWithActivity = new Set<string>(
+    pendingApplications.map((item) => item.student_user_id),
+  );
+  internships.forEach((item) => studentsWithActivity.add(item.student_user_id));
+  const active = internships.filter(
+    (item) => item.status === 'confirmed' || item.status === 'in_progress',
+  );
+  return {
+    pendingApplications,
+    studentCount: registeredStudentCount,
+    activityStudentCount: studentsWithActivity.size,
+    unassignedCount: active.filter((item) => !item.supervisor_user_id).length,
+    activeCount: active.length,
+  };
+}
+
 export function useUniversityDashboard() {
   return useQuery<UniversityDashboardData>({
     queryKey: universityKeys.dashboard,
     queryFn: async () => {
-      const [pending, internships] = await Promise.all([
+      const [pending, allInternships, students] = await Promise.all([
         listApplications({ status: 'COMPANY_ACCEPTED', limit: AGGREGATE_LIMIT, offset: 0 }),
         listInternships({ limit: AGGREGATE_LIMIT, offset: 0 }),
+        listAdminUsers({ role: 'student', page: 1 }),
       ]);
-      const apps = pending.results;
-      const all = internships.results;
-      const students = new Set<string>(apps.map((item) => item.student_user_id));
-      all.forEach((item) => students.add(item.student_user_id));
-      const active = all.filter((item) => item.status === 'confirmed' || item.status === 'in_progress');
-      return {
-        pendingApplications: apps,
-        studentCount: students.size,
-        unassignedCount: active.filter((item) => !item.supervisor_user_id).length,
-        activeCount: active.length,
-      };
+      return buildUniversityDashboard(pending.results, allInternships.results, students.count);
     },
   });
 }

@@ -30,6 +30,8 @@ export const S = {
     active: 'Active',
     inactive: 'Inactive',
     edit: 'Edit',
+    universityScopeHint:
+      'Your university account has no institution assigned. Ask a platform administrator to set it in Universities.',
   },
   provision: {
     studentTitle: 'Add student',
@@ -64,8 +66,8 @@ export const S = {
     title: 'University Administration',
     welcome: 'Welcome, {name}. Validate placements, assign academic supervisors, and monitor student progress.',
     welcomeFallback: 'Administrator',
-    statStudents: 'Students with activity',
-    statStudentsHint: 'Participating in placements',
+    statStudents: 'Registered students',
+    statStudentsHint: '{count} with placement activity',
     statPending: 'Awaiting academic validation',
     statPendingHint: 'Company accepted',
     statUnassigned: 'Unassigned internships',

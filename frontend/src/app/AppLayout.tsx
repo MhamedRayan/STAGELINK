@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import {
   Bell,
   Briefcase,
+  Building2,
   CircleCheck,
   ClipboardCheck,
   FileText,
@@ -31,6 +32,7 @@ import { NAV_ITEMS } from './nav';
 const NAV_ICONS: Record<string, LucideIcon> = {
   Dashboard: LayoutGrid,
   'Company Verification': CircleCheck,
+  Universities: Building2,
   'Create Accounts': UserPlus,
   Profile: User,
   'Company Profile': User,

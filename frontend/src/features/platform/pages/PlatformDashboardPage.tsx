@@ -52,7 +52,7 @@ export function PlatformDashboardPage() {
       count: universities.data,
       isLoading: universities.isLoading,
       isError: universities.isError,
-      to: ROUTES.platform.createAccounts,
+      to: ROUTES.platform.universities,
     },
     {
       key: 'students',

@@ -15,7 +15,7 @@ import { PAGE_SIZE } from '@/lib/pagination';
 import { EditUniversityUserModal } from '../components/EditUniversityUserModal';
 import { ProvisionAccountModal } from '../components/ProvisionAccountModal';
 import { SupervisorDepartmentCell, SupervisorNameCell } from '../components/NameCells';
-import { useUniversitySupervisors } from '../hooks';
+import { isUniversityScopeError, useUniversitySupervisors } from '../hooks';
 import { S } from '../strings';
 
 /** University Supervisors — Figma 28:373. Scoped Identity roster plus assignment counts. */
@@ -26,6 +26,7 @@ export function UniversitySupervisorsPage() {
   const [editing, setEditing] = useState<AdminUserSummary | null>(null);
   const supervisors = useUniversitySupervisors({ page, q: query });
   const details = useDirectoryUser(editing?.id);
+  const scopeError = isUniversityScopeError(supervisors.error);
 
   return (
     <div className="max-w-content">
@@ -53,6 +54,15 @@ export function UniversitySupervisorsPage() {
       <p className="mt-4 rounded-card border border-line bg-mint px-4 py-3 text-[13px] text-ink">
         {S.supervisors.note}
       </p>
+
+      {scopeError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-card border border-pill-danger-fg bg-pill-danger-bg px-4 py-3 text-[13px] text-pill-danger-fg"
+        >
+          {S.common.universityScopeHint}
+        </p>
+      )}
 
       <div className="mt-5">
         {supervisors.isError ? (
