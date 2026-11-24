@@ -157,7 +157,7 @@ export function AppLayout({ role }: { role: Role }) {
         id="app-sidebar"
         aria-label="Main navigation"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto bg-forest-900 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:transition-[width]',
+          'fixed inset-y-0 left-0 z-40 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto bg-forest-900 transition-transform duration-200 lg:translate-x-0 lg:transition-[width]',
           isDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           isRail ? 'lg:w-[76px]' : 'lg:w-sidebar',
         )}
@@ -271,7 +271,7 @@ export function AppLayout({ role }: { role: Role }) {
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col lg:pl-sidebar">
         <div className="flex h-12 shrink-0 items-center gap-2 px-4 pt-1 sm:px-6 lg:px-8 xl:px-[42px]">
           <button
             type="button"
@@ -299,7 +299,12 @@ export function AppLayout({ role }: { role: Role }) {
           </button>
         </div>
 
-        <div className="min-w-0 flex-1 px-4 pb-10 sm:px-6 lg:px-8 xl:px-[42px] xl:pb-[42px]">
+        <div
+          className={cn(
+            'min-w-0 flex-1 px-4 pb-10 sm:px-6 lg:px-8 xl:px-[42px] xl:pb-[42px]',
+            isRail && 'lg:[&>div]:!max-w-[1284px]',
+          )}
+        >
           <Outlet />
         </div>
       </main>
