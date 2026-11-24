@@ -3,26 +3,16 @@ import { editUniversityAccountSchema, provisionAccountSchema } from './schemas';
 const base = {
   name: 'University of Algiers',
   email: 'contact@univ.dz',
-  generatePassword: false,
-  password: '',
+  password: 'longenough1',
   role: 'university_admin' as const,
   university: 'University of Algiers',
 };
 
 describe('platform schemas', () => {
-  it('requires a password of at least 8 characters when none is generated', () => {
-    expect(provisionAccountSchema.safeParse(base).success).toBe(false);
+  it('requires an initial password of at least 8 characters', () => {
+    expect(provisionAccountSchema.safeParse({ ...base, password: '' }).success).toBe(false);
     expect(provisionAccountSchema.safeParse({ ...base, password: 'short' }).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...base, password: 'longenough1' }).success).toBe(true);
-  });
-
-  it('accepts an empty password when one is generated', () => {
-    expect(provisionAccountSchema.safeParse({ ...base, generatePassword: true }).success).toBe(true);
-  });
-
-  it('rejects a missing name or a malformed email', () => {
-    expect(provisionAccountSchema.safeParse({ ...base, name: '  ' }).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...base, email: 'not-an-email' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse(base).success).toBe(true);
   });
 
   it('requires an institution for university accounts but not for companies', () => {
@@ -32,9 +22,14 @@ describe('platform schemas', () => {
         ...base,
         role: 'company',
         university: '',
-        generatePassword: true,
+        email: 'contact@company.dz',
       }).success,
     ).toBe(true);
+  });
+
+  it('rejects a missing name or a malformed email', () => {
+    expect(provisionAccountSchema.safeParse({ ...base, name: '  ' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...base, email: 'not-an-email' }).success).toBe(false);
   });
 
   it('requires both a name and an institution when editing a university account', () => {

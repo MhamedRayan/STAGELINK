@@ -3,20 +3,14 @@ import { editUniversityUserSchema, provisionAccountSchema } from './schemas';
 const account = {
   name: 'Amina Njeri',
   email: 'amina@example.com',
-  generatePassword: false,
-  password: '',
+  password: 'longenough1',
 };
 
 describe('university schemas', () => {
-  it('requires a password of at least 8 characters unless one is generated', () => {
-    expect(provisionAccountSchema.safeParse(account).success).toBe(false);
+  it('requires an explicit initial password of at least 8 characters', () => {
+    expect(provisionAccountSchema.safeParse({ ...account, password: '' }).success).toBe(false);
     expect(provisionAccountSchema.safeParse({ ...account, password: 'short' }).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...account, password: 'longenough1' }).success).toBe(
-      true,
-    );
-    expect(provisionAccountSchema.safeParse({ ...account, generatePassword: true }).success).toBe(
-      true,
-    );
+    expect(provisionAccountSchema.safeParse(account).success).toBe(true);
   });
 
   it('rejects a blank name or malformed email', () => {

@@ -11,17 +11,11 @@ const email = z
   .max(254)
   .email(S.common.emailInvalid);
 
-export const provisionAccountSchema = z
-  .object({
-    name: requiredText(),
-    email,
-    generatePassword: z.boolean(),
-    password: z.string().max(128),
-  })
-  .refine((values) => values.generatePassword || values.password.length >= 8, {
-    path: ['password'],
-    message: S.common.passwordMin,
-  });
+export const provisionAccountSchema = z.object({
+  name: requiredText(),
+  email,
+  password: z.string().min(8, S.common.passwordMin).max(128),
+});
 
 export type ProvisionAccountFormValues = z.infer<typeof provisionAccountSchema>;
 
