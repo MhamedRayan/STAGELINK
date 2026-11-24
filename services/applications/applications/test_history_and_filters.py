@@ -1,10 +1,12 @@
 import uuid
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from .identity_client import IdentityUnavailable
 from .models import ApplicationStatus
 from .roles import Role
 from .testing import (
@@ -22,8 +24,16 @@ class ApplicationListTests(TestCase):
         self.client = APIClient()
         self.student = DummyUser(STUDENT_ID, Role.STUDENT)
         self.other_student = DummyUser(OTHER_STUDENT_ID, Role.STUDENT)
-        self.university = DummyUser(UNIVERSITY_ID, Role.UNIVERSITY_ADMIN)
+        self.university = DummyUser(
+            UNIVERSITY_ID, Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
         self.offer_id = uuid.uuid4()
+        self.student_scope = patch(
+            'applications.views.list_student_ids_for_university',
+            return_value=[str(STUDENT_ID), str(OTHER_STUDENT_ID)],
+        )
+        self.student_scope.start()
+        self.addCleanup(self.student_scope.stop)
 
         self.own = make_application()
         self.submitted = make_application(offer_id=self.offer_id)
@@ -125,7 +135,15 @@ class ApplicationHistoryEndpointTests(TestCase):
         self.client = APIClient()
         self.student = DummyUser(STUDENT_ID, Role.STUDENT)
         self.other_student = DummyUser(OTHER_STUDENT_ID, Role.STUDENT)
-        self.university = DummyUser(UNIVERSITY_ID, Role.UNIVERSITY_ADMIN)
+        self.university = DummyUser(
+            UNIVERSITY_ID, Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
+        self.student_scope = patch(
+            'applications.views.list_student_ids_for_university',
+            return_value=[str(STUDENT_ID)],
+        )
+        self.student_scope.start()
+        self.addCleanup(self.student_scope.stop)
         self.application = make_application()
         self.application.history.create(
             from_status='',
@@ -173,3 +191,82 @@ class ApplicationHistoryEndpointTests(TestCase):
 
         self.assertEqual(len(response.data['results']), 1)
         self.assertEqual(response.data['pagination']['total'], 2)
+
+
+class UniversityScopeTests(TestCase):
+    """A university administrator only ever sees its own institution."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.offer_id = uuid.uuid4()
+        self.application = make_application(offer_id=self.offer_id)
+        self.other = make_application(student_user_id=OTHER_STUDENT_ID)
+
+    def _admin(self, university='Demo University'):
+        return DummyUser(UNIVERSITY_ID, Role.UNIVERSITY_ADMIN, university=university)
+
+    @patch(
+        'applications.views.list_student_ids_for_university',
+        return_value=[str(STUDENT_ID)],
+    )
+    def test_list_is_scoped_to_the_institution(self, mock_scope):
+        self.client.force_authenticate(user=self._admin())
+
+        response = self.client.get(reverse('application-list-create'))
+
+        self.assertEqual(
+            [row['id'] for row in response.data['results']],
+            [str(self.application.id)],
+        )
+        mock_scope.assert_called_once_with('Demo University')
+
+    def test_blank_university_sees_nothing_without_a_lookup(self):
+        self.client.force_authenticate(user=self._admin(university=' '))
+
+        with patch('applications.views.list_student_ids_for_university') as scope:
+            response = self.client.get(reverse('application-list-create'))
+
+        self.assertEqual(response.data['results'], [])
+        scope.assert_not_called()
+
+    @patch(
+        'applications.views.list_student_ids_for_university',
+        side_effect=IdentityUnavailable('down'),
+    )
+    def test_identity_outage_fails_closed(self, mock_scope):
+        self.client.force_authenticate(user=self._admin())
+
+        response = self.client.get(reverse('application-list-create'))
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertEqual(response.data['code'], 'IDENTITY_UNAVAILABLE')
+
+    @patch(
+        'applications.views.list_student_ids_for_university',
+        return_value=[str(STUDENT_ID)],
+    )
+    def test_other_institution_detail_is_not_found(self, mock_scope):
+        self.client.force_authenticate(user=self._admin())
+
+        response = self.client.get(
+            reverse('application-detail', kwargs={'pk': self.other.id})
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch(
+        'applications.views.list_student_ids_for_university',
+        return_value=[str(STUDENT_ID)],
+    )
+    def test_other_institution_decision_is_not_found(self, mock_scope):
+        self.other.status = ApplicationStatus.COMPANY_ACCEPTED
+        self.other.save(update_fields=['status'])
+        self.client.force_authenticate(user=self._admin())
+
+        response = self.client.post(
+            reverse('university-decision', kwargs={'pk': self.other.id}),
+            {'decision': 'ACCEPT'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

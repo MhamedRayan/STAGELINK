@@ -6,7 +6,13 @@ from rest_framework.test import APIClient
 from .models import CancellationRequest, CancellationStatus, Internship, InternshipAudit, InternshipAuditAction, InternshipStatus
 from .roles import Role
 from .services import create_internship
-from .testing_utils import TEST_JWT_KEY, make_internship, make_token, new_id
+from .testing_utils import (
+    TEST_JWT_KEY,
+    make_internship,
+    make_token,
+    new_id,
+    scope_all_students,
+)
 
 PAST = date(2000, 1, 1)
 
@@ -15,10 +21,13 @@ PAST = date(2000, 1, 1)
 class CancellationTestBase(TestCase):
     def setUp(self):
         self.api = APIClient()
+        scope_all_students(self)
         self.student = new_id()
         self.company = new_id()
         self.internship = make_internship(student=self.student, company=self.company, start=PAST)
-        self.admin = make_token(new_id(), Role.UNIVERSITY_ADMIN)
+        self.admin = make_token(
+            new_id(), Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
         self.student_token = make_token(self.student, Role.STUDENT)
         self.company_token = make_token(self.company, Role.COMPANY)
 

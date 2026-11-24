@@ -4,7 +4,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 
+from api.admin_scope import university_for_user
 from api.models import (
     CompanyProfile,
     PUBLIC_REGISTRATION_ROLES,
@@ -81,6 +84,30 @@ class UserLoginSerializer(serializers.Serializer):
 
         attrs["user"] = user
         return attrs
+
+
+class UniversityTokenRefreshSerializer(TokenRefreshSerializer):
+    """Rotate tokens and refresh the institution claim from Identity.
+
+    SimpleJWT copies the claims of the submitted refresh token. A university
+    administrator whose institution changed would otherwise keep the old scope
+    until their next login, so the claim is re-read from the role profile here.
+    """
+
+    def validate(self, attrs):
+        submitted = RefreshToken(attrs["refresh"])
+        data = super().validate(attrs)
+
+        user = User.objects.filter(pk=submitted["user_id"]).first()
+        if user is None:
+            return data
+
+        refreshed = RefreshToken(data["refresh"]) if data.get("refresh") else submitted
+        refreshed["university"] = university_for_user(user)
+        if data.get("refresh"):
+            data["refresh"] = str(refreshed)
+        data["access"] = str(refreshed.access_token)
+        return data
 
 
 class LogoutSerializer(serializers.Serializer):

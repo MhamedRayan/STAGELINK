@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from .models import Internship
 from .roles import Role
+from .testing_utils import scope_all_students
 
 TEST_KEY = "test-jwt-signing-key-with-enough-length-0123456789"
 LIST_URL = "/api/internships/"
@@ -20,11 +21,19 @@ OTHER_SUPERVISOR_ID = uuid.uuid4()
 ADMIN_ID = uuid.uuid4()
 
 
-def make_token(user_id=None, role=Role.STUDENT, ttl=timedelta(minutes=15), key=TEST_KEY, algorithm="HS256"):
+def make_token(
+    user_id=None,
+    role=Role.STUDENT,
+    ttl=timedelta(minutes=15),
+    key=TEST_KEY,
+    algorithm="HS256",
+    university="",
+):
     now = datetime.now(timezone.utc)
     payload = {
         "user_id": str(user_id if user_id is not None else STUDENT_ID),
         "role": role,
+        "university": university,
         "iat": now,
         "exp": now + ttl,
     }
@@ -35,6 +44,7 @@ def make_token(user_id=None, role=Role.STUDENT, ttl=timedelta(minutes=15), key=T
 class PublicInternshipApiTests(TestCase):
     def setUp(self):
         self.api = APIClient()
+        scope_all_students(self)
         self.own = Internship.objects.create(
             source_application_id=uuid.uuid4(),
             student_user_id=STUDENT_ID,
@@ -129,9 +139,14 @@ class PublicInternshipApiTests(TestCase):
 
         self.assertEqual([row["id"] for row in response.data["results"]], [str(self.own.pk)])
 
-    def test_university_administration_sees_all_internships(self):
+    def test_university_administration_sees_its_institution_internships(self):
         response = self._get(
-            LIST_URL, make_token(user_id=ADMIN_ID, role=Role.UNIVERSITY_ADMIN)
+            LIST_URL,
+            make_token(
+                user_id=ADMIN_ID,
+                role=Role.UNIVERSITY_ADMIN,
+                university="Demo University",
+            ),
         )
 
         self.assertEqual(len(response.data["results"]), 2)
@@ -174,7 +189,12 @@ class PublicInternshipApiTests(TestCase):
     def test_university_administration_can_open_any_internship(self):
         url = f"{LIST_URL}{self.other.pk}/"
         response = self._get(
-            url, make_token(user_id=ADMIN_ID, role=Role.UNIVERSITY_ADMIN)
+            url,
+            make_token(
+                user_id=ADMIN_ID,
+                role=Role.UNIVERSITY_ADMIN,
+                university="Demo University",
+            ),
         )
 
         self.assertEqual(response.status_code, 200)

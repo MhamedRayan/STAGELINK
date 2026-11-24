@@ -175,10 +175,6 @@ APPLICATIONS_TIMEOUT_SECONDS = env.float(
     "APPLICATIONS_TIMEOUT_SECONDS", default=5.0
 )
 
-# Identity's directory is the primary source for university-administrator
-# notification recipients. This UUID list is only an outage fallback.
-UNIVERSITY_ADMIN_USER_IDS = env.list("UNIVERSITY_ADMIN_USER_IDS", default=[])
-
 # JWT issued by the Identity & Profiles service. The signing key must match theirs.
 # The algorithm is fixed in code on purpose, not read from the environment, so it
 # cannot be weakened by configuration.

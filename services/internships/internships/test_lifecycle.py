@@ -10,7 +10,13 @@ from .lifecycle import ensure_transition_allowed
 from .models import InternshipAudit, InternshipAuditAction, InternshipStatus
 from .roles import Role
 from .services import complete_internship, start_due_internships, start_internship
-from .testing_utils import TEST_JWT_KEY, make_internship, make_token, new_id
+from .testing_utils import (
+    TEST_JWT_KEY,
+    make_internship,
+    make_token,
+    new_id,
+    scope_all_students,
+)
 
 PAST = date(2000, 1, 1)
 FUTURE = date(2999, 1, 1)
@@ -135,7 +141,10 @@ class CompletionTests(TestCase):
 class LifecycleEndpointTests(TestCase):
     def setUp(self):
         self.api = APIClient()
-        self.admin = make_token(new_id(), Role.UNIVERSITY_ADMIN)
+        scope_all_students(self)
+        self.admin = make_token(
+            new_id(), Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
 
     def _post(self, internship, action, token):
         return self.api.post(

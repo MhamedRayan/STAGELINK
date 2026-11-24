@@ -58,8 +58,12 @@ export interface paths {
          * List internships visible to the caller
          * @description Visibility is role-based: students see their own internships, companies
          *     see internships for their company, supervisors see assigned internships,
-         *     and university administrators see all internships. Platform administrators
-         *     see none. Filters only narrow the visible set; they never widen it.
+         *     university administrators see internships whose student belongs to their
+         *     own institution, and platform administrators see none. Filters only
+         *     narrow the visible set; they never widen it. The institution scope is
+         *     resolved from Identity and cached briefly; when Identity is unavailable
+         *     the request fails with `503 identity_unavailable` rather than widening
+         *     the result.
          */
         get: operations["listInternships"];
         put?: never;
@@ -82,7 +86,9 @@ export interface paths {
         };
         /**
          * Read an internship
-         * @description Internships outside the caller's visibility return `404`.
+         * @description Internships outside the caller's visibility return `404`. University
+         *     administrators therefore cannot read an internship from another
+         *     institution, even by guessing its ID.
          */
         get: operations["getInternship"];
         put?: never;
@@ -108,10 +114,13 @@ export interface paths {
         /**
          * Assign or reassign the supervisor of an internship
          * @description Restricted to university administration. The supervisor is verified with
-         *     the Identity directory: the user must exist, be active and have role
-         *     `supervisor`. The internship must be `confirmed` or `in_progress`.
-         *     Reassigning requires a reason. Assigning the same supervisor again changes
-         *     nothing. Every change is recorded in the history.
+         *     the Identity directory: the user must exist, be active, have role
+         *     `supervisor`, and belong to the caller's institution. A supervisor from
+         *     another institution is rejected as an invalid supervisor. The internship
+         *     must belong to a student of the caller's institution and be `confirmed`
+         *     or `in_progress`. Reassigning requires a reason. Assigning the same
+         *     supervisor again changes nothing. Every change is recorded in the
+         *     history.
          */
         post: operations["assignSupervisor"];
         delete?: never;
@@ -772,6 +781,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     getInternship: {
@@ -797,6 +807,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["ServiceUnavailable"];
         };
     };
     assignSupervisor: {

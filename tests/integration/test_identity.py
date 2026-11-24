@@ -172,6 +172,7 @@ class IdentityAccountLifecycleTests(RealAccountTestCase):
             role=ROLE_STUDENT,
             email=email,
             name="Lifecycle Student",
+            university=f"Lifecycle University {uuid.uuid4().hex[:8]}",
         )
         self.assertEqual(profile["role"], ROLE_STUDENT)
         self.assertTrue(profile["is_active"])
@@ -393,6 +394,7 @@ class FullDemoFlowTests(RealAccountTestCase):
         student_email = unique_email("student.flow")
         university_email = unique_email("university.flow")
         supervisor_email = unique_email("supervisor.flow")
+        flow_university = "Integration Flow University"
 
         company = self.register(ROLE_COMPANY, company_email, "Flow Company")
         self.assert_status(
@@ -411,6 +413,7 @@ class FullDemoFlowTests(RealAccountTestCase):
             role=ROLE_UNIVERSITY_ADMIN,
             email=university_email,
             name="Flow University Admin",
+            university=flow_university,
         )
         university_tokens = self.login(university_email)
         university_headers = auth_headers(university_tokens["access"])
@@ -420,6 +423,7 @@ class FullDemoFlowTests(RealAccountTestCase):
             role=ROLE_SUPERVISOR,
             email=supervisor_email,
             name="Flow Supervisor",
+            university=flow_university,
         )
         supervisor_tokens = self.login(supervisor_email)
         supervisor_headers = auth_headers(supervisor_tokens["access"])
@@ -457,6 +461,7 @@ class FullDemoFlowTests(RealAccountTestCase):
             role=ROLE_STUDENT,
             email=student_email,
             name="Flow Student",
+            university=flow_university,
         )
         student_tokens = self.login(student_email)
         student_headers = auth_headers(student_tokens["access"])

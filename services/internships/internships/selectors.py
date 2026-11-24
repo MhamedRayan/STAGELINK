@@ -1,3 +1,4 @@
+from .identity_client import list_student_ids_for_university
 from .models import Internship
 from .roles import Role
 
@@ -25,7 +26,12 @@ def visible_internships_for(actor):
         return Internship.objects.filter(supervisor_user_id=actor.user_id)
 
     if actor.role == Role.UNIVERSITY_ADMIN:
-        return Internship.objects.all()
+        university = (getattr(actor, "university", "") or "").strip()
+        if not university:
+            # A blank institution is never a global scope.
+            return Internship.objects.none()
+        student_ids = list_student_ids_for_university(university)
+        return Internship.objects.filter(student_user_id__in=student_ids)
 
     # Platform Administrator, and any role not listed above, sees nothing.
     return Internship.objects.none()

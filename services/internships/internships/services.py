@@ -234,19 +234,36 @@ def complete_internship(internship, *, actor_user_id):
         )
 
 
-def assign_supervisor(internship, *, supervisor_user_id, actor_user_id, reason=""):
+def assign_supervisor(
+    internship,
+    *,
+    supervisor_user_id,
+    actor_user_id,
+    reason="",
+    actor_university=None,
+):
     """
     Assign or reassign the supervisor of a Confirmed or In progress internship.
 
     The supervisor is checked with the Identity service before any database
     lock is taken, so no transaction is held open during an HTTP call.
     Re-assigning requires a reason. Assigning the same supervisor again changes nothing.
+
+    When ``actor_university`` is supplied (the university-administrator path),
+    the supervisor must belong to the same institution. A mismatch is reported
+    as an invalid supervisor so another institution's accounts are not exposed.
     """
     reason = (reason or "").strip()
 
     user = fetch_identity_user(supervisor_user_id)
     if user is None or user.get("role") != Role.SUPERVISOR or not user.get("is_active"):
         raise InvalidSupervisor()
+
+    if actor_university is not None:
+        expected = str(actor_university).strip().casefold()
+        actual = str(user.get("university") or "").strip().casefold()
+        if not expected or actual != expected:
+            raise InvalidSupervisor()
 
     with transaction.atomic():
         locked = Internship.objects.select_for_update().get(pk=internship.pk)

@@ -15,6 +15,7 @@ from .testing_utils import (
     make_submission,
     make_token,
     new_id,
+    scope_all_students,
 )
 
 PAST = date(2000, 1, 1)
@@ -24,6 +25,7 @@ PAST = date(2000, 1, 1)
 class SubmissionApiTests(TemporaryMediaMixin, TestCase):
     def setUp(self):
         self.api = APIClient()
+        scope_all_students(self)
         self.student = new_id()
         self.company = new_id()
         self.supervisor = new_id()
@@ -38,7 +40,9 @@ class SubmissionApiTests(TemporaryMediaMixin, TestCase):
         self.student_token = make_token(self.student, Role.STUDENT)
         self.company_token = make_token(self.company, Role.COMPANY)
         self.supervisor_token = make_token(self.supervisor, Role.SUPERVISOR)
-        self.admin_token = make_token(self.admin, Role.UNIVERSITY_ADMIN)
+        self.admin_token = make_token(
+            self.admin, Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
 
     def _url(self, suffix=""):
         return f"/api/internships/{self.internship.pk}/submissions/{suffix}"

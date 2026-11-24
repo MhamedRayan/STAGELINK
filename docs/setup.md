@@ -89,11 +89,18 @@ curl -s -X POST http://localhost:8001/api/admin/users/ \
 ```
 
 `POST /api/admin/users/` accepts either `password` or `generate_password: true`;
-a generated password is returned **once** as `one_time_password`. The same
+a generated password is returned **once** as `one_time_password`. A non-blank
+`university` is required for `student`, `supervisor` and `university_admin`
+accounts, so every scoped account has an institution from the start. The same
 endpoint supports `GET /api/admin/users/` (`role`, `q`, `university`, `page`)
 and `PATCH /api/admin/users/{id}/` for name, email, profile fields and
 activation. Platform admin may also verify/reject companies via
 `POST /api/admin/companies/{id}/verify/` and `/reject/`.
+
+Access and refresh tokens carry a `university` claim. Applications and
+Internships use it to scope university-administrator reads and decisions to
+students of the caller's institution; a blank claim yields an empty result, and
+an Identity outage returns `503` rather than widening the scope.
 
 Any signed-in user can resolve the UUIDs carried by applications and
 internships:

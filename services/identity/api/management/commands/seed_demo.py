@@ -675,6 +675,7 @@ class Command(BaseCommand):
         refresh = RefreshToken.for_user(company)
         refresh["email"] = company.email
         refresh["role"] = company.role
+        refresh["university"] = ""
         return str(refresh.access_token)
 
     @staticmethod

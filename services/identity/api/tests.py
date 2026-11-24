@@ -9,6 +9,7 @@ from api.models import (
     CompanyProfile,
     StudentProfile,
     SupervisorProfile,
+    UniversityAdminProfile,
     User,
     UserRole,
 )
@@ -128,6 +129,41 @@ class IdentityApiTests(APITestCase):
         access_token = AccessToken(response.data["access"])
         self.assertEqual(access_token["role"], UserRole.STUDENT)
         self.assertEqual(access_token["email"], self.student.email)
+        self.assertEqual(access_token["university"], "")
+
+    def test_refresh_reloads_the_university_claim_from_the_profile(self):
+        admin = User.objects.create_user(
+            email="claim-admin@example.edu",
+            password="ClaimAdminStrongPassword!2026",
+            name="Claim Admin",
+            role=UserRole.UNIVERSITY_ADMIN,
+        )
+        UniversityAdminProfile.objects.filter(user=admin).update(
+            university="First University"
+        )
+        login = self.client.post(
+            reverse("auth-login"),
+            {
+                "email": admin.email,
+                "password": "ClaimAdminStrongPassword!2026",
+            },
+            format="json",
+        )
+        self.assertEqual(AccessToken(login.data["access"])["university"], "First University")
+
+        UniversityAdminProfile.objects.filter(user=admin).update(
+            university="Second University"
+        )
+        refresh = self.client.post(
+            reverse("auth-refresh"),
+            {"refresh": login.data["refresh"]},
+            format="json",
+        )
+
+        self.assertEqual(refresh.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            AccessToken(refresh.data["access"])["university"], "Second University"
+        )
 
     def test_login_rejects_inactive_company(self):
         User.objects.create_user(
@@ -610,6 +646,7 @@ class IdentityApiTests(APITestCase):
                 "name": "Supervisor One",
                 "role": UserRole.SUPERVISOR,
                 "password": "SecureSupervisorPhrase!2026",
+                "university": "Example University",
             },
             format="json",
         )
@@ -759,12 +796,22 @@ class IdentityApiTests(APITestCase):
             name="Directory Supervisor",
             role=UserRole.SUPERVISOR,
         )
-        SupervisorProfile.objects.filter(user=supervisor).update(department="CS-01")
+        SupervisorProfile.objects.filter(user=supervisor).update(
+            department="CS-01", university="Scope University"
+        )
         self.client.credentials(HTTP_X_SERVICE_TOKEN=TEST_SERVICE_TOKEN)
 
         filtered = self.client.get(
             reverse("internal-user-directory"),
             {"role": UserRole.SUPERVISOR, "department": "CS-01", "page": 1},
+        )
+        by_university = self.client.get(
+            reverse("internal-user-directory"),
+            {"role": UserRole.SUPERVISOR, "university": "scope university"},
+        )
+        blank_university = self.client.get(
+            reverse("internal-user-directory"),
+            {"role": UserRole.SUPERVISOR, "university": " "},
         )
         batch = self.client.get(
             reverse("internal-user-directory"),
@@ -777,7 +824,14 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(filtered.status_code, status.HTTP_200_OK)
         self.assertEqual(filtered.data["count"], 1)
         self.assertEqual(filtered.data["results"][0]["id"], str(supervisor.id))
+        self.assertEqual(filtered.data["results"][0]["university"], "Scope University")
         self.assertNotIn("is_active", filtered.data["results"][0])
+        self.assertEqual(by_university.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [item["id"] for item in by_university.data["results"]],
+            [str(supervisor.id)],
+        )
+        self.assertEqual(blank_university.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(batch.status_code, status.HTTP_200_OK)
         self.assertEqual(
             [item["id"] for item in batch.data["results"]],
@@ -785,7 +839,7 @@ class IdentityApiTests(APITestCase):
         )
         self.assertEqual(
             set(batch.data["results"][0]),
-            {"id", "name"},
+            {"id", "name", "role", "university"},
         )
         self.assertEqual(unknown_role.status_code, status.HTTP_400_BAD_REQUEST)
 
@@ -813,7 +867,14 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(batch.status_code, status.HTTP_200_OK)
         self.assertEqual(
             batch.data["results"],
-            [{"id": str(inactive.id), "name": "Inactive Admin"}],
+            [
+                {
+                    "id": str(inactive.id),
+                    "name": "Inactive Admin",
+                    "role": UserRole.UNIVERSITY_ADMIN,
+                    "university": "",
+                }
+            ],
         )
 
     def test_internal_directory_rejects_bad_token_and_more_than_100_ids(self):

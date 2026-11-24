@@ -19,14 +19,19 @@ def normalise_university(value):
     return (value or "").strip().casefold()
 
 
+def university_for_user(user):
+    """Return the institution stored on a role profile, or an empty string."""
+    profile = ensure_role_profile(user)
+    return (getattr(profile, "university", "") or "").strip()
+
+
 def admin_university(admin):
     """Return the caller's trimmed university text, or None for other roles."""
     if admin is None or not getattr(admin, "is_authenticated", False):
         return None
     if admin.role != UserRole.UNIVERSITY_ADMIN:
         return None
-    profile = ensure_role_profile(admin)
-    return (profile.university or "").strip()
+    return university_for_user(admin)
 
 
 def scope_admin_users(admin, queryset):

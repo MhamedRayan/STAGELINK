@@ -1,4 +1,4 @@
-import { provisionAccountSchema } from './schemas';
+import { provisionAccountSchema, universityAccountSchema } from './schemas';
 
 const base = {
   name: 'University of Algiers',
@@ -21,5 +21,14 @@ describe('platform schemas', () => {
   it('rejects a missing name or a malformed email', () => {
     expect(provisionAccountSchema.safeParse({ ...base, name: '  ' }).success).toBe(false);
     expect(provisionAccountSchema.safeParse({ ...base, email: 'not-an-email' }).success).toBe(false);
+  });
+
+  it('requires an institution for a university administrator', () => {
+    const admin = { ...base, generatePassword: true };
+    expect(universityAccountSchema.safeParse(admin).success).toBe(false);
+    expect(universityAccountSchema.safeParse({ ...admin, university: '  ' }).success).toBe(false);
+    expect(
+      universityAccountSchema.safeParse({ ...admin, university: 'Demo University' }).success,
+    ).toBe(true);
   });
 });

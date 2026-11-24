@@ -19,6 +19,7 @@ class AuthenticatedUser:
 
     id: uuid.UUID
     role: str
+    university: str = ""
 
     @property
     def is_authenticated(self):
@@ -87,4 +88,12 @@ class IdentityJWTAuthentication(BaseAuthentication):
         except (TypeError, ValueError, AttributeError):
             raise AuthenticationFailed("Invalid user id.")
 
-        return AuthenticatedUser(id=user_id, role=role)
+        university = payload.get("university")
+        if university is not None and not isinstance(university, str):
+            raise AuthenticationFailed("Invalid university claim.")
+
+        return AuthenticatedUser(
+            id=user_id,
+            role=role,
+            university=(university or "").strip(),
+        )

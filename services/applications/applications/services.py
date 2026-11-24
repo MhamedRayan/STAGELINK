@@ -266,25 +266,29 @@ def offer_application_counts(offer_id):
 def _resolve_university_admins(application):
     """Resolve university-administrator recipients after commit.
 
-    The Identity directory is authoritative. When it is unavailable, fall back
-    to the configured UUID list so notifications keep flowing during an outage.
-    The administrator recorded on the application is always included.
+    Notifications are tenant-scoped: only administrators of the student's own
+    institution are returned. The Identity directory is authoritative. When it
+    is unavailable, the notification is skipped rather than broadcast to every
+    university, which would cross tenant boundaries.
     """
 
-    recorded = set()
-    if application.university_user_id:
-        recorded.add(str(application.university_user_id))
-
+    student_id = str(application.student_user_id)
     try:
-        directory = set(identity_client.list_university_admin_ids())
+        universities = identity_client.user_universities([student_id])
+        university = universities.get(student_id, "")
+        if not university:
+            logger.warning(
+                "Student %s has no institution; skipping university-admin notification.",
+                student_id,
+            )
+            return []
+        return identity_client.list_university_admin_ids(university)
     except identity_client.IdentityUnavailable as exc:
         logger.warning(
-            "Identity directory unavailable; using configured university admins: %s",
+            "Identity directory unavailable; skipping university-admin notification: %s",
             exc,
         )
-        directory = {str(value) for value in settings.UNIVERSITY_ADMIN_USER_IDS or []}
-
-    return sorted(directory | recorded)
+        return []
 
 
 def _notify(*, app, recipient_user_id, notification_type, title, message, event):

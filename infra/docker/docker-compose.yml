@@ -137,10 +137,9 @@ services:
       OFFERS_SERVICE_URL: "http://offers:8000/api/internal/offers/"
       # Notifications are best effort and sent after commit.
       NOTIFICATIONS_BASE_URL: "http://notifications:8000"
-      # University-administrator recipients are resolved from the Identity
-      # directory after commit; the env list is only an outage fallback.
+      # University-administrator recipients are resolved per institution from
+      # the Identity directory after commit.
       IDENTITY_BASE_URL: "http://identity:8000"
-      UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
     depends_on:
       db-applications:
         condition: service_healthy
@@ -178,7 +177,6 @@ services:
       OFFERS_SERVICE_URL: "http://offers:8000/api/internal/offers/"
       NOTIFICATIONS_BASE_URL: "http://notifications:8000"
       IDENTITY_BASE_URL: "http://identity:8000"
-      UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
     depends_on:
       db-applications:
         condition: service_healthy
@@ -202,9 +200,7 @@ services:
       MAX_SUBMISSION_SIZE_BYTES: "${MAX_SUBMISSION_SIZE_BYTES:-10485760}"
       NOTIFICATIONS_BASE_URL: "http://notifications:8000"
       APPLICATIONS_BASE_URL: "http://applications:8000"
-      # Recipients are resolved from Identity after commit; the env list is
-      # only an outage fallback.
-      UNIVERSITY_ADMIN_USER_IDS: "${UNIVERSITY_ADMIN_USER_IDS:-}"
+      # Recipients are resolved per institution from Identity after commit.
     volumes:
       - internships-media:/app/media
     depends_on:

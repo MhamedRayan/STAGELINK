@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .errors import BusinessError, IDENTITY_UNAVAILABLE, NOT_FOUND
+from .identity_client import IdentityUnavailable, list_student_ids_for_university
 from .models import Application, ApplicationStatusHistory
 from .permissions import (
     IsApplicationParticipant,
@@ -52,7 +54,21 @@ def visible_applications_for(user):
         return Application.objects.filter(student_user_id=user_id)
     if role == Role.COMPANY:
         return Application.objects.filter(company_user_id=user_id)
-    if role in (Role.UNIVERSITY_ADMIN, Role.PLATFORM_ADMIN):
+    if role == Role.UNIVERSITY_ADMIN:
+        university = (getattr(user, "university", "") or "").strip()
+        if not university:
+            # A blank scope is never a global scope.
+            return Application.objects.none()
+        try:
+            student_ids = list_student_ids_for_university(university)
+        except IdentityUnavailable as exc:
+            raise BusinessError(
+                IDENTITY_UNAVAILABLE,
+                "The identity service is unavailable. Try again later.",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            ) from exc
+        return Application.objects.filter(student_user_id__in=student_ids)
+    if role == Role.PLATFORM_ADMIN:
         return Application.objects.all()
     return Application.objects.none()
 
@@ -189,8 +205,16 @@ class UniversityDecisionView(APIView):
         serializer = UniversityDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
+        application = visible_applications_for(request.user).filter(pk=pk).first()
+        if application is None:
+            raise BusinessError(
+                NOT_FOUND,
+                "Application not found.",
+                status_code=status.HTTP_404_NOT_FOUND,
+            )
+
         application = decide_as_university(
-            application_id=pk,
+            application_id=application.id,
             university_user_id=request.user.id,
             decision=serializer.validated_data['decision'],
             reason=serializer.validated_data.get('reason', ''),

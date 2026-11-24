@@ -30,6 +30,8 @@ from datetime import date, datetime, timedelta, timezone
 import jwt
 import requests
 
+from integration_accounts import create_flow_accounts
+
 DEFAULT_IDENTITY_BASE_URL = "http://localhost:8001"
 DEFAULT_OFFERS_BASE_URL = "http://localhost:8002"
 DEFAULT_APPLICATIONS_BASE_URL = "http://localhost:8003"
@@ -240,19 +242,16 @@ class ApplicationNotificationIntegrationTests(unittest.TestCase):
         )
 
     def setUp(self):
-        self.student_id = uuid.uuid4()
-        self.company_id = uuid.uuid4()
-        self.university_id = uuid.uuid4()
+        # The university decision and admin notifications are tenant-scoped, so
+        # these principals must be real accounts from one institution.
+        accounts = create_flow_accounts()
+        self.student_id = accounts["student_id"]
+        self.company_id = accounts["company_id"]
+        self.university_id = accounts["university_id"]
 
-        self.student_headers = auth_headers(
-            make_token(self.student_id, ROLE_STUDENT)
-        )
-        self.company_headers = auth_headers(
-            make_token(self.company_id, ROLE_COMPANY)
-        )
-        self.university_headers = auth_headers(
-            make_token(self.university_id, ROLE_UNIVERSITY_ADMIN)
-        )
+        self.student_headers = accounts["student_headers"]
+        self.company_headers = accounts["company_headers"]
+        self.university_headers = accounts["university_headers"]
 
         self.start_date = (date.today() + timedelta(days=30)).isoformat()
         self.end_date = (date.today() + timedelta(days=120)).isoformat()

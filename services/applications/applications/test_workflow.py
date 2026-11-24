@@ -31,7 +31,15 @@ class WorkflowTests(TestCase):
         self.client = APIClient()
         self.company = DummyUser(COMPANY_ID, Role.COMPANY)
         self.student = DummyUser(STUDENT_ID, Role.STUDENT)
-        self.university = DummyUser(UNIVERSITY_ID, Role.UNIVERSITY_ADMIN)
+        self.university = DummyUser(
+            UNIVERSITY_ID, Role.UNIVERSITY_ADMIN, university="Demo University"
+        )
+        self.student_scope = patch(
+            'applications.views.list_student_ids_for_university',
+            return_value=[str(STUDENT_ID), str(OTHER_STUDENT_ID)],
+        )
+        self.student_scope.start()
+        self.addCleanup(self.student_scope.stop)
         self.offer = make_offer(capacity=2)
         self.offer_id = uuid.UUID(self.offer['id'])
         self.application = make_application(offer_id=self.offer_id)
