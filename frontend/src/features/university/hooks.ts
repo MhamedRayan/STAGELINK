@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   listApplications,
@@ -10,6 +11,15 @@ import {
   type ListApplicationsParams,
 } from '@/api/applications';
 import {
+  createAdminUser,
+  listAdminUsers,
+  updateAdminUser,
+  type AdminUserCreateRequest,
+  type AdminUserCreateResponse,
+  type AdminUserSummary,
+  type AdminUserUpdateRequest,
+} from '@/api/identity';
+import {
   approveCancellationRequest,
   assignSupervisor,
   listCancellationRequests,
@@ -19,11 +29,25 @@ import {
   type Internship,
   type ListInternshipsParams,
 } from '@/api/internships';
-import { demoDirectoryUsers } from '@/features/directory/users';
-import { normalizeOffsetPage, pageToOffset } from '@/lib/pagination';
+import { userKeys } from '@/features/directory/users';
+import {
+  normalizeDrfPage,
+  normalizeOffsetPage,
+  pageToOffset,
+  PAGE_SIZE,
+} from '@/lib/pagination';
 import { universityKeys } from './keys';
 
 const AGGREGATE_LIMIT = 100;
+
+type ApplicationActivity = Pick<Application, 'student_user_id'>;
+type InternshipActivity = Pick<
+  Internship,
+  'student_user_id' | 'status' | 'supervisor_user_id'
+>;
+
+const NO_STUDENT_ACTIVITY = new Map<string, UniversityStudentActivity>();
+const NO_SUPERVISOR_ACTIVITY = new Map<string, number>();
 
 function useInvalidateUniversity() {
   const client = useQueryClient();
@@ -117,75 +141,204 @@ export function useUniversityDashboard() {
   });
 }
 
-export interface UniversityStudentRow {
-  userId: string;
+export interface UniversityRosterParams {
+  page: number;
+  q?: string;
+}
+
+export interface UniversityStudentActivity {
   applicationsCount: number;
   internshipStatus?: Internship['status'];
 }
 
-export function useUniversityStudents() {
-  return useQuery<UniversityStudentRow[]>({
-    queryKey: universityKeys.students,
+export interface UniversityStudentRow {
+  user: AdminUserSummary;
+  applicationsCount: number;
+  internshipStatus?: Internship['status'];
+}
+
+export function buildStudentActivity(
+  applications: ApplicationActivity[],
+  internships: InternshipActivity[],
+): Map<string, UniversityStudentActivity> {
+  const byStudent = new Map<string, UniversityStudentActivity>();
+  for (const item of applications) {
+    const row = byStudent.get(item.student_user_id) ?? { applicationsCount: 0 };
+    row.applicationsCount += 1;
+    byStudent.set(item.student_user_id, row);
+  }
+  for (const item of internships) {
+    const row = byStudent.get(item.student_user_id) ?? { applicationsCount: 0 };
+    row.internshipStatus = item.status;
+    byStudent.set(item.student_user_id, row);
+  }
+  return byStudent;
+}
+
+export function mergeStudentRows(
+  users: AdminUserSummary[],
+  activity: Map<string, UniversityStudentActivity>,
+): UniversityStudentRow[] {
+  return users.map((user) => {
+    const stats = activity.get(user.id);
+    return {
+      user,
+      applicationsCount: stats?.applicationsCount ?? 0,
+      internshipStatus: stats?.internshipStatus,
+    };
+  });
+}
+
+export function useUniversityStudentRoster({ page, q }: UniversityRosterParams) {
+  return useQuery({
+    queryKey: universityKeys.studentRoster(page, q?.trim() ?? ''),
+    queryFn: async () =>
+      normalizeDrfPage(
+        await listAdminUsers({ role: 'student', page, q: q?.trim() || undefined }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useUniversityStudentActivity() {
+  return useQuery({
+    queryKey: universityKeys.studentActivity,
     queryFn: async () => {
       const [apps, internships] = await Promise.all([
         listApplications({ limit: AGGREGATE_LIMIT, offset: 0 }),
         listInternships({ limit: AGGREGATE_LIMIT, offset: 0 }),
       ]);
-      const byStudent = new Map<string, UniversityStudentRow>();
-      for (const item of apps.results) {
-        const row = byStudent.get(item.student_user_id) ?? {
-          userId: item.student_user_id,
-          applicationsCount: 0,
-        };
-        row.applicationsCount += 1;
-        byStudent.set(row.userId, row);
-      }
-      for (const item of internships.results) {
-        const row = byStudent.get(item.student_user_id) ?? {
-          userId: item.student_user_id,
-          applicationsCount: 0,
-        };
-        row.internshipStatus = item.status;
-        byStudent.set(row.userId, row);
-      }
-      return [...byStudent.values()];
+      return buildStudentActivity(apps.results, internships.results);
     },
   });
 }
 
-export interface UniversitySupervisorRow {
-  userId: string;
-  department: string;
-  assignedCount: number;
-  isDemo: boolean;
+export interface UniversityStudentResult {
+  rows: UniversityStudentRow[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  refetch(): void;
 }
 
-export function useUniversitySupervisors() {
-  return useQuery<UniversitySupervisorRow[]>({
-    queryKey: universityKeys.supervisors,
+/** Roster from Identity's scoped admin directory, enriched with placement activity. */
+export function useUniversityStudents(params: UniversityRosterParams): UniversityStudentResult {
+  const roster = useUniversityStudentRoster(params);
+  const activity = useUniversityStudentActivity();
+  const rows = useMemo(
+    () => mergeStudentRows(roster.data?.items ?? [], activity.data ?? NO_STUDENT_ACTIVITY),
+    [roster.data, activity.data],
+  );
+  return {
+    rows,
+    total: roster.data?.total ?? 0,
+    isLoading: roster.isLoading || activity.isLoading,
+    isError: roster.isError || activity.isError,
+    error: roster.error ?? activity.error,
+    refetch: () => {
+      void roster.refetch();
+      void activity.refetch();
+    },
+  };
+}
+
+export interface UniversitySupervisorRow {
+  user: AdminUserSummary;
+  assignedCount: number;
+}
+
+export function buildSupervisorActivity(
+  internships: Pick<Internship, 'supervisor_user_id'>[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const item of internships) {
+    if (!item.supervisor_user_id) continue;
+    counts.set(item.supervisor_user_id, (counts.get(item.supervisor_user_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+export function mergeSupervisorRows(
+  users: AdminUserSummary[],
+  counts: Map<string, number>,
+): UniversitySupervisorRow[] {
+  return users.map((user) => ({ user, assignedCount: counts.get(user.id) ?? 0 }));
+}
+
+export function useUniversitySupervisorRoster({ page, q }: UniversityRosterParams) {
+  return useQuery({
+    queryKey: universityKeys.supervisorRoster(page, q?.trim() ?? ''),
+    queryFn: async () =>
+      normalizeDrfPage(
+        await listAdminUsers({ role: 'supervisor', page, q: q?.trim() || undefined }),
+      ),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useUniversitySupervisorActivity() {
+  return useQuery({
+    queryKey: universityKeys.supervisorActivity,
     queryFn: async () => {
       const internships = await listInternships({ limit: AGGREGATE_LIMIT, offset: 0 });
-      const counts = new Map<string, number>();
-      for (const item of internships.results) {
-        if (!item.supervisor_user_id) continue;
-        counts.set(item.supervisor_user_id, (counts.get(item.supervisor_user_id) ?? 0) + 1);
-      }
-      const rows = new Map<string, UniversitySupervisorRow>();
-      for (const user of demoDirectoryUsers('supervisor')) {
-        rows.set(user.id, {
-          userId: user.id,
-          department: user.department ?? 'Academic Faculty',
-          assignedCount: counts.get(user.id) ?? 0,
-          isDemo: true,
-        });
-      }
-      for (const [userId, assignedCount] of counts) {
-        if (!rows.has(userId)) {
-          rows.set(userId, { userId, department: 'Academic Faculty', assignedCount, isDemo: false });
-        }
-      }
-      return [...rows.values()];
+      return buildSupervisorActivity(internships.results);
     },
+  });
+}
+
+export interface UniversitySupervisorResult {
+  rows: UniversitySupervisorRow[];
+  total: number;
+  isLoading: boolean;
+  isError: boolean;
+  error: unknown;
+  refetch(): void;
+}
+
+/** Roster from Identity's scoped admin directory, enriched with assignment counts. */
+export function useUniversitySupervisors(
+  params: UniversityRosterParams,
+): UniversitySupervisorResult {
+  const roster = useUniversitySupervisorRoster(params);
+  const activity = useUniversitySupervisorActivity();
+  const rows = useMemo(
+    () =>
+      mergeSupervisorRows(
+        roster.data?.items ?? [],
+        activity.data ?? NO_SUPERVISOR_ACTIVITY,
+      ),
+    [roster.data, activity.data],
+  );
+  return {
+    rows,
+    total: roster.data?.total ?? 0,
+    isLoading: roster.isLoading || activity.isLoading,
+    isError: roster.isError || activity.isError,
+    error: roster.error ?? activity.error,
+    refetch: () => {
+      void roster.refetch();
+      void activity.refetch();
+    },
+  };
+}
+
+/** All scoped supervisors for the assignment picker (20 per API page). */
+export function useUniversitySupervisorOptions() {
+  return useQuery({
+    queryKey: universityKeys.supervisorOptions,
+    queryFn: async () => {
+      const first = await listAdminUsers({ role: 'supervisor', page: 1 });
+      const pages = Math.ceil(first.count / PAGE_SIZE);
+      if (pages <= 1) return first.results;
+      const rest = await Promise.all(
+        Array.from({ length: pages - 1 }, (_, index) =>
+          listAdminUsers({ role: 'supervisor', page: index + 2 }),
+        ),
+      );
+      return [first, ...rest].flatMap((page) => page.results);
+    },
+    staleTime: 5 * 60_000,
   });
 }
 
@@ -287,5 +440,28 @@ export function useRejectCancellation() {
       reason: string;
     }) => rejectCancellationRequest(internshipId, requestId, reason),
     onSuccess: invalidate,
+  });
+}
+
+export function useProvisionUniversityUser() {
+  const invalidate = useInvalidateUniversity();
+  return useMutation<AdminUserCreateResponse, unknown, AdminUserCreateRequest>({
+    mutationFn: (input) => createAdminUser(input),
+    onSuccess: () => {
+      invalidate();
+    },
+  });
+}
+
+export function useUpdateUniversityUser() {
+  const client = useQueryClient();
+  const invalidate = useInvalidateUniversity();
+  return useMutation({
+    mutationFn: ({ userId, input }: { userId: string; input: AdminUserUpdateRequest }) =>
+      updateAdminUser(userId, input),
+    onSuccess: (_data, variables) => {
+      invalidate();
+      void client.invalidateQueries({ queryKey: userKeys.detail(variables.userId) });
+    },
   });
 }

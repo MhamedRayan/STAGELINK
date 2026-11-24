@@ -15,20 +15,25 @@ import {
   useToast,
 } from '@/components/ui';
 import { CompanyNameCell, OfferTitleCell } from '@/features/student/components/NameCells';
-import { demoDirectoryUsers } from '@/features/directory/users';
 import { normalizeError } from '@/lib/errors';
 import { formatDate } from '@/lib/format';
+import { fallbackLabel } from '@/lib/ids';
 import type { Internship } from '@/api/internships';
 import { StudentNameCell } from '../components/NameCells';
-import { useAssignSupervisor, useUniversityAssignments } from '../hooks';
+import {
+  useAssignSupervisor,
+  useUniversityAssignments,
+  useUniversitySupervisorOptions,
+} from '../hooks';
 import { S } from '../strings';
 
-/** University Supervisor Assignment — Figma 28:876. Demo picker only when the directory is on. */
+/** University Supervisor Assignment — Figma 28:876. Picker uses the live scoped roster. */
 export function UniversityAssignmentsPage() {
   const toast = useToast();
   const assignments = useUniversityAssignments();
   const assign = useAssignSupervisor();
-  const supervisors = demoDirectoryUsers('supervisor');
+  const supervisorOptions = useUniversitySupervisorOptions();
+  const supervisors = supervisorOptions.data ?? [];
   const [selected, setSelected] = useState<Internship | null>(null);
   const [supervisorId, setSupervisorId] = useState('');
   const [customId, setCustomId] = useState('');
@@ -159,18 +164,23 @@ export function UniversityAssignmentsPage() {
                 <Select value={supervisorId} onChange={(event) => setSupervisorId(event.target.value)}>
                   {supervisors.map((user) => (
                     <option key={user.id} value={user.id}>
-                      {user.name} ({user.department ?? S.supervisors.faculty})
+                      {user.name}
                     </option>
                   ))}
                   {selected.supervisor_user_id &&
                     !supervisors.some((user) => user.id === selected.supervisor_user_id) && (
                       <option value={selected.supervisor_user_id}>
-                        {selected.supervisor_user_id}
+                        {fallbackLabel('supervisor', selected.supervisor_user_id)}
                       </option>
                     )}
                   <option value="custom">{S.assignments.custom}</option>
                 </Select>
               </Field>
+            )}
+            {supervisorOptions.isError && (
+              <p role="alert" className="text-[12px] leading-4 text-pill-danger-fg">
+                {S.assignments.optionsError}
+              </p>
             )}
             {(supervisorId === 'custom' || supervisors.length === 0) && (
               <Field label={S.assignments.custom}>

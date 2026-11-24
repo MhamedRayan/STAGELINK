@@ -17,6 +17,11 @@ export function SupervisorNameCell({ userId, fallback }: { userId?: string | nul
   return <>{userId ? name : fallback}</>;
 }
 
+export function SupervisorDepartmentCell({ userId, fallback }: { userId: string; fallback: string }) {
+  const user = useDirectoryUser(userId);
+  return <>{user?.department?.trim() || fallback}</>;
+}
+
 export function RequesterNameCell({ userId, role }: { userId: string; role: Role }) {
   return <>{useUserLabel(userId, role)}</>;
 }

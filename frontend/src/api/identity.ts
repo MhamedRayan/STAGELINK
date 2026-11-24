@@ -83,9 +83,19 @@ export function rejectAdminCompany(companyId: string, reason: string): Promise<A
   });
 }
 
-export function listAdminUsers(params: { role?: Role; page?: number }): Promise<AdminUserPage> {
+export function listAdminUsers(params: {
+  role?: Role;
+  q?: string;
+  university?: string;
+  page?: number;
+}): Promise<AdminUserPage> {
   return http<AdminUserPage>('identity', '/api/admin/users/', {
-    query: { role: params.role, page: params.page },
+    query: {
+      role: params.role,
+      q: params.q,
+      university: params.university,
+      page: params.page,
+    },
   });
 }
 

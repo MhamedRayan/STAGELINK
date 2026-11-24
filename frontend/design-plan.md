@@ -423,27 +423,32 @@ Each page lists its frame, content, data sources, actions and deviations.
   Supervisors, Active Internships); “Applications awaiting university validation” table
   (Student, Offer, Company, Status).
 - **Data:** `GET /api/applications/?status=COMPANY_ACCEPTED`, `GET /api/internships/`.
-- **Δ** “Total Students 482” is not derivable (no directory endpoint). Label it “Students with
-  activity” and count distinct `student_user_id` across applications and internships. Unassigned
+- **Δ** “Total Students 482” is not a single aggregate. Label it “Students with activity” and
+  count distinct `student_user_id` across applications and internships. Unassigned
   supervisors = internships `confirmed`/`in_progress` with `supervisor_user_id = null`;
   Active internships = `confirmed` + `in_progress`.
 
 #### Students — `/app/university/students` (`28:184`)
-- **Layout:** title + “Manage student accounts and academic information”; table (Student,
-  Student ID, …).
-- **Data:** `GET /api/admin/users/?role=student` (university-admin token), filtered to the
-  admin's university; names via `GET /api/users/lookup/?ids=...`.
+- **Layout:** title + “Manage student accounts and academic information”; search; table
+  (Student, Student ID, Applications, Placement, Account status, Action); pager.
+- **Data:** `GET /api/admin/users/?role=student&q=&page=` (university-admin token), filtered to
+  the admin's university; names and matricule via `GET /api/users/lookup/?ids=...`; application
+  count and placement status merged from the existing applications/internships activity query.
 - **Δ** “+ Add student” calls `POST /api/admin/users/` with `role: "student"` and the
-  university-admin token; the backend fills in the caller's university.
-- **Δ** Student ID (matricule) is not readable for other users; show the short UUID or the
-  directory value in demo mode.
+  university-admin token; the backend fills in the caller's university, so the form has no
+  university input. Edit uses `PATCH /api/admin/users/{id}/` for name, email, department,
+  specialty, academic year and matricule. Account status stays read-only for university admins.
+- **Δ** Student ID (matricule) is visible to university administrators through the directory;
+  unknown ids fall back to the short UUID.
 
 #### Supervisors — `/app/university/supervisors` (`28:373`)
-- **Layout:** title + “Manage supervisor accounts and their assigned students”; table
-  (Supervisor, Assigned students).
-- **Data:** derived from internships with a non-null `supervisor_user_id`; names from the demo
-  directory; assigned count per supervisor.
-- **Δ** “+ Add supervisor” is hidden for the same permission reason.
+- **Layout:** title + “Manage supervisor accounts and their assigned students”; search; table
+  (Supervisor, Department, Assigned students, Account status, Action); pager.
+- **Data:** `GET /api/admin/users/?role=supervisor&q=&page=` scoped to the admin's university;
+  names and department via the live directory; assigned count from internships.
+- **Δ** “+ Add supervisor” calls `POST /api/admin/users/` with `role: "supervisor"`; the backend
+  fills in the caller's university. Edit uses `PATCH /api/admin/users/{id}/` for name, email and
+  department. Account status stays read-only for university admins.
 
 #### Applications — `/app/university/applications` (`28:541`)
 - **Layout:** title + “Validate or reject applications accepted by companies”; status filter;
@@ -470,9 +475,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   offer titles resolved by `offer_id`.
 - **Actions:** `POST /api/internships/{id}/assign-supervisor/` `{supervisor_user_id}`; on
   reassignment the API also requires a `reason`.
-- **Δ** The supervisor picker needs a directory the API does not provide. In demo mode the
-  picker lists supervisors from the demo directory; otherwise it accepts a supervisor UUID with
-  validation. Reassignments prompt for a reason.
+- **Δ** The supervisor picker lists the live, university-scoped supervisor roster from
+  `GET /api/admin/users/?role=supervisor`. The custom-UUID input remains only as a fallback for
+  legacy assigned ids that are no longer in the roster. Reassignments prompt for a reason.
 
 #### Internships — `/app/university/internships` (`28:1043`)
 - **Layout:** title + “All internships and their lifecycle status”; status filter; table
@@ -744,8 +749,9 @@ These are binding design decisions caused by the fixed API surface.
 2. **University admin directory is now available.** `GET /api/admin/users/` and
    `POST /api/admin/users/` accept a university-admin token and are scoped to students and
    supervisors of that admin's university; `PATCH /api/admin/users/{id}/` edits those profiles.
-   Student/supervisor lists can still be derived from applications and internships, but
-   creation and editing no longer need a platform-admin token.
+   The Students and Supervisors screens use this scoped roster, merged with application and
+   internship activity for the existing counts; creation and editing no longer need a
+   platform-admin token.
 3. **No aggregate endpoints.** Dashboard figures are computed client-side from list responses;
    keep page sizes small and cache with TanStack Query. Figures that cannot be derived are
    relabelled (“Students with activity”, “Active students”).

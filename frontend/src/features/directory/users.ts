@@ -64,15 +64,6 @@ export function useDirectoryUser(userId: string | undefined): DirectoryUser | un
   return undefined;
 }
 
-/** Demo-only roster for a role, sorted by name (used by supervisor pickers). */
-export function demoDirectoryUsers(role: Role): Array<DemoDirectoryUser & { id: string }> {
-  if (import.meta.env.VITE_DEMO_DIRECTORY !== '1') return [];
-  return Object.entries(USERS)
-    .filter(([, user]) => user.role === role)
-    .map(([id, user]) => ({ id, ...user }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
 /** Resolve a user id to a live name; unknown ids degrade to `Role · 3f2a9c`. */
 export function useUserLabel(userId: string | undefined, role: Role): string {
   const user = useDirectoryUser(userId);
