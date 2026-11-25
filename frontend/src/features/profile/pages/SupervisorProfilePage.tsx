@@ -99,7 +99,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
               <TextField label={S.supervisor.university} error={errors.university?.message} {...register('university')} />
               <TextField label={S.supervisor.department} error={errors.department?.message} {...register('department')} />
             </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4 lg:mt-[84px]">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-[84px]">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>

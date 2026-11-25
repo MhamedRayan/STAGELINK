@@ -98,7 +98,7 @@ function StudentProfileForm({ user, profile }: { user: AuthUser; profile: Studen
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
             </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4 lg:mt-[308px]">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-[308px]">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>

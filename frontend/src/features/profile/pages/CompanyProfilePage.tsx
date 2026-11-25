@@ -118,7 +118,7 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
                 </Field>
               </div>
             </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4 lg:mt-[86px]">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-[86px]">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>
