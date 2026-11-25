@@ -7,7 +7,10 @@ export const S = {
       pending: { label: 'Pending Verifications', hint: 'Companies waiting' },
       active: { label: 'Active Companies', hint: 'Verified accounts' },
       universities: { label: 'University Accounts', hint: 'Registered universities' },
-      students: { label: 'Student Accounts', hint: 'Registered students' },
+    },
+    brand: {
+      name: 'STAGELINK',
+      tagline: 'University Internship Management Platform',
     },
     tableTitle: 'Companies awaiting verification',
     columns: {

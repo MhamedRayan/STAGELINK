@@ -592,13 +592,16 @@ Each page lists its frame, content, data sources, actions and deviations.
 
 #### Dashboard — `/app/platform` (`24:112`)
 - **Layout:** welcome heading; stat cards (Pending Verifications, Active Companies, University
-  Accounts, Student Accounts); “Companies awaiting verification” table (Company, Location,
-  Registered, Status).
+  Accounts) plus a STAGELINK brand card; “Companies awaiting verification” table (Company,
+  Location, Legal name, Status).
 - **Data:** `GET /api/admin/companies/?status=pending|active&page=`,
-  `GET /api/admin/users/?role=university_admin|student&page=` — all counts are real here.
+  `GET /api/admin/users/?role=university_admin&page=` — all counts are real here.
 - **Δ** “Location” comes from the company profile `address`, which is empty for companies that
   registered after the form was trimmed; show “Not provided”. `AdminCompanySummary` has no
   registration date, so the “Registered” column is replaced by “Legal name” (`legal_name`).
+- **Δ UI (user-directed):** platform admins must not see students, so the Student Accounts card
+  and its `?role=student` request are removed. The fourth slot holds the STAGELINK mark and
+  wordmark instead of being left empty.
 
 #### Companies — `/app/platform/companies` (addition, no frame)
 - **Layout:** title + “Every company account on the platform, with its verification status.”;
