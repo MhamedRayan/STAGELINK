@@ -1,32 +1,18 @@
-import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import {
-  Button,
-  Field,
-  Input,
-  Modal,
-  PageHeader,
-  useToast,
-} from '@/components/ui';
-import type { AdminUserCreateResponse, ProvisionableRole } from '@/api/identity';
+import { Button, Field, Input, PageHeader, useToast } from '@/components/ui';
 import { normalizeError } from '@/lib/errors';
 import { useCreateAccount } from '../hooks';
-import {
-  provisionAccountSchema,
-  universityAccountSchema,
-  type ProvisionAccountFormValues,
-} from '../schemas';
+import { provisionAccountSchema, type ProvisionAccountFormValues } from '../schemas';
 import { S } from '../strings';
 
 interface CardCopy {
-  role: ProvisionableRole;
+  role: 'company' | 'university_admin';
   title: string;
   name: string;
   email: string;
   submit: string;
   note?: string;
-  institution?: boolean;
 }
 
 const CARDS: CardCopy[] = [
@@ -36,7 +22,6 @@ const CARDS: CardCopy[] = [
     name: S.accounts.university.name,
     email: S.accounts.university.email,
     submit: S.accounts.university.submit,
-    institution: true,
   },
   {
     role: 'company',
@@ -48,14 +33,8 @@ const CARDS: CardCopy[] = [
   },
 ];
 
-/** One provisioning card: 540 x 610 in 24:447. Platform provisions company and university accounts only. */
-function ProvisionCard({
-  copy,
-  onCreated,
-}: {
-  copy: CardCopy;
-  onCreated(result: AdminUserCreateResponse): void;
-}) {
+/** Platform provisioning cards: explicit initial password only, no generated passwords. */
+function ProvisionCard({ copy }: { copy: CardCopy }) {
   const toast = useToast();
   const create = useCreateAccount();
   const {
@@ -63,39 +42,34 @@ function ProvisionCard({
     handleSubmit,
     reset,
     setError,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<ProvisionAccountFormValues>({
-    resolver: zodResolver(
-      copy.institution ? universityAccountSchema : provisionAccountSchema,
-    ),
+    resolver: zodResolver(provisionAccountSchema),
     defaultValues: {
       name: '',
       email: '',
-      university: '',
       password: '',
-      generatePassword: false,
+      role: copy.role,
+      university: '',
     },
   });
-  const generatePassword = watch('generatePassword');
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      const result = await create.mutateAsync({
+      await create.mutateAsync({
         name: values.name,
         email: values.email,
         role: copy.role,
-        generate_password: values.generatePassword,
-        ...(values.generatePassword ? {} : { password: values.password }),
-        ...(copy.institution ? { university: values.university } : {}),
+        password: values.password,
+        generate_password: false,
+        ...(copy.role === 'university_admin' ? { university: values.university } : {}),
       });
       toast.success(S.accounts.created);
-      onCreated(result);
       reset();
     } catch (error) {
       const apiError = normalizeError(error);
       let fieldShown = false;
-      for (const field of ['name', 'email', 'university', 'password'] as const) {
+      for (const field of ['name', 'email', 'password', 'university'] as const) {
         const message = apiError.fieldErrors[field];
         if (message) {
           setError(field, { message });
@@ -107,7 +81,7 @@ function ProvisionCard({
   });
 
   return (
-    <section className="h-[610px] rounded-panel bg-mint p-5">
+    <section className="rounded-panel bg-mint p-5">
       <h2 className="text-[16px] font-semibold leading-[19px] text-forest-900">{copy.title}</h2>
 
       <form onSubmit={onSubmit} noValidate>
@@ -129,20 +103,22 @@ function ProvisionCard({
               autoComplete="email"
             />
           </Field>
-          {copy.institution && (
-            <Field
-              label={S.accounts.institutionName}
-              error={errors.university?.message}
-              controlGap="md"
-              className="mt-2"
-            >
-              <Input
-                {...register('university')}
-                hasError={!!errors.university}
-                className="h-10 px-[14px] text-[13px]"
-                autoComplete="organization"
-              />
-            </Field>
+          {copy.role === 'university_admin' && (
+            <div className="mt-2">
+              <Field
+                label={S.accounts.university.institution}
+                error={errors.university?.message}
+                hint={S.accounts.university.institutionHint}
+                controlGap="md"
+              >
+                <Input
+                  {...register('university')}
+                  hasError={!!errors.university}
+                  className="h-10 px-[14px] text-[13px]"
+                  autoComplete="organization"
+                />
+              </Field>
+            </div>
           )}
           <Field
             label={S.accounts.password}
@@ -156,13 +132,8 @@ function ProvisionCard({
               className="h-10 px-[14px] text-[13px]"
               type="password"
               autoComplete="new-password"
-              disabled={generatePassword}
             />
           </Field>
-          <label className="mt-[32px] flex h-10 cursor-pointer items-center gap-3 rounded-[8px] border border-line bg-canvas px-[14px] text-[13px] text-forest-900">
-            <input {...register('generatePassword')} type="checkbox" className="h-4 w-4 accent-surface-600" />
-            {S.accounts.generatePassword}
-          </label>
         </div>
 
         <Button
@@ -178,49 +149,17 @@ function ProvisionCard({
   );
 }
 
-/** Platform — Create Accounts, Figma 24:447. */
+/** Platform — Create Accounts. */
 export function PlatformCreateAccountsPage() {
-  const toast = useToast();
-  const [oneTime, setOneTime] = useState<AdminUserCreateResponse | null>(null);
-
-  const copyPassword = async () => {
-    if (!oneTime?.one_time_password) return;
-    try {
-      await navigator.clipboard.writeText(oneTime.one_time_password);
-      toast.success(S.accounts.copied);
-    } catch {
-      toast.error(S.accounts.oneTimeNote);
-    }
-  };
-
   return (
     <div className="max-w-content">
       <PageHeader title={S.accounts.title} subtitle={S.accounts.subtitle} />
 
-      <div className="mt-[35px] grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="mt-[35px] grid grid-cols-1 items-start gap-5 lg:grid-cols-2">
         {CARDS.map((card) => (
-          <ProvisionCard key={card.role} copy={card} onCreated={setOneTime} />
+          <ProvisionCard key={card.role} copy={card} />
         ))}
       </div>
-
-      <Modal
-        open={!!oneTime}
-        onClose={() => setOneTime(null)}
-        title={S.accounts.oneTimeTitle}
-        footer={
-          <Button variant="secondary" onClick={() => setOneTime(null)}>
-            {S.common.close}
-          </Button>
-        }
-      >
-        <p className="text-[13px] text-muted">{S.accounts.oneTimeNote}</p>
-        <p className="mt-4 break-all rounded-[8px] border border-line bg-canvas p-3 text-[16px] font-semibold text-forest-900">
-          {oneTime?.one_time_password}
-        </p>
-        <Button variant="secondary" className="mt-4" onClick={() => void copyPassword()}>
-          {S.accounts.copy}
-        </Button>
-      </Modal>
     </div>
   );
 }

@@ -5,9 +5,11 @@ import {
   listAdminCompanies,
   listAdminUsers,
   rejectAdminCompany,
+  updateAdminUser,
   verifyAdminCompany,
   type AdminCompanySummary,
   type AdminUserCreateRequest,
+  type AdminUserUpdateRequest,
   type Role,
   type VerificationStatus,
 } from '@/api/identity';
@@ -73,6 +75,21 @@ export function useCreateAccount() {
   const invalidate = useInvalidatePlatform();
   return useMutation({
     mutationFn: (input: AdminUserCreateRequest) => createAdminUser(input),
+    onSuccess: () => void invalidate(),
+  });
+}
+
+/** Edit a university account, including the institution used for student/supervisor scoping. */
+export function useUpdateUniversityAccount() {
+  const invalidate = useInvalidatePlatform();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      input,
+    }: {
+      userId: string;
+      input: AdminUserUpdateRequest;
+    }) => updateAdminUser(userId, input),
     onSuccess: () => void invalidate(),
   });
 }

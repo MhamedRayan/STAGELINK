@@ -21,6 +21,10 @@ interface DataTableProps<T> {
   /** Optional extensions to the frozen API, used by the platform pages. */
   className?: string;
   rowClassName?: string;
+  headerClassName?: string;
+  tableClassName?: string;
+  getRowClassName?(row: T): string;
+  isRowSelected?(row: T): boolean;
 }
 
 /** Shared table: mint panel, 11 px uppercase head, 14 px forest body, 1 px line separators. */
@@ -33,6 +37,10 @@ export function DataTable<T>({
   onRowClick,
   className,
   rowClassName,
+  headerClassName,
+  tableClassName,
+  getRowClassName,
+  isRowSelected,
 }: DataTableProps<T>) {
   if (isLoading) {
     return (
@@ -58,7 +66,7 @@ export function DataTable<T>({
 
   return (
     <div className={cn('w-full overflow-x-auto rounded-panel border border-line bg-mint', className)}>
-      <table className="w-full border-collapse text-left">
+      <table className={cn('w-full border-collapse text-left', tableClassName)}>
         <thead>
           <tr className="border-b border-line">
             {columns.map((column) => (
@@ -68,6 +76,7 @@ export function DataTable<T>({
                 style={column.width ? { width: column.width } : undefined}
                 className={cn(
                   'whitespace-nowrap px-5 py-3 text-table-head font-medium uppercase text-muted',
+                  headerClassName,
                   column.align === 'right' && 'text-right',
                 )}
               >
@@ -91,11 +100,13 @@ export function DataTable<T>({
                   : undefined
               }
               tabIndex={onRowClick ? 0 : undefined}
+              aria-selected={onRowClick ? isRowSelected?.(row) ?? false : undefined}
               className={cn(
                 'text-table-body text-forest-900',
                 onRowClick &&
                   'cursor-pointer hover:bg-line/40 focus-visible:bg-line/40 focus-visible:outline-none',
                 rowClassName,
+                getRowClassName?.(row),
               )}
             >
               {columns.map((column) => (

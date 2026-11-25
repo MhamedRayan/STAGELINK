@@ -11,16 +11,45 @@ const email = z
   .max(254)
   .email(S.common.emailInvalid);
 
+/** University-admin creation captures every profile field at signup time. */
 export const provisionAccountSchema = z
   .object({
     name: requiredText(),
     email,
-    generatePassword: z.boolean(),
-    password: z.string().max(128),
+    password: z.string().min(8, S.common.passwordMin).max(128),
+    role: z.enum(['student', 'supervisor']),
+    matricule: optionalText(128),
+    department: optionalText(),
+    specialty: optionalText(),
+    academicYear: optionalText(64),
+    grade: optionalText(),
   })
-  .refine((values) => values.generatePassword || values.password.length >= 8, {
-    path: ['password'],
-    message: S.common.passwordMin,
+  .superRefine((values, ctx) => {
+    if (!values.department) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['department'],
+        message: S.common.required,
+      });
+    }
+    if (values.role === 'student') {
+      for (const field of ['matricule', 'specialty', 'academicYear'] as const) {
+        if (!values[field]) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [field],
+            message: S.common.required,
+          });
+        }
+      }
+    }
+    if (values.role === 'supervisor' && !values.grade) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['grade'],
+        message: S.common.required,
+      });
+    }
   });
 
 export type ProvisionAccountFormValues = z.infer<typeof provisionAccountSchema>;

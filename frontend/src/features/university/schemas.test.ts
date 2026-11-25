@@ -3,25 +3,52 @@ import { editUniversityUserSchema, provisionAccountSchema } from './schemas';
 const account = {
   name: 'Amina Njeri',
   email: 'amina@example.com',
-  generatePassword: false,
-  password: '',
+  password: 'longenough1',
+};
+
+const student = {
+  ...account,
+  role: 'student' as const,
+  matricule: 'STU-001',
+  department: 'Computer Science',
+  specialty: 'Software Engineering',
+  academicYear: '3rd year',
+  grade: '',
+};
+
+const supervisor = {
+  ...account,
+  role: 'supervisor' as const,
+  matricule: '',
+  department: 'Computer Science',
+  specialty: '',
+  academicYear: '',
+  grade: '17.50',
 };
 
 describe('university schemas', () => {
-  it('requires a password of at least 8 characters unless one is generated', () => {
-    expect(provisionAccountSchema.safeParse(account).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...account, password: 'short' }).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...account, password: 'longenough1' }).success).toBe(
-      true,
-    );
-    expect(provisionAccountSchema.safeParse({ ...account, generatePassword: true }).success).toBe(
-      true,
-    );
+  it('requires an explicit initial password of at least 8 characters', () => {
+    expect(provisionAccountSchema.safeParse({ ...student, password: '' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...student, password: 'short' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse(student).success).toBe(true);
+  });
+
+  it('requires all student profile fields at creation', () => {
+    expect(provisionAccountSchema.safeParse({ ...student, matricule: '' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...student, department: '' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...student, specialty: '' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...student, academicYear: '' }).success).toBe(false);
+  });
+
+  it('requires department and grade at supervisor creation', () => {
+    expect(provisionAccountSchema.safeParse(supervisor).success).toBe(true);
+    expect(provisionAccountSchema.safeParse({ ...supervisor, grade: '' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...supervisor, department: '' }).success).toBe(false);
   });
 
   it('rejects a blank name or malformed email', () => {
-    expect(provisionAccountSchema.safeParse({ ...account, name: '  ' }).success).toBe(false);
-    expect(provisionAccountSchema.safeParse({ ...account, email: 'not-an-email' }).success).toBe(
+    expect(provisionAccountSchema.safeParse({ ...student, name: '  ' }).success).toBe(false);
+    expect(provisionAccountSchema.safeParse({ ...student, email: 'not-an-email' }).success).toBe(
       false,
     );
   });
