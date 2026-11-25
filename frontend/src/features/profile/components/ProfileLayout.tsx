@@ -2,23 +2,11 @@ import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
 /** Page title block — Figma: title 27 bold at y 42, subtitle 13 muted 5 px below. */
-export function ProfileHeader({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string;
-  subtitle: string;
-  /** Optional trailing control (e.g. log out), kept on the title row at wide widths. */
-  action?: ReactNode;
-}) {
+export function ProfileHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-[27px] font-bold leading-[33px] text-forest-900">{title}</h1>
-        <p className="mt-[5px] pl-0.5 text-[13px] leading-4 text-muted">{subtitle}</p>
-      </div>
-      {action && <div className="shrink-0 pt-1">{action}</div>}
+    <header>
+      <h1 className="text-[27px] font-bold leading-[33px] text-forest-900">{title}</h1>
+      <p className="mt-[5px] pl-0.5 text-[13px] leading-4 text-muted">{subtitle}</p>
     </header>
   );
 }

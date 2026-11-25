@@ -60,7 +60,6 @@ export const S = {
     personal: 'Personal information',
     university: 'University',
     department: 'Department',
-    grade: 'Grade',
     summary: 'Assignment summary',
     assigned: 'Assigned students',
     active: 'Active internships',

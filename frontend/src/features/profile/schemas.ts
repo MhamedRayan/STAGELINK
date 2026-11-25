@@ -36,6 +36,5 @@ export type CompanyProfileFormValues = z.infer<typeof companyProfileSchema>;
 export const supervisorProfileSchema = accountSchema.extend({
   university: requiredText(),
   department: requiredText(),
-  grade: requiredText(),
 });
 export type SupervisorProfileFormValues = z.infer<typeof supervisorProfileSchema>;

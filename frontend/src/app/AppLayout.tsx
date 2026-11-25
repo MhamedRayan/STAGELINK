@@ -314,12 +314,7 @@ export function AppLayout({ role }: { role: Role }) {
           </button>
         </div>
 
-        <div
-          className={cn(
-            'min-w-0 flex-1 px-4 pb-10 sm:px-6 lg:px-8 xl:px-[42px] xl:pb-[42px]',
-            isRail && 'lg:[&>div]:!max-w-none',
-          )}
-        >
+        <div className="min-w-0 flex-1 px-4 pb-10 sm:px-6 lg:px-8 xl:px-[42px] xl:pb-[42px] [&>div]:!max-w-none">
           <Outlet />
         </div>
       </main>

@@ -9,7 +9,6 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { Textarea } from '@/components/ui/Textarea';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
-import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -27,7 +26,7 @@ export function CompanyProfilePage() {
   if (query.error) {
     return (
       <>
-        <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} />
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       </>
     );
@@ -35,7 +34,7 @@ export function CompanyProfilePage() {
   if (!user || !query.data) {
     return (
       <>
-        <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} />
         <ProfileLoading />
       </>
     );
@@ -100,10 +99,10 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
 
   return (
     <>
-      <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} action={<ProfileLogoutButton />} />
+      <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="min-h-[620px] w-full pb-8 lg:w-[700px]">
+          <ProfileCard className="min-h-[620px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-[700]">
             <CardTitle>{S.company.info}</CardTitle>
             <div className="mt-[21px] grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
               <div className="col-span-2">
@@ -119,7 +118,7 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
                 </Field>
               </div>
             </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4 lg:mt-[86px]">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>
@@ -129,7 +128,7 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
             </div>
           </ProfileCard>
 
-          <ProfileCard className="min-h-[620px] w-full pb-8 lg:w-[380px]">
+          <ProfileCard className="min-h-[620px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-[380]">
             <CardTitle>{S.company.contact}</CardTitle>
             <dl className="mt-[21px]">
               <dt className="text-[11px] leading-[13px] text-muted">{S.company.contactEmail}</dt>

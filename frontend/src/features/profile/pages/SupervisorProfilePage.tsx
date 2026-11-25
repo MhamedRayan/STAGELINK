@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
-import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
 import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
@@ -15,14 +14,14 @@ import { supervisorProfileSchema, type SupervisorProfileFormValues } from '../sc
 import { S } from '../strings';
 import { accountChanges } from '../utils';
 
-/** Supervisor — Profile, Figma 27:1013. Phone/Faculty removed, Grade added (plan Δ). */
+/** Supervisor — Profile, Figma 27:1013. Phone/Faculty removed (plan Δ); grade is kept but not editable. */
 export function SupervisorProfilePage() {
   const { user } = useAuth();
   const query = useSupervisorProfile();
   if (query.error) {
     return (
       <>
-        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} />
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       </>
     );
@@ -30,7 +29,7 @@ export function SupervisorProfilePage() {
   if (!user || !query.data) {
     return (
       <>
-        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} />
         <ProfileLoading />
       </>
     );
@@ -64,7 +63,6 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
       email: user.email,
       university: profile.university,
       department: profile.department,
-      grade: profile.grade,
     },
   });
   const feedback = useSaveFeedback<SupervisorProfileFormValues>(setError, {
@@ -72,14 +70,14 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
     email: 'email',
     university: 'university',
     department: 'department',
-    grade: 'grade',
   });
 
   const onSubmit = handleSubmit(async (values) => {
     try {
       await save.mutateAsync({
         account: accountChanges(user, values),
-        role: { university: values.university, department: values.department, grade: values.grade },
+        // PUT is a full replace: keep the stored grade even though it is not editable here.
+        role: { university: values.university, department: values.department, grade: profile.grade },
       });
       reset(values);
       feedback.onSaved();
@@ -90,19 +88,18 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
 
   return (
     <>
-      <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} action={<ProfileLogoutButton />} />
+      <ProfileHeader title={S.supervisor.title} subtitle={S.supervisor.subtitle} />
       <form onSubmit={onSubmit} noValidate>
         <ProfileRow>
-          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-1">
             <CardTitle>{S.supervisor.personal}</CardTitle>
             <div className="mt-[27px] space-y-2">
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
               <TextField label={S.supervisor.university} error={errors.university?.message} {...register('university')} />
               <TextField label={S.supervisor.department} error={errors.department?.message} {...register('department')} />
-              <TextField label={S.supervisor.grade} error={errors.grade?.message} {...register('grade')} />
             </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4 lg:mt-[84px]">
               <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
                 {S.common.save}
               </Button>
@@ -112,7 +109,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
             </div>
           </ProfileCard>
 
-          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
+          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-1">
             <CardTitle>{S.supervisor.summary}</CardTitle>
             <div className="mt-[27px] space-y-4">
               <SummaryBox label={S.supervisor.assigned} value={summary.data?.assigned} />
@@ -120,7 +117,7 @@ function SupervisorProfileForm({ user, profile }: { user: AuthUser; profile: Sup
               <SummaryBox label={S.supervisor.pending} value={summary.data?.pendingReviews} />
               <SummaryBox label={S.supervisor.evaluations} value={summary.data?.evaluationsRecorded} />
             </div>
-            <p className="mt-8 text-[12px] leading-[15px] text-muted">{S.supervisor.note}</p>
+            <p className="mt-8 text-[12px] leading-[15px] text-muted lg:mt-[40px]">{S.supervisor.note}</p>
           </ProfileCard>
         </ProfileRow>
       </form>
