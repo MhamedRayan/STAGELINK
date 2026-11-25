@@ -55,6 +55,7 @@ export const PATTERNS = {
   platform: {
     base: '/app/platform',
     companies: '/app/platform/companies',
+    verification: '/app/platform/verification',
     universities: '/app/platform/universities',
     createAccounts: '/app/platform/accounts/new',
     profile: '/app/platform/profile',
@@ -118,6 +119,7 @@ export const ROUTES = {
   platform: {
     dashboard: '/app/platform',
     companies: '/app/platform/companies',
+    verification: '/app/platform/verification',
     universities: '/app/platform/universities',
     createAccounts: '/app/platform/accounts/new',
     profile: '/app/platform/profile',

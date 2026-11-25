@@ -184,7 +184,7 @@ export function PlatformCompanyVerificationPage() {
                         setSelectedId(company.id);
                       }
                     }}
-                    className="h-[60px] cursor-pointer hover:bg-line/40 focus-visible:bg-line/40 focus-visible:outline-none"
+                    className="h-[68px] cursor-pointer hover:bg-line/40 focus-visible:bg-line/40 focus-visible:outline-none"
                   >
                       <td className="text-table-body text-forest-900">{company.name}</td>
                       <td className="text-table-body text-forest-900">

@@ -74,6 +74,7 @@ export function PlatformUniversitiesPage() {
               getRowKey={(row) => row.id}
               isLoading={universities.isLoading}
               className="rounded-none border-0"
+              rowClassName="h-[68px]"
               emptyState={
                 <EmptyState title={S.universities.title} message={S.universities.empty} />
               }

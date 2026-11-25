@@ -7,7 +7,10 @@ export const S = {
       pending: { label: 'Pending Verifications', hint: 'Companies waiting' },
       active: { label: 'Active Companies', hint: 'Verified accounts' },
       universities: { label: 'University Accounts', hint: 'Registered universities' },
-      students: { label: 'Student Accounts', hint: 'Registered students' },
+    },
+    brand: {
+      name: 'STAGELINK',
+      tagline: 'University Internship Management Platform',
     },
     tableTitle: 'Companies awaiting verification',
     columns: {
@@ -49,6 +52,19 @@ export const S = {
     rejectConfirm: 'Keep inactive',
     notProvided: 'Not provided',
     selectPrompt: 'Select a company to see its details.',
+  },
+  companies: {
+    title: 'Companies',
+    subtitle: 'Every company account on the platform, with its verification status.',
+    columns: {
+      company: 'Company',
+      email: 'Contact email',
+      verification: 'Verification',
+      account: 'Account',
+    },
+    active: 'Active',
+    inactive: 'Inactive',
+    empty: 'No company accounts found yet.',
   },
   universities: {
     title: 'Universities',

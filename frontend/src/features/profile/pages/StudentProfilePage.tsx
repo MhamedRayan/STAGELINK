@@ -6,8 +6,18 @@ import { Button } from '@/components/ui/Button';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
-import { ProfileLogoutButton } from '../components/ProfileLogoutButton';
-import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
+import { ROLE_LABEL } from '@/lib/roles';
+import {
+  ACTION_BUTTON,
+  FieldGrid,
+  ProfileActions,
+  ProfileHeader,
+  ProfileIdentity,
+  ProfileLoading,
+  ProfilePanel,
+  ProfileSection,
+  profileMeta,
+} from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
 import { useSaveProfile, useStudentProfile } from '../hooks';
@@ -22,7 +32,7 @@ export function StudentProfilePage() {
   if (query.error) {
     return (
       <>
-        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} />
         <ErrorState error={query.error} onRetry={() => void query.refetch()} />
       </>
     );
@@ -30,7 +40,7 @@ export function StudentProfilePage() {
   if (!user || !query.data) {
     return (
       <>
-        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
+        <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} />
         <ProfileLoading />
       </>
     );
@@ -90,36 +100,40 @@ function StudentProfileForm({ user, profile }: { user: AuthUser; profile: Studen
 
   return (
     <>
-      <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} action={<ProfileLogoutButton />} />
-      <form onSubmit={onSubmit} noValidate>
-        <ProfileRow>
-          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
-            <CardTitle>{S.student.personal}</CardTitle>
-            <div className="mt-[27px] space-y-2">
+      <ProfileHeader title={S.student.title} subtitle={S.student.subtitle} />
+      <form onSubmit={onSubmit} noValidate className="mt-8">
+        <ProfilePanel>
+          <ProfileIdentity
+            name={user.name}
+            meta={profileMeta(ROLE_LABEL.student, profile.university, profile.department)}
+          />
+
+          <ProfileSection title={S.student.personal}>
+            <FieldGrid>
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
-            </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:gap-4">
-              <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
-                {S.common.save}
-              </Button>
-              <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
-                {S.common.changePassword}
-              </Button>
-            </div>
-          </ProfileCard>
+            </FieldGrid>
+          </ProfileSection>
 
-          <ProfileCard className="min-h-[560px] w-full pb-8 lg:min-h-[640px] lg:w-[540px]">
-            <CardTitle>{S.student.academic}</CardTitle>
-            <div className="mt-[27px]">
-              <TextField controlGap="sm" label={S.student.studentId} error={errors.matricule?.message} {...register('matricule')} />
-              <TextField controlGap="sm" label={S.student.university} error={errors.university?.message} {...register('university')} />
-              <TextField controlGap="sm" label={S.student.department} error={errors.department?.message} {...register('department')} />
-              <TextField controlGap="sm" label={S.student.specialty} error={errors.specialty?.message} {...register('specialty')} />
-              <TextField controlGap="sm" label={S.student.academicYear} error={errors.academicYear?.message} {...register('academicYear')} />
-            </div>
-          </ProfileCard>
-        </ProfileRow>
+          <ProfileSection title={S.student.academic}>
+            <FieldGrid columns={3}>
+              <TextField label={S.student.studentId} error={errors.matricule?.message} {...register('matricule')} />
+              <TextField label={S.student.university} error={errors.university?.message} {...register('university')} />
+              <TextField label={S.student.department} error={errors.department?.message} {...register('department')} />
+              <TextField label={S.student.specialty} error={errors.specialty?.message} {...register('specialty')} />
+              <TextField label={S.student.academicYear} error={errors.academicYear?.message} {...register('academicYear')} />
+            </FieldGrid>
+          </ProfileSection>
+
+          <ProfileActions>
+            <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
+              {S.common.save}
+            </Button>
+            <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
+              {S.common.changePassword}
+            </Button>
+          </ProfileActions>
+        </ProfilePanel>
       </form>
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </>

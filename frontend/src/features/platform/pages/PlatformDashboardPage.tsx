@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Button, ErrorState, PageHeader, Skeleton, StatCard, StatusPill } from '@/components/ui';
+import { Button, ErrorState, Logo, PageHeader, Skeleton, StatCard, StatusPill } from '@/components/ui';
 import { ROUTES } from '@/app/routes';
 import { useAuth } from '@/features/auth/AuthProvider';
 import { CompanyLocation } from '../components/CompanyLocation';
@@ -27,7 +27,6 @@ export function PlatformDashboardPage() {
   const pendingCompanies = useAdminCompanies('pending', 1);
   const activeCompanies = useAdminCompanyCount('active');
   const universities = useAdminUserCount('university_admin');
-  const students = useAdminUserCount('student');
 
   const stats = [
     {
@@ -36,7 +35,7 @@ export function PlatformDashboardPage() {
       count: pendingCompanies.data?.total,
       isLoading: pendingCompanies.isLoading,
       isError: pendingCompanies.isError,
-      to: ROUTES.platform.companies,
+      to: ROUTES.platform.verification,
     },
     {
       key: 'active',
@@ -53,14 +52,6 @@ export function PlatformDashboardPage() {
       isLoading: universities.isLoading,
       isError: universities.isError,
       to: ROUTES.platform.universities,
-    },
-    {
-      key: 'students',
-      ...S.dashboard.stats.students,
-      count: students.data,
-      isLoading: students.isLoading,
-      isError: students.isError,
-      to: ROUTES.platform.createAccounts,
     },
   ];
 
@@ -85,6 +76,17 @@ export function PlatformDashboardPage() {
             to={stat.to}
           />
         ))}
+        <div className="flex h-[110px] items-center gap-[10px] rounded-[14px] bg-mint px-[18px]">
+          <Logo size="sm" />
+          <div>
+            <p className="text-[17px] font-bold leading-6 text-forest-900">
+              {S.dashboard.brand.name}
+            </p>
+            <p className="mt-0.5 text-[10px] leading-[14px] text-muted">
+              {S.dashboard.brand.tagline}
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="mt-[26px] grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -156,7 +158,7 @@ export function PlatformDashboardPage() {
           <div className="mt-16 space-y-3">
             <Button
               className="h-10 w-full rounded-[10px] text-[13px] font-medium"
-              onClick={() => navigate(ROUTES.platform.companies)}
+              onClick={() => navigate(ROUTES.platform.verification)}
             >
               {S.dashboard.actions.verify}
             </Button>

@@ -36,8 +36,6 @@ export const S = {
     website: 'Website',
     phone: 'Phone',
     description: 'Description',
-    contact: 'Contact',
-    contactEmail: 'Contact email',
     verification: 'Account verification',
     websiteInvalid: 'Enter a valid web address (https://…) or leave it empty',
     verified: 'Verified by the platform administrator. Your offers are visible to students.',
@@ -52,7 +50,6 @@ export const S = {
     faculties: 'Faculties and departments',
     facultiesNote:
       'Faculties, departments and other reference data are managed by the platform administrator.',
-    accountSettings: 'Account settings',
   },
   supervisor: {
     title: 'Profile',
@@ -60,7 +57,6 @@ export const S = {
     personal: 'Personal information',
     university: 'University',
     department: 'Department',
-    grade: 'Grade',
     summary: 'Assignment summary',
     assigned: 'Assigned students',
     active: 'Active internships',

@@ -99,7 +99,7 @@ items). The final navigation is fixed here:
 | Company | Dashboard · Company Profile · My Offers · Post Internship · Incoming Requests · Cancellations · Notifications |
 | University Admin | Dashboard · Students · Supervisors · Applications · Internships · Cancellations · Notifications · Profile |
 | Supervisor | Dashboard · My Students · Final Reviews · Notifications · Profile |
-| Platform Admin | Dashboard · Company Verification · Create Accounts · Profile |
+| Platform Admin | Dashboard · Companies · Company Verification · Universities · Create Accounts · Profile |
 
 Guest pages use a slim public header: logo, “Browse Offers”, “Log in”.
 
@@ -170,7 +170,9 @@ Guest pages use a slim public header: logo, “Browse Offers”, “Log in”.
 | `/app/supervisor/notifications` | Notifications | supervisor | Supervisor — Notifications (`27:856`) |
 | `/app/supervisor/profile` | Profile | supervisor | Supervisor — Profile (`27:1013`) |
 | `/app/platform` | Dashboard | platform_admin | Platform — Dashboard (`24:112`) |
-| `/app/platform/companies` | Company Verification | platform_admin | Platform — Company Verification (`24:285`) |
+| `/app/platform/companies` | Companies | platform_admin | — (addition, no frame) |
+| `/app/platform/verification` | Company Verification | platform_admin | Platform — Company Verification (`24:285`) |
+| `/app/platform/universities` | Universities | platform_admin | — (addition, no frame) |
 | `/app/platform/accounts/new` | Create Accounts | platform_admin | Platform — Create Accounts (`24:447`) |
 | `/app/platform/profile` | Profile | platform_admin | Platform — Profile (`24:605`) |
 
@@ -345,6 +347,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   `matricule`), so the form loads them first and submits a complete body.
 - **Addition:** “Change password” opens a modal (current, new, confirm) →
   `POST /api/users/me/password/`, then navigate to `/password-changed`.
+- **Δ UI (user-directed):** the frame's two fixed cards render as one soft panel — an identity
+  strip (avatar, name, role/context), hairline-separated sections, and a single action bar at the
+  bottom holding Save, Change password and Log out (confirmation modal).
 
 ### 3.3 Company
 
@@ -369,6 +374,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   (**addition**) for *Contact person* and *Website* so the required body can be sent truthfully.
 - **Verification card:** `pending` → “Awaiting verification”, `active` → “Verified by the
   platform administrator”, `rejected` → reason from `rejection_reason`.
+- **Δ UI (user-directed):** one soft panel instead of two cards — identity strip with the
+  verification pill, a company-information section, a verification note, and the action bar
+  (Save, Change password, Log out).
 
 #### My Offers — `/app/company/offers` (`26:350`)
 - **Layout:** title + “+ Create offer”; table (Offer, Places, Deadline, Status, Actions).
@@ -509,6 +517,8 @@ Each page lists its frame, content, data sources, actions and deviations.
   phone and the faculty/department reference lists have no storage or endpoint. Keep the card
   headings but render name/email (account) only, plus a read-only note that reference data is
   managed by the platform administrator. Remove “Security settings” (nothing to configure).
+- **Δ UI (user-directed):** one soft panel — identity strip, university-information section,
+  reference-data note, and the action bar (Save, Change password, Log out).
 
 #### Notifications — `/app/university/notifications` (`28:1719`)
 - Shared notifications page.
@@ -572,22 +582,37 @@ Each page lists its frame, content, data sources, actions and deviations.
   pending reviews, evaluations recorded).
 - **Data:** `PATCH /api/users/me/`; `GET`/`PUT /api/users/me/profile/` (`department`, `grade`);
   `GET /api/internships/?mine=true` for the summary.
-- **Δ** Phone and faculty have no fields and are removed; add a **Grade** input (required by
-  `SupervisorProfileUpdate`). Summary counts are client-side.
+- **Δ** Phone and faculty have no fields and are removed. `Grade` is required by
+  `SupervisorProfileUpdate`, so it is submitted from the loaded profile but is not editable here.
+  Summary counts are client-side.
+- **Δ UI (user-directed):** one soft panel — identity strip, personal-information section,
+  assignment-summary tiles, and the action bar (Save, Change password, Log out).
 
 ### 3.6 Platform Admin
 
 #### Dashboard — `/app/platform` (`24:112`)
 - **Layout:** welcome heading; stat cards (Pending Verifications, Active Companies, University
-  Accounts, Student Accounts); “Companies awaiting verification” table (Company, Location,
-  Registered, Status).
+  Accounts) plus a STAGELINK brand card; “Companies awaiting verification” table (Company,
+  Location, Legal name, Status).
 - **Data:** `GET /api/admin/companies/?status=pending|active&page=`,
-  `GET /api/admin/users/?role=university_admin|student&page=` — all counts are real here.
+  `GET /api/admin/users/?role=university_admin&page=` — all counts are real here.
 - **Δ** “Location” comes from the company profile `address`, which is empty for companies that
   registered after the form was trimmed; show “Not provided”. `AdminCompanySummary` has no
   registration date, so the “Registered” column is replaced by “Legal name” (`legal_name`).
+- **Δ UI (user-directed):** platform admins must not see students, so the Student Accounts card
+  and its `?role=student` request are removed. The fourth slot holds the STAGELINK mark and
+  wordmark instead of being left empty.
 
-#### Company Verification — `/app/platform/companies` (`24:285`)
+#### Companies — `/app/platform/companies` (addition, no frame)
+- **Layout:** title + “Every company account on the platform, with its verification status.”;
+  table (Company, Contact email, Verification pill, Account active/inactive) with pagination.
+- **Data:** `GET /api/admin/users/?role=company&page=` — the only endpoint that lists companies
+  of every status. `AdminCompanySummary` requires `status`, so the verification endpoint cannot
+  back this screen.
+- **Δ** Added because the “Active Companies” stat card pointed at the status-scoped verification
+  queue; the card now opens this directory.
+
+#### Company Verification — `/app/platform/verification` (`24:285`)
 - **Layout:** title + “Companies stay inactive until manually verified and activated.”; filter
   by status; table (Company, Location, Status); “Company details” panel (Company, Contact
   email, Phone, Location, Registration) with “Verify & activate” and “Keep inactive” (reject).
@@ -614,6 +639,8 @@ Each page lists its frame, content, data sources, actions and deviations.
 - **Layout:** Account information (full name, email, role), “Save changes”, “Change password”.
 - **Data:** `PATCH /api/users/me/`; change password via modal.
 - **Δ** `platform_admin` has no role profile; only account fields exist.
+- **Δ UI (user-directed):** one soft panel — identity strip, account-information section, and
+  the action bar (Save, Change password, Log out).
 
 ### 3.7 Shared Notifications page
 
