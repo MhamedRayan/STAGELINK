@@ -119,6 +119,11 @@ export function AppLayout({ role }: { role: Role }) {
     setMenuOpen(false);
   }, [pathname]);
 
+  // The expanded account menu does not exist in the icon rail.
+  useEffect(() => {
+    if (isRail) setMenuOpen(false);
+  }, [isRail]);
+
   useEffect(() => {
     if (!isDrawerOpen) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -158,7 +163,7 @@ export function AppLayout({ role }: { role: Role }) {
         id="app-sidebar"
         aria-label="Main navigation"
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto bg-forest-900 transition-transform duration-200 lg:translate-x-0 lg:transition-[width]',
+          'fixed inset-y-0 left-0 z-40 flex h-screen w-sidebar shrink-0 flex-col overflow-y-auto bg-forest-900 transition-transform duration-200 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:transition-[width]',
           isDrawerOpen ? 'translate-x-0' : '-translate-x-full',
           isRail ? 'lg:w-[76px]' : 'lg:w-sidebar',
         )}
@@ -227,52 +232,61 @@ export function AppLayout({ role }: { role: Role }) {
 
         <div ref={menuRef} className="relative mt-auto shrink-0">
           <div className={cn('h-px bg-line', isRail ? 'mx-3' : 'mx-[22px]')} />
-          <button
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            aria-label={`Account menu for ${user?.name ?? 'this account'}`}
-            onClick={() => setMenuOpen((open) => !open)}
-            className={cn(
-              'mt-[22px] flex w-full items-center gap-[10px] pb-[22px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage',
-              isRail ? 'justify-center px-2' : 'px-[28px]',
-            )}
-          >
-            <Avatar name={user?.name} className="h-9 w-9" />
-            {!isRail && (
-              <span className="min-w-0">
-                <span className="block truncate text-[12px] font-semibold leading-4 text-inverse">
-                  {user?.name ?? '—'}
-                </span>
-                <span className="mt-0.5 block truncate text-[10px] leading-[14px] text-sage">
-                  {ROLE_LABEL[role]}
-                </span>
-              </span>
-            )}
-          </button>
-          {menuOpen && (
-            <div
-              role="menu"
-              className={cn(
-                'absolute z-10 rounded-[10px] border border-line bg-mint p-1 shadow-lg',
-                isRail ? 'bottom-6 left-full ml-3 w-48' : 'bottom-full left-[28px] right-[28px] mb-2',
-              )}
-            >
+          {isRail ? (
+            <div className="flex flex-col items-center gap-2 py-[22px]">
+              <Avatar name={user?.name} className="h-9 w-9" />
               <button
                 type="button"
-                role="menuitem"
+                aria-label="Log out"
+                title="Log out"
                 onClick={() => void logout()}
-                className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-[13px] font-medium text-forest-900 hover:bg-line/60"
+                className="flex h-[38px] w-[38px] items-center justify-center rounded-[10px] text-nav-text transition-colors hover:bg-surface-700 hover:text-inverse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage"
               >
-                <LogOut aria-hidden="true" className="h-4 w-4" />
-                Log out
+                <LogOut aria-hidden="true" className="h-[18px] w-[18px]" />
               </button>
             </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label={`Account menu for ${user?.name ?? 'this account'}`}
+                onClick={() => setMenuOpen((open) => !open)}
+                className="mt-[22px] flex w-full items-center gap-[10px] px-[28px] pb-[22px] text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+              >
+                <Avatar name={user?.name} className="h-9 w-9" />
+                <span className="min-w-0">
+                  <span className="block truncate text-[12px] font-semibold leading-4 text-inverse">
+                    {user?.name ?? '—'}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[10px] leading-[14px] text-sage">
+                    {ROLE_LABEL[role]}
+                  </span>
+                </span>
+              </button>
+              {menuOpen && (
+                <div
+                  role="menu"
+                  className="absolute bottom-full left-[28px] right-[28px] z-10 mb-2 rounded-[10px] border border-line bg-mint p-1 shadow-lg"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void logout()}
+                    className="flex w-full items-center gap-2 rounded-[8px] px-3 py-2 text-[13px] font-medium text-forest-900 hover:bg-line/60"
+                  >
+                    <LogOut aria-hidden="true" className="h-4 w-4" />
+                    Log out
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col lg:pl-sidebar">
+      <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-12 shrink-0 items-center gap-2 px-4 pt-1 sm:px-6 lg:px-8 xl:px-[42px]">
           <button
             type="button"
@@ -303,7 +317,7 @@ export function AppLayout({ role }: { role: Role }) {
         <div
           className={cn(
             'min-w-0 flex-1 px-4 pb-10 sm:px-6 lg:px-8 xl:px-[42px] xl:pb-[42px]',
-            isRail && 'lg:[&>div]:!max-w-[1284px]',
+            isRail && 'lg:[&>div]:!max-w-none',
           )}
         >
           <Outlet />
