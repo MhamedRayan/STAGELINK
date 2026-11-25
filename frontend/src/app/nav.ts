@@ -47,7 +47,8 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
   ],
   platform_admin: [
     { label: 'Dashboard', to: ROUTES.platform.dashboard, end: true },
-    { label: 'Company Verification', to: ROUTES.platform.companies },
+    { label: 'Companies', to: ROUTES.platform.companies },
+    { label: 'Company Verification', to: ROUTES.platform.verification },
     { label: 'Universities', to: ROUTES.platform.universities },
     { label: 'Create Accounts', to: ROUTES.platform.createAccounts },
     { label: 'Profile', to: ROUTES.platform.profile },

@@ -38,6 +38,7 @@ import { SupervisorStudentProfilePage } from '@/features/supervisor/pages/Superv
 import { SupervisorInternshipProgressPage } from '@/features/supervisor/pages/SupervisorInternshipProgressPage';
 import { SupervisorFinalReviewPage } from '@/features/supervisor/pages/SupervisorFinalReviewPage';
 import { PlatformDashboardPage } from '@/features/platform/pages/PlatformDashboardPage';
+import { PlatformCompaniesPage } from '@/features/platform/pages/PlatformCompaniesPage';
 import { PlatformCompanyVerificationPage } from '@/features/platform/pages/PlatformCompanyVerificationPage';
 import { PlatformUniversitiesPage } from '@/features/platform/pages/PlatformUniversitiesPage';
 import { PlatformCreateAccountsPage } from '@/features/platform/pages/PlatformCreateAccountsPage';
@@ -123,7 +124,8 @@ export const router = createBrowserRouter([
 
   roleSubtree('platform_admin', [
     { path: P.platform.base, element: <PlatformDashboardPage /> },
-    { path: P.platform.companies, element: <PlatformCompanyVerificationPage /> },
+    { path: P.platform.companies, element: <PlatformCompaniesPage /> },
+    { path: P.platform.verification, element: <PlatformCompanyVerificationPage /> },
     { path: P.platform.universities, element: <PlatformUniversitiesPage /> },
     { path: P.platform.createAccounts, element: <PlatformCreateAccountsPage /> },
     { path: P.platform.profile, element: <PlatformProfilePage /> },

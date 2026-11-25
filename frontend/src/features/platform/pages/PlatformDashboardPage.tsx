@@ -36,7 +36,7 @@ export function PlatformDashboardPage() {
       count: pendingCompanies.data?.total,
       isLoading: pendingCompanies.isLoading,
       isError: pendingCompanies.isError,
-      to: ROUTES.platform.companies,
+      to: ROUTES.platform.verification,
     },
     {
       key: 'active',
@@ -156,7 +156,7 @@ export function PlatformDashboardPage() {
           <div className="mt-16 space-y-3">
             <Button
               className="h-10 w-full rounded-[10px] text-[13px] font-medium"
-              onClick={() => navigate(ROUTES.platform.companies)}
+              onClick={() => navigate(ROUTES.platform.verification)}
             >
               {S.dashboard.actions.verify}
             </Button>

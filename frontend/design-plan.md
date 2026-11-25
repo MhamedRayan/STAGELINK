@@ -99,7 +99,7 @@ items). The final navigation is fixed here:
 | Company | Dashboard · Company Profile · My Offers · Post Internship · Incoming Requests · Cancellations · Notifications |
 | University Admin | Dashboard · Students · Supervisors · Applications · Internships · Cancellations · Notifications · Profile |
 | Supervisor | Dashboard · My Students · Final Reviews · Notifications · Profile |
-| Platform Admin | Dashboard · Company Verification · Create Accounts · Profile |
+| Platform Admin | Dashboard · Companies · Company Verification · Universities · Create Accounts · Profile |
 
 Guest pages use a slim public header: logo, “Browse Offers”, “Log in”.
 
@@ -170,7 +170,9 @@ Guest pages use a slim public header: logo, “Browse Offers”, “Log in”.
 | `/app/supervisor/notifications` | Notifications | supervisor | Supervisor — Notifications (`27:856`) |
 | `/app/supervisor/profile` | Profile | supervisor | Supervisor — Profile (`27:1013`) |
 | `/app/platform` | Dashboard | platform_admin | Platform — Dashboard (`24:112`) |
-| `/app/platform/companies` | Company Verification | platform_admin | Platform — Company Verification (`24:285`) |
+| `/app/platform/companies` | Companies | platform_admin | — (addition, no frame) |
+| `/app/platform/verification` | Company Verification | platform_admin | Platform — Company Verification (`24:285`) |
+| `/app/platform/universities` | Universities | platform_admin | — (addition, no frame) |
 | `/app/platform/accounts/new` | Create Accounts | platform_admin | Platform — Create Accounts (`24:447`) |
 | `/app/platform/profile` | Profile | platform_admin | Platform — Profile (`24:605`) |
 
@@ -598,7 +600,16 @@ Each page lists its frame, content, data sources, actions and deviations.
   registered after the form was trimmed; show “Not provided”. `AdminCompanySummary` has no
   registration date, so the “Registered” column is replaced by “Legal name” (`legal_name`).
 
-#### Company Verification — `/app/platform/companies` (`24:285`)
+#### Companies — `/app/platform/companies` (addition, no frame)
+- **Layout:** title + “Every company account on the platform, with its verification status.”;
+  table (Company, Contact email, Verification pill, Account active/inactive) with pagination.
+- **Data:** `GET /api/admin/users/?role=company&page=` — the only endpoint that lists companies
+  of every status. `AdminCompanySummary` requires `status`, so the verification endpoint cannot
+  back this screen.
+- **Δ** Added because the “Active Companies” stat card pointed at the status-scoped verification
+  queue; the card now opens this directory.
+
+#### Company Verification — `/app/platform/verification` (`24:285`)
 - **Layout:** title + “Companies stay inactive until manually verified and activated.”; filter
   by status; table (Company, Location, Status); “Company details” panel (Company, Contact
   email, Phone, Location, Registration) with “Verify & activate” and “Keep inactive” (reject).

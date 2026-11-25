@@ -32,8 +32,9 @@ import { NAV_ITEMS } from './nav';
 /** One line icon per nav label; unknown labels fall back to the dashboard icon. */
 const NAV_ICONS: Record<string, LucideIcon> = {
   Dashboard: LayoutGrid,
+  Companies: Building2,
   'Company Verification': CircleCheck,
-  Universities: Building2,
+  Universities: GraduationCap,
   'Create Accounts': UserPlus,
   Profile: User,
   'Company Profile': User,

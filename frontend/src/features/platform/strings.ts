@@ -50,6 +50,19 @@ export const S = {
     notProvided: 'Not provided',
     selectPrompt: 'Select a company to see its details.',
   },
+  companies: {
+    title: 'Companies',
+    subtitle: 'Every company account on the platform, with its verification status.',
+    columns: {
+      company: 'Company',
+      email: 'Contact email',
+      verification: 'Verification',
+      account: 'Account',
+    },
+    active: 'Active',
+    inactive: 'Inactive',
+    empty: 'No company accounts found yet.',
+  },
   universities: {
     title: 'Universities',
     subtitle: 'Registered university accounts and the institutions they manage.',
