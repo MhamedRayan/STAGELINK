@@ -26,6 +26,7 @@ import {
   listCancellationRequests,
   listInternships,
   rejectCancellationRequest,
+  startInternship,
   type CancellationRequest,
   type Internship,
   type ListInternshipsParams,
@@ -368,6 +369,11 @@ export function isAssignableInternship(status: Internship['status']): boolean {
   return status === 'confirmed' || status === 'in_progress';
 }
 
+/** Only confirmed placements can be moved into progress. */
+export function isStartableInternship(status: Internship['status']): boolean {
+  return status === 'confirmed';
+}
+
 /** Single internship for deep links that point outside the aggregated assignment list. */
 export function useUniversityInternship(id: string | undefined) {
   return useQuery({
@@ -434,6 +440,14 @@ export function useUniversityDecision() {
       decision: CompanyDecisionValue;
       reason?: string;
     }) => postUniversityDecision(id, decision, reason),
+    onSuccess: invalidate,
+  });
+}
+
+export function useStartInternship() {
+  const invalidate = useInvalidateUniversity();
+  return useMutation({
+    mutationFn: (internshipId: string) => startInternship(internshipId),
     onSuccess: invalidate,
   });
 }

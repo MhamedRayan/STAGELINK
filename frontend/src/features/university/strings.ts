@@ -175,6 +175,8 @@ export const S = {
     subtitle: 'Comprehensive lifecycle monitoring of all active, completed and cancelled placements.',
     assignSupervisor: 'Assign supervisor',
     reassignSupervisor: 'Reassign supervisor',
+    start: 'Start internship',
+    started: 'Internship started.',
     empty: 'No internships found.',
   },
   cancellations: {

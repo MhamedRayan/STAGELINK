@@ -7,6 +7,7 @@ import {
   buildSupervisorActivity,
   buildUniversityDashboard,
   isAssignableInternship,
+  isStartableInternship,
   isUniversityScopeError,
   mergeStudentRows,
   mergeSupervisorRows,
@@ -92,6 +93,13 @@ describe('university roster helpers', () => {
     expect(isAssignableInternship('in_progress')).toBe(true);
     expect(isAssignableInternship('completed')).toBe(false);
     expect(isAssignableInternship('cancelled')).toBe(false);
+  });
+
+  it('only allows starting confirmed placements', () => {
+    expect(isStartableInternship('confirmed')).toBe(true);
+    expect(isStartableInternship('in_progress')).toBe(false);
+    expect(isStartableInternship('completed')).toBe(false);
+    expect(isStartableInternship('cancelled')).toBe(false);
   });
 
   it('uses the registered student count and keeps activity as a separate detail', () => {

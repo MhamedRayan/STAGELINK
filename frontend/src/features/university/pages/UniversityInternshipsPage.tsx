@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ROUTES } from '@/app/routes';
 import {
+  Button,
   DataTable,
   EmptyState,
   ErrorState,
@@ -9,23 +10,45 @@ import {
   Pagination,
   Select,
   StatusPill,
+  useToast,
 } from '@/components/ui';
 import { CompanyNameCell, OfferTitleCell } from '@/features/student/components/NameCells';
+import { normalizeError } from '@/lib/errors';
 import { PAGE_SIZE } from '@/lib/pagination';
 import { formatDate } from '@/lib/format';
 import { INTERNSHIP_STATUS } from '@/lib/status';
 import type { Internship } from '@/api/internships';
 import { StudentNameCell, SupervisorNameCell } from '../components/NameCells';
-import { isAssignableInternship, useUniversityInternships } from '../hooks';
+import {
+  isAssignableInternship,
+  isStartableInternship,
+  useStartInternship,
+  useUniversityInternships,
+} from '../hooks';
 import { S } from '../strings';
 
 const STATUSES = Object.keys(INTERNSHIP_STATUS) as Internship['status'][];
 
 /** University Internships — Figma 28:1043. */
 export function UniversityInternshipsPage() {
+  const toast = useToast();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<Internship['status'] | ''>('');
+  const [startingId, setStartingId] = useState<string | null>(null);
   const internships = useUniversityInternships({ page, status: status || undefined });
+  const start = useStartInternship();
+
+  const startInternship = async (id: string) => {
+    setStartingId(id);
+    try {
+      await start.mutateAsync(id);
+      toast.success(S.internships.started);
+    } catch (error) {
+      toast.error(normalizeError(error).message);
+    } finally {
+      setStartingId(null);
+    }
+  };
 
   return (
     <div className="max-w-content">
@@ -99,20 +122,34 @@ export function UniversityInternshipsPage() {
                   key: 'action',
                   header: S.common.action,
                   align: 'right',
-                  width: '170px',
-                  render: (row) =>
-                    isAssignableInternship(row.status) ? (
-                      <Link
-                        to={`${ROUTES.university.assignments}?internship=${row.id}`}
-                        className="text-[13px] font-medium text-surface-600 hover:underline"
-                      >
-                        {row.supervisor_user_id
-                          ? S.internships.reassignSupervisor
-                          : S.internships.assignSupervisor}
-                      </Link>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    ),
+                  width: '230px',
+                  render: (row) => (
+                    <div className="flex items-center justify-end gap-3">
+                      {isStartableInternship(row.status) && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => void startInternship(row.id)}
+                          isLoading={startingId === row.id}
+                          disabled={startingId !== null && startingId !== row.id}
+                        >
+                          {S.internships.start}
+                        </Button>
+                      )}
+                      {isAssignableInternship(row.status) ? (
+                        <Link
+                          to={`${ROUTES.university.assignments}?internship=${row.id}`}
+                          className="text-[13px] font-medium text-surface-600 hover:underline"
+                        >
+                          {row.supervisor_user_id
+                            ? S.internships.reassignSupervisor
+                            : S.internships.assignSupervisor}
+                        </Link>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </div>
+                  ),
                 },
               ]}
               rows={internships.data?.items ?? []}
