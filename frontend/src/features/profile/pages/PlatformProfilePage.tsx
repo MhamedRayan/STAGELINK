@@ -4,7 +4,17 @@ import { useForm } from 'react-hook-form';
 import { Button } from '@/components/ui/Button';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth } from '@/features/auth/AuthProvider';
-import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
+import { ROLE_LABEL } from '@/lib/roles';
+import {
+  ACTION_BUTTON,
+  FieldGrid,
+  ProfileActions,
+  ProfileHeader,
+  ProfileIdentity,
+  ProfileLoading,
+  ProfilePanel,
+  ProfileSection,
+} from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
 import { useSaveProfile } from '../hooks';
@@ -51,25 +61,27 @@ export function PlatformProfilePage() {
   return (
     <>
       <ProfileHeader title={S.platform.title} subtitle={S.platform.subtitle} />
-      <form onSubmit={onSubmit} noValidate>
-        <ProfileRow>
-          <ProfileCard className="min-h-[500px] w-full pb-8 lg:w-[700px]">
-            <CardTitle>{S.platform.account}</CardTitle>
-            <div className="mt-[27px] space-y-2">
+      <form onSubmit={onSubmit} noValidate className="mt-8">
+        <ProfilePanel>
+          <ProfileIdentity name={user.name} meta={ROLE_LABEL.platform_admin} />
+
+          <ProfileSection title={S.platform.account}>
+            <FieldGrid>
               <TextField label={S.common.fullName} autoComplete="name" error={errors.name?.message} {...register('name')} />
               <TextField label={S.common.email} type="email" autoComplete="email" error={errors.email?.message} {...register('email')} />
               <TextField label={S.platform.role} readOnly tabIndex={-1} value={S.platform.roleValue} className="text-muted" />
-            </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-[36px]">
-              <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
-                {S.common.save}
-              </Button>
-              <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
-                {S.common.changePassword}
-              </Button>
-            </div>
-          </ProfileCard>
-        </ProfileRow>
+            </FieldGrid>
+          </ProfileSection>
+
+          <ProfileActions>
+            <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
+              {S.common.save}
+            </Button>
+            <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
+              {S.common.changePassword}
+            </Button>
+          </ProfileActions>
+        </ProfilePanel>
       </form>
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </>

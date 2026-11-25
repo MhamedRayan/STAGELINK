@@ -9,7 +9,18 @@ import { StatusPill } from '@/components/ui/StatusPill';
 import { Textarea } from '@/components/ui/Textarea';
 import { ChangePasswordModal } from '@/features/auth/components/ChangePasswordModal';
 import { useAuth, type AuthUser } from '@/features/auth/AuthProvider';
-import { ACTION_BUTTON, CardTitle, ProfileCard, ProfileHeader, ProfileLoading, ProfileRow } from '../components/ProfileLayout';
+import { ROLE_LABEL } from '@/lib/roles';
+import {
+  ACTION_BUTTON,
+  FieldGrid,
+  ProfileActions,
+  ProfileHeader,
+  ProfileIdentity,
+  ProfileLoading,
+  ProfilePanel,
+  ProfileSection,
+  profileMeta,
+} from '../components/ProfileLayout';
 import { TextField } from '../components/TextField';
 import { useSaveFeedback } from '../components/useProfileSave';
 import { useCompanyProfileMe, useSaveProfile } from '../hooks';
@@ -100,49 +111,42 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
   return (
     <>
       <ProfileHeader title={S.company.title} subtitle={S.company.subtitle} />
-      <form onSubmit={onSubmit} noValidate>
-        <ProfileRow>
-          <ProfileCard className="min-h-[620px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-[700]">
-            <CardTitle>{S.company.info}</CardTitle>
-            <div className="mt-[21px] grid grid-cols-1 gap-x-5 gap-y-1.5 sm:grid-cols-2">
-              <div className="col-span-2">
+      <form onSubmit={onSubmit} noValidate className="mt-8">
+        <ProfilePanel>
+          <ProfileIdentity
+            name={user.name}
+            meta={profileMeta(ROLE_LABEL.company, profile.address)}
+            badge={<StatusPill domain="verification" value={profile.verification_status} />}
+          />
+
+          <ProfileSection title={S.company.info}>
+            <FieldGrid>
+              <div className="sm:col-span-2">
                 <TextField label={S.company.companyName} autoComplete="organization" error={errors.companyName?.message} {...register('companyName')} />
               </div>
               <TextField label={S.company.contactPerson} autoComplete="name" error={errors.contactPerson?.message} {...register('contactPerson')} />
               <TextField label={S.company.location} autoComplete="address-level2" error={errors.location?.message} {...register('location')} />
               <TextField label={S.company.website} type="url" autoComplete="url" error={errors.website?.message} {...register('website')} />
               <TextField label={S.company.phone} type="tel" autoComplete="tel" error={errors.phone?.message} {...register('phone')} />
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <Field label={S.company.description} controlGap="md" error={errors.description?.message}>
                   <Textarea className="h-[110px]" hasError={Boolean(errors.description)} {...register('description')} />
                 </Field>
               </div>
-            </div>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-4 lg:mt-[86px]">
-              <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
-                {S.common.save}
-              </Button>
-              <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
-                {S.common.changePassword}
-              </Button>
-            </div>
-          </ProfileCard>
+            </FieldGrid>
+          </ProfileSection>
 
-          <ProfileCard className="min-h-[620px] w-full pb-8 lg:min-h-[640px] lg:min-w-0 lg:flex-[380]">
-            <CardTitle>{S.company.contact}</CardTitle>
-            <dl className="mt-[21px]">
-              <dt className="text-[11px] leading-[13px] text-muted">{S.company.contactEmail}</dt>
-              <dd className="mt-[5px] break-all text-[14px] leading-[17px] text-forest-900">{user.email}</dd>
-              <dt className="mt-[21px] text-[11px] leading-[13px] text-muted">{S.company.phone}</dt>
-              <dd className="mt-[5px] text-[14px] leading-[17px] text-forest-900">{profile.phone || '—'}</dd>
-            </dl>
-            <div className="mt-[39px]">
-              <CardTitle>{S.company.verification}</CardTitle>
-              <StatusPill domain="verification" value={profile.verification_status} className="mt-[15px] px-[19px]" />
-              <p className="mt-2.5 max-w-[320px] text-[12px] leading-[15px] text-muted">{verificationText(profile)}</p>
-            </div>
-          </ProfileCard>
-        </ProfileRow>
+          <ProfileSection title={S.company.verification} description={verificationText(profile)} />
+
+          <ProfileActions>
+            <Button type="submit" isLoading={isSubmitting} className={ACTION_BUTTON}>
+              {S.common.save}
+            </Button>
+            <Button variant="secondary" className={ACTION_BUTTON} onClick={() => setPasswordOpen(true)}>
+              {S.common.changePassword}
+            </Button>
+          </ProfileActions>
+        </ProfilePanel>
       </form>
       <ChangePasswordModal open={passwordOpen} onClose={() => setPasswordOpen(false)} />
     </>
