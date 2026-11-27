@@ -14,7 +14,7 @@ const password = process.env.DEMO_PASSWORD ?? 'StagelinkDemo!2026';
 async function login(page: import('@playwright/test').Page, email: string, home: string) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.locator('input[name="password"]').fill(password);
   await page.getByRole('button', { name: 'Log in' }).click();
   await expect(page).toHaveURL(home);
 }

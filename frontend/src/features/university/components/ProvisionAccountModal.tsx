@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { AdminUserUpdateRequest } from '@/api/identity';
-import { Button, Field, Input, Modal, useToast } from '@/components/ui';
+import { Button, Field, Input, Modal, PasswordInput, useToast } from '@/components/ui';
 import { normalizeError } from '@/lib/errors';
 import { isUniversityScopeError, useProvisionUniversityUser } from '../hooks';
 import {
@@ -118,7 +118,13 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
         </>
       }
     >
-      <form id="provision-account-form" onSubmit={onSubmit} noValidate className="space-y-4">
+      <form
+        id="provision-account-form"
+        onSubmit={onSubmit}
+        noValidate
+        autoComplete="off"
+        className="space-y-4"
+      >
         {scopeError && (
           <p
             role="alert"
@@ -167,11 +173,13 @@ export function ProvisionAccountModal({ open, role, onClose }: ProvisionAccountM
           </>
         )}
         <Field label={S.provision.password} error={errors.password?.message}>
-          <Input
+          <PasswordInput
             {...register('password')}
             hasError={!!errors.password}
-            type="password"
-            autoComplete="new-password"
+            id={`provision-password-${role}`}
+            autoComplete="off"
+            showLabel={S.common.showPassword}
+            hideLabel={S.common.hidePassword}
           />
         </Field>
       </form>

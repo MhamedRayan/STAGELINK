@@ -192,6 +192,7 @@ Each page lists its frame, content, data sources, actions and deviations.
   “Invalid email or password”. On 403 (inactive company) show “This account is awaiting
   platform verification”.
 - **Δ** The “Forgot password?” link is removed — there is no reset API.
+- **Δ UI (user-directed):** the password field has an eye toggle to show or hide its value.
 - **Notes:** students, supervisors and university admins receive accounts from their
   institution; only companies self-register.
 
@@ -206,6 +207,7 @@ Each page lists its frame, content, data sources, actions and deviations.
   company display name and the initial `legal_name`.
 - **Behaviour:** on 201 go to `/register/submitted`; on 400 map field errors (duplicate email,
   weak password); on 429 show a retry message.
+- **Δ UI (user-directed):** both password fields have independent eye toggles.
 
 #### Registration Submitted — `/register/submitted` (`62:37`)
 - **Layout:** confirmation card: check icon, “Registration received”, status pill “Pending
@@ -347,6 +349,7 @@ Each page lists its frame, content, data sources, actions and deviations.
   `matricule`), so the form loads them first and submits a complete body.
 - **Addition:** “Change password” opens a modal (current, new, confirm) →
   `POST /api/users/me/password/`, then navigate to `/password-changed`.
+- **Δ UI (user-directed):** each modal password field has an independent eye toggle.
 - **Δ UI (user-directed):** the frame's two fixed cards render as one soft panel — an identity
   strip (avatar, name, role/context), hairline-separated sections, and a single action bar at the
   bottom holding Save, Change password and Log out (confirmation modal).
@@ -446,6 +449,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   university-admin token; the backend fills in the caller's university, so the form has no
   university input. Edit uses `PATCH /api/admin/users/{id}/` for name, email, department,
   specialty, academic year and matricule. Account status stays read-only for university admins.
+- **Δ UI (user-directed):** the initial-password field has an eye toggle and `autocomplete="off"`
+  so browser autofill cannot move the caret to another account form. The provisioning modal only
+  focuses on open, not on every parent re-render.
 - **Δ** Student ID (matricule) is visible to university administrators through the directory;
   unknown ids fall back to the short UUID.
 
@@ -457,6 +463,8 @@ Each page lists its frame, content, data sources, actions and deviations.
 - **Δ** “+ Add supervisor” calls `POST /api/admin/users/` with `role: "supervisor"`; the backend
   fills in the caller's university. Edit uses `PATCH /api/admin/users/{id}/` for name, email and
   department. Account status stays read-only for university admins.
+- **Δ UI (user-directed):** the Add-supervisor initial-password field has an eye toggle and
+  `autocomplete="off"`; the modal keeps focus in the field the user is typing in on re-render.
 
 #### Applications — `/app/university/applications` (`28:541`)
 - **Layout:** title + “Validate or reject applications accepted by companies”; status filter;
@@ -634,6 +642,8 @@ Each page lists its frame, content, data sources, actions and deviations.
   those are filled in by the company profile after activation. A **Supervisor account** card is
   added (the only way to provision supervisors). Each card collects an initial password or
   `generate_password: true`; when generated, show it once in a copyable panel.
+- **Δ UI (user-directed):** initial-password inputs have an eye toggle, a unique id and
+  `autocomplete="off"` to stop browser autofill jumping between the two account cards.
 
 #### Profile — `/app/platform/profile` (`24:605`)
 - **Layout:** Account information (full name, email, role), “Save changes”, “Change password”.

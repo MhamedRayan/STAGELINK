@@ -5,13 +5,14 @@ import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/app/routes';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
-import { Input } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { normalizeError } from '@/lib/errors';
 import { useAuth } from '../AuthProvider';
 import { useChangePassword } from '../passwordHooks';
 import { changePasswordSchema, type ChangePasswordFormValues } from '../passwordSchema';
 import { PW } from '../passwordStrings';
+import { S } from '../strings';
 
 const FORM_ID = 'change-password-form';
 
@@ -79,29 +80,32 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
     >
       <form id={FORM_ID} onSubmit={onSubmit} noValidate className="space-y-3.5">
         <Field label={PW.modal.current} controlGap="md" error={errors.currentPassword?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="current-password"
             className="h-10 text-[13px]"
             hasError={Boolean(errors.currentPassword)}
+            showLabel={S.passwordToggle.show}
+            hideLabel={S.passwordToggle.hide}
             {...register('currentPassword')}
           />
         </Field>
         <Field label={PW.modal.next} controlGap="md" error={errors.newPassword?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             className="h-10 text-[13px]"
             hasError={Boolean(errors.newPassword)}
+            showLabel={S.passwordToggle.show}
+            hideLabel={S.passwordToggle.hide}
             {...register('newPassword')}
           />
         </Field>
         <Field label={PW.modal.confirm} controlGap="md" error={errors.confirmPassword?.message}>
-          <Input
-            type="password"
+          <PasswordInput
             autoComplete="new-password"
             className="h-10 text-[13px]"
             hasError={Boolean(errors.confirmPassword)}
+            showLabel={S.passwordToggle.show}
+            hideLabel={S.passwordToggle.hide}
             {...register('confirmPassword')}
           />
         </Field>

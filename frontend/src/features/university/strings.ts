@@ -1,5 +1,7 @@
 export const S = {
   common: {
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     allStatuses: 'All statuses',
     student: 'Student',
     company: 'Company',

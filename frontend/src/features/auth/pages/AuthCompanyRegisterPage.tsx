@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Logo } from '@/components/ui/Logo';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { normalizeError } from '@/lib/errors';
 import { useRegisterCompany } from '../hooks';
 import { registerCompanySchema, type RegisterCompanyFormValues } from '../schemas';
@@ -137,12 +138,13 @@ export function AuthCompanyRegisterPage() {
               />
             </Field>
             <Field label={S.register.passwordLabel} controlGap="md" error={errors.password?.message}>
-              <Input
-                type="password"
+              <PasswordInput
                 className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="new-password"
                 placeholder={S.register.passwordPlaceholder}
                 hasError={Boolean(errors.password)}
+                showLabel={S.passwordToggle.show}
+                hideLabel={S.passwordToggle.hide}
                 {...register('password')}
               />
             </Field>
@@ -151,12 +153,13 @@ export function AuthCompanyRegisterPage() {
               controlGap="md"
               error={errors.confirmPassword?.message}
             >
-              <Input
-                type="password"
+              <PasswordInput
                 className="h-10 rounded-[8px] text-[13px]"
                 autoComplete="new-password"
                 placeholder={S.register.passwordPlaceholder}
                 hasError={Boolean(errors.confirmPassword)}
+                showLabel={S.passwordToggle.show}
+                hideLabel={S.passwordToggle.hide}
                 {...register('confirmPassword')}
               />
             </Field>
