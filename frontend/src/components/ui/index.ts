@@ -13,6 +13,8 @@ export { Input } from './Input';
 export type { InputProps } from './Input';
 export { Logo } from './Logo';
 export { PageHeader } from './PageHeader';
+export { PasswordInput } from './PasswordInput';
+export type { PasswordInputProps } from './PasswordInput';
 export { ReasonDialog } from './ReasonDialog';
 export { Select } from './Select';
 export type { SelectProps } from './Select';

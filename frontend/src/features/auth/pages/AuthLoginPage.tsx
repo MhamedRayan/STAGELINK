@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Logo } from '@/components/ui/Logo';
+import { PasswordInput } from '@/components/ui/PasswordInput';
 import { normalizeError } from '@/lib/errors';
 import { useAuth } from '../AuthProvider';
 import { loginSchema, type LoginFormValues } from '../schemas';
@@ -78,11 +79,12 @@ export function AuthLoginPage() {
           </Field>
 
           <Field label={S.login.passwordLabel} className="mt-5">
-            <Input
-              type="password"
+            <PasswordInput
               autoComplete="current-password"
               placeholder={S.login.passwordPlaceholder}
               hasError={Boolean(errors.password)}
+              showLabel={S.passwordToggle.show}
+              hideLabel={S.passwordToggle.hide}
               {...register('password')}
             />
           </Field>

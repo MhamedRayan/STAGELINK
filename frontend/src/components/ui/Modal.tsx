@@ -14,6 +14,9 @@ const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select
 /** Accessible modal: focus moves in, is trapped, Esc closes, focus returns on close. */
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  // Callers pass inline handlers, so keep the latest one without restarting the focus effect.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -23,7 +26,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !panel) return;
@@ -44,7 +47,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       document.removeEventListener('keydown', onKeyDown);
       previous?.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
   return createPortal(

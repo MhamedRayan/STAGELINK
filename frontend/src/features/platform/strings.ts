@@ -113,6 +113,8 @@ export const S = {
     created: 'Account created.',
   },
   common: {
+    showPassword: 'Show password',
+    hidePassword: 'Hide password',
     cancel: 'Cancel',
     edit: 'Edit',
     previous: 'Previous',

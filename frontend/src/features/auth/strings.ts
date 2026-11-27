@@ -1,4 +1,5 @@
 export const S = {
+  passwordToggle: { show: 'Show password', hide: 'Hide password' },
   login: {
     title: 'STAGLINK',
     subtitle: 'University Internship Management Platform',

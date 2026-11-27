@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
-import { Button, Field, Input, PageHeader, useToast } from '@/components/ui';
+import { Button, Field, Input, PageHeader, PasswordInput, useToast } from '@/components/ui';
 import { normalizeError } from '@/lib/errors';
 import { useCreateAccount } from '../hooks';
 import { provisionAccountSchema, type ProvisionAccountFormValues } from '../schemas';
@@ -84,7 +84,7 @@ function ProvisionCard({ copy }: { copy: CardCopy }) {
     <section className="rounded-panel bg-mint p-5">
       <h2 className="text-[16px] font-semibold leading-[19px] text-forest-900">{copy.title}</h2>
 
-      <form onSubmit={onSubmit} noValidate>
+      <form onSubmit={onSubmit} noValidate autoComplete="off">
         <div className="mt-[27px]">
           <Field label={copy.name} error={errors.name?.message} controlGap="md">
             <Input
@@ -126,12 +126,14 @@ function ProvisionCard({ copy }: { copy: CardCopy }) {
             controlGap="md"
             className="mt-2"
           >
-            <Input
+            <PasswordInput
               {...register('password')}
               hasError={!!errors.password}
               className="h-10 px-[14px] text-[13px]"
-              type="password"
-              autoComplete="new-password"
+              id={`provision-password-${copy.role}`}
+              autoComplete="off"
+              showLabel={S.common.showPassword}
+              hideLabel={S.common.hidePassword}
             />
           </Field>
         </div>
