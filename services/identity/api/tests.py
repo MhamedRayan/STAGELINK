@@ -43,6 +43,10 @@ class IdentityApiTests(APITestCase):
                 "password": "RegistrationStrongPassword!2026",
                 "name": "New Company",
                 "role": UserRole.COMPANY,
+                "legal_form": "EURL",
+                "location": "Alger",
+                "registration_number": "RC 16/00-1234567",
+                "phone": "+213 21 55 66 77",
             },
             format="json",
         )
@@ -51,7 +55,12 @@ class IdentityApiTests(APITestCase):
         user = User.objects.get(email="new.company@example.com")
         self.assertNotEqual(user.password_hash, "RegistrationStrongPassword!2026")
         self.assertTrue(user.check_password("RegistrationStrongPassword!2026"))
-        self.assertTrue(CompanyProfile.objects.filter(user=user).exists())
+        profile = CompanyProfile.objects.get(user=user)
+        self.assertEqual(profile.legal_name, "New Company")
+        self.assertEqual(profile.legal_form, "EURL")
+        self.assertEqual(profile.address, "Alger")
+        self.assertEqual(profile.registration_number, "RC 16/00-1234567")
+        self.assertEqual(profile.phone, "+213 21 55 66 77")
 
     def test_registration_rejects_students(self):
         response = self.client.post(
@@ -83,6 +92,27 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         company = User.objects.get(email="company@example.com")
         self.assertFalse(company.is_active)
+
+    def test_registration_validates_company_details(self):
+        response = self.client.post(
+            reverse("auth-register"),
+            {
+                "email": "details@example.com",
+                "password": "SecureIndustryPhrase!2026",
+                "name": "Details Company",
+                "role": UserRole.COMPANY,
+                "legal_form": "X" * 101,
+                "registration_number": "Y" * 101,
+                "phone": "Z" * 65,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("legal_form", response.data)
+        self.assertIn("registration_number", response.data)
+        self.assertIn("phone", response.data)
+        self.assertFalse(User.objects.filter(email="details@example.com").exists())
 
     def test_registration_rejects_privileged_roles(self):
         response = self.client.post(
@@ -421,6 +451,8 @@ class IdentityApiTests(APITestCase):
             reverse("user-role-profile"),
             {
                 "legal_name": "Profile Company LLC",
+                "legal_form": "SARL",
+                "registration_number": "RC 16/00-7654321",
                 "address": "10 Main Street",
                 "contact_person": "Sam Contact",
                 "phone": "+2135550100",
@@ -434,6 +466,8 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(get_response.data["verification_status"], "pending")
         self.assertEqual(put_response.status_code, status.HTTP_200_OK)
         self.assertEqual(put_response.data["legal_name"], "Profile Company LLC")
+        self.assertEqual(put_response.data["legal_form"], "SARL")
+        self.assertEqual(put_response.data["registration_number"], "RC 16/00-7654321")
         company.refresh_from_db()
         self.assertFalse(company.is_active)
 
@@ -470,6 +504,10 @@ class IdentityApiTests(APITestCase):
                 "password": "SecureCompanyPhrase!2026",
                 "name": "Verify Me LLC",
                 "role": UserRole.COMPANY,
+                "legal_form": "EURL",
+                "location": "Oran",
+                "registration_number": "RC 16/00-1111111",
+                "phone": "+2135550111",
             },
             format="json",
         )
@@ -499,6 +537,12 @@ class IdentityApiTests(APITestCase):
         self.assertEqual(company_response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(pending.status_code, status.HTTP_200_OK)
         self.assertIn(str(company.id), [item["id"] for item in pending.data["results"]])
+        summary = next(item for item in pending.data["results"] if item["id"] == str(company.id))
+        self.assertEqual(summary["legal_name"], "Verify Me LLC")
+        self.assertEqual(summary["legal_form"], "EURL")
+        self.assertEqual(summary["registration_number"], "RC 16/00-1111111")
+        self.assertEqual(summary["address"], "Oran")
+        self.assertEqual(summary["phone"], "+2135550111")
         self.assertEqual(missing_reason.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(rejected.status_code, status.HTTP_200_OK)
         self.assertFalse(company.is_active)
@@ -537,6 +581,8 @@ class IdentityApiTests(APITestCase):
             user=company,
             defaults={
                 "legal_name": "Public Company LLC",
+                "legal_form": "SPA",
+                "registration_number": "RC 16/00-9999999",
                 "address": "10 Main Street",
                 "contact_person": "Private Contact",
                 "phone": "+2135550100",
@@ -554,6 +600,8 @@ class IdentityApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["id"], str(profile.id))
+        self.assertEqual(response.data["legal_form"], "SPA")
+        self.assertEqual(response.data["registration_number"], "RC 16/00-9999999")
         self.assertNotIn("phone", response.data)
         self.assertNotIn("contact_person", response.data)
 

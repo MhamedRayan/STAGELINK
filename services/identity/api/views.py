@@ -523,6 +523,10 @@ def _company_admin_summary(user):
         "verified_at": profile.verified_at,
         "rejection_reason": profile.rejection_reason,
         "legal_name": profile.legal_name,
+        "legal_form": profile.legal_form,
+        "registration_number": profile.registration_number,
+        "address": profile.address,
+        "phone": profile.phone,
     }
 
 

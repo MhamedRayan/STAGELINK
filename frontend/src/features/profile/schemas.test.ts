@@ -11,7 +11,15 @@ describe('profile schemas', () => {
     expect(ok.success).toBe(true);
   });
   it('accepts an empty or valid website, rejects junk', () => {
-    const base = { companyName: 'ACME', contactPerson: '', location: '', phone: '', description: '' };
+    const base = {
+      companyName: 'ACME',
+      legalForm: '',
+      registrationNumber: '',
+      contactPerson: '',
+      location: '',
+      phone: '',
+      description: '',
+    };
     expect(companyProfileSchema.safeParse({ ...base, website: '' }).success).toBe(true);
     expect(companyProfileSchema.safeParse({ ...base, website: 'https://acme.dz' }).success).toBe(true);
     expect(companyProfileSchema.safeParse({ ...base, website: 'acme' }).success).toBe(false);

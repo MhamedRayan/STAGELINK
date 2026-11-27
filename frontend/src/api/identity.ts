@@ -28,11 +28,12 @@ export function login(email: string, password: string): Promise<TokenPair> {
   });
 }
 
-export function registerCompany(input: {
-  email: string;
-  name: string;
-  password: string;
-}): Promise<unknown> {
+export function registerCompany(
+  input: Pick<
+    UserRegistration,
+    'email' | 'name' | 'password' | 'legal_form' | 'location' | 'registration_number' | 'phone'
+  >,
+): Promise<unknown> {
   return http('identity', '/api/auth/register/', {
     method: 'POST',
     body: { ...input, role: 'company' },

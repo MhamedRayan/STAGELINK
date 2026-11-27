@@ -13,12 +13,20 @@ import { useRegisterCompany } from '../hooks';
 import { registerCompanySchema, type RegisterCompanyFormValues } from '../schemas';
 import { S } from '../strings';
 
-const SERVER_FIELDS = ['name', 'email', 'password'] as const;
+/** Backend field name → form field name (API data stays snake_case). */
+const SERVER_FIELDS = {
+  name: 'name',
+  email: 'email',
+  password: 'password',
+  legal_form: 'legalForm',
+  location: 'location',
+  registration_number: 'registrationNumber',
+  phone: 'phone',
+} as const;
 
 /**
  * Company Register — Figma 62:4: 840 px card, 4 rows × 2 columns.
- * Only name/email/password are sent (the API accepts nothing else yet); the other four fields
- * are shown as designed and are not persisted — see schemas.ts.
+ * All company details are sent and stored on the company profile at registration.
  */
 export function AuthCompanyRegisterPage() {
   const navigate = useNavigate();
@@ -43,28 +51,38 @@ export function AuthCompanyRegisterPage() {
     },
   });
 
-  const onSubmit = handleSubmit(async ({ name, email, password }) => {
-    setServerMessage(null);
-    try {
-      await registerMutation.mutateAsync({ name, email, password });
-      navigate(ROUTES.registerSubmitted, { replace: true });
-    } catch (error) {
-      const apiError = normalizeError(error);
-      if (apiError.status === 429) {
-        setServerMessage(S.register.tooManyAttempts);
-        return;
-      }
-      let mapped = false;
-      for (const field of SERVER_FIELDS) {
-        const message = apiError.fieldErrors[field];
-        if (message) {
-          setError(field, { message });
-          mapped = true;
+  const onSubmit = handleSubmit(
+    async ({ name, legalForm, location, registrationNumber, phone, email, password }) => {
+      setServerMessage(null);
+      try {
+        await registerMutation.mutateAsync({
+          name,
+          legal_form: legalForm,
+          location,
+          registration_number: registrationNumber,
+          phone,
+          email,
+          password,
+        });
+        navigate(ROUTES.registerSubmitted, { replace: true });
+      } catch (error) {
+        const apiError = normalizeError(error);
+        if (apiError.status === 429) {
+          setServerMessage(S.register.tooManyAttempts);
+          return;
         }
+        let mapped = false;
+        for (const [serverField, formField] of Object.entries(SERVER_FIELDS)) {
+          const message = apiError.fieldErrors[serverField];
+          if (message) {
+            setError(formField as keyof RegisterCompanyFormValues, { message });
+            mapped = true;
+          }
+        }
+        if (!mapped) setServerMessage(apiError.message);
       }
-      if (!mapped) setServerMessage(apiError.message);
-    }
-  });
+    },
+  );
 
   return (
     <main className="flex min-h-screen items-start justify-center bg-canvas p-4 pb-12 sm:items-center sm:p-6">

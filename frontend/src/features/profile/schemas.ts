@@ -21,6 +21,8 @@ export type StudentProfileFormValues = z.infer<typeof studentProfileSchema>;
 
 export const companyProfileSchema = z.object({
   companyName: z.string().trim().min(1, S.common.nameRequired).max(255),
+  legalForm: z.string().trim().max(100),
+  registrationNumber: z.string().trim().max(100),
   contactPerson: z.string().trim().max(255),
   location: z.string().trim(),
   website: z

@@ -142,6 +142,8 @@ class CompanyProfile(models.Model):
         User, on_delete=models.CASCADE, related_name="company_profile"
     )
     legal_name = models.CharField(max_length=255, blank=True, default="")
+    legal_form = models.CharField(max_length=100, blank=True, default="")
+    registration_number = models.CharField(max_length=100, blank=True, default="")
     address = models.TextField(blank=True, default="")
     contact_person = models.CharField(max_length=255, blank=True, default="")
     phone = models.CharField(max_length=64, blank=True, default="")

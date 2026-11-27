@@ -121,7 +121,8 @@ Guest pages use a slim public header: logo, “Browse Offers”, “Log in”.
   for failed loads, and an empty state per table.
 - **Files** — uploads are multipart; downloads use `fetch` + blob because the download endpoint
   requires the Bearer header.
-- **Notifications** — unread count polled every 30 s; opening one marks only that one read.
+- **Notifications** — unread count polled every 30 s; opening one marks only that one read, and
+  the page header offers a bulk “Mark all as read” action.
 
 ### Route map
 
@@ -199,12 +200,14 @@ Each page lists its frame, content, data sources, actions and deviations.
 #### Company Register — `/register/company` (`62:4`)
 - **Layout:** single card, two-column field grid, intro copy explaining post-registration
   verification, primary “Create company account”, link “Back to log in”.
-- **Fields kept:** company name, email, password, confirm password.
-- **Δ Fields removed:** legal form, registration number, location, phone, separate contact
-  email. `POST /api/auth/register/` accepts only `email`, `name`, `password`, `role`; a company
-  cannot sign in to finish its profile until it is verified.
-- **Data:** `POST /api/auth/register/` with `role: "company"`. The submitted `name` becomes the
-  company display name and the initial `legal_name`.
+- **Fields kept:** company name, legal form, registration number, location, email, phone,
+  password, confirm password.
+- **Δ Fields removed:** separate contact email (the account email is the contact address).
+  A company cannot sign in until it is verified.
+- **Data:** `POST /api/auth/register/` with `role: "company"` and all eight fields. The
+  submitted `name` becomes the display name and the initial `legal_name`; legal form,
+  registration number, location and phone are stored on the company profile so the platform
+  administrator can verify them.
 - **Behaviour:** on 201 go to `/register/submitted`; on 400 map field errors (duplicate email,
   weak password); on 429 show a retry message.
 - **Δ UI (user-directed):** both password fields have independent eye toggles.
@@ -372,9 +375,11 @@ Each page lists its frame, content, data sources, actions and deviations.
   email, phone), Account verification card (status pill + explanatory copy), “Save changes”,
   “Change password”.
 - **Data:** `PATCH /api/users/me/` (name/email); `GET`/`PUT /api/users/me/profile/`.
-- **Δ** “Legal form” and “Industry” removed — no model fields. `PUT` requires `legal_name`,
-  `address`, `contact_person`, `phone`, `website`, `description`; add two small inputs
-  (**addition**) for *Contact person* and *Website* so the required body can be sent truthfully.
+- **Δ** “Industry” removed — no model field. `PUT` requires `legal_name`, `legal_form`,
+  `registration_number`, `address`, `contact_person`, `phone`, `website`, `description`; the
+  legal form and registration number fields let a company correct what it submitted at
+  registration. *Contact person* and *Website* are additions so the required body can be sent
+  truthfully.
 - **Verification card:** `pending` → “Awaiting verification”, `active` → “Verified by the
   platform administrator”, `rejected` → reason from `rejection_reason`.
 - **Δ UI (user-directed):** one soft panel instead of two cards — identity strip with the
@@ -604,9 +609,9 @@ Each page lists its frame, content, data sources, actions and deviations.
   Location, Legal name, Status).
 - **Data:** `GET /api/admin/companies/?status=pending|active&page=`,
   `GET /api/admin/users/?role=university_admin&page=` — all counts are real here.
-- **Δ** “Location” comes from the company profile `address`, which is empty for companies that
-  registered after the form was trimmed; show “Not provided”. `AdminCompanySummary` has no
-  registration date, so the “Registered” column is replaced by “Legal name” (`legal_name`).
+- **Δ** “Location” comes from the company profile `address` submitted at registration; show
+  “Not provided” when empty. `AdminCompanySummary` has no registration date, so the
+  “Registered” column is replaced by “Legal name” (`legal_name`).
 - **Δ UI (user-directed):** platform admins must not see students, so the Student Accounts card
   and its `?role=student` request are removed. The fourth slot holds the STAGELINK mark and
   wordmark instead of being left empty.
@@ -627,9 +632,9 @@ Each page lists its frame, content, data sources, actions and deviations.
 - **Data:** `GET /api/admin/companies/?status=&page=`.
 - **Actions:** `POST /api/admin/companies/{company_user_id}/verify/`;
   `POST /api/admin/companies/{company_user_id}/reject/` with required reason.
-- **Δ** Phone/location come from the company profile and are empty for accounts created with
-  the trimmed registration form — show “Not provided”. Remove the “Registration: submitted
-  during account creation” line.
+- **Δ** Phone, location, legal form and registration number come from the profile submitted at
+  registration — show “Not provided” when empty. The “Registration: submitted during account
+  creation” line now shows the actual registration number.
 
 #### Create Accounts — `/app/platform/accounts/new` (`24:447`)
 - **Layout:** three cards: “University account” (university name, create), “Company account”
@@ -661,11 +666,13 @@ Used by all five roles at `/app/{role}/notifications` (`25:1617`, `26:1016`, `27
   paginated list of rows. Each row: title, message, `Unread`/`Read` label, relative timestamp;
   unread rows use the mint surface.
 - **Data:** `GET /api/notifications/?page=` (20 per page),
-  `PATCH /api/notifications/{id}/read/`, unread count from
+  `PATCH /api/notifications/{id}/read/`, `POST /api/notifications/read-all/`, unread count from
   `GET /api/notifications/unread-count/`.
 - **Behaviour:** opening a row marks it read, updates the bell badge, and navigates to the
   related page when `related_object_type` is recognised (`application`, `internship`,
   `submission`, `evaluation`); otherwise it stays on the list.
+- **Addition:** a “Mark all as read” action in the header calls the bulk endpoint, is disabled
+  when the unread count is zero, and refreshes both the list and the bell badge.
 - **Notes:** no “mark all read” control is designed; the API exists but stays unused in v1.
 
 ---
@@ -749,8 +756,8 @@ Terminal: `CONFIRMED`, `COMPANY_REJECTED`, `UNIVERSITY_REJECTED`, `STUDENT_DECLI
 | 1 | Forgot password / verification code / reset password | No Identity endpoints exist | “Forgot password?” link removed from Login |
 | 2 | Student self-registration | Product decision; only companies self-register | Students are provisioned (seed/demo) and login only |
 | 3 | ~~University admin creating students or supervisors~~ | **No longer excluded:** university admins can provision students/supervisors in their own university | “+ Add student” / “+ Add supervisor” use `POST /api/admin/users/` with the caller's token |
-| 4 | Company legal form, registration number, industry | No model fields | Fields removed from Register and Company Profile |
-| 5 | Company location/phone at registration | Registration accepts only `email/name/password/role` | Collected later on Company Profile (location, phone) |
+| 4 | ~~Company legal form and registration number~~ | **No longer excluded:** both are stored on the company profile | Industry remains excluded (no model field) |
+| 5 | ~~Company location/phone at registration~~ | **No longer excluded:** registration stores location and phone on the profile | Company Profile can correct them after activation |
 | 6 | Offer start/end dates, workplace type, field/specialty, contact email | Not part of the offer model | Offer shows deadline, capacity, location, requirements |
 | 7 | Reserved-places count per offer | Not exposed in the public offer payload | “N places” (capacity) only |
 | 8 | Global sidebar search | No global search endpoint | Search filters the current page’s list; offers keep real search |

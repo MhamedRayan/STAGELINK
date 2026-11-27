@@ -75,7 +75,9 @@ paths:
         Public registration is limited to the `company` role. Students,
         supervisors and administrators must be provisioned by an administrator.
         Company accounts are created inactive until a platform administrator
-        verifies and activates them.
+        verifies and activates them. The company name, legal form, registration
+        number, location and phone are stored on the company profile so the
+        administrator can verify the submitted details.
       security: []
       requestBody:
         required: true
@@ -1137,6 +1139,21 @@ components:
           maxLength: 255
         role:
           $ref: '#/components/schemas/PublicRole'
+        legal_form:
+          type: string
+          maxLength: 100
+          description: Legal form; stored on the company profile at registration.
+        location:
+          type: string
+          maxLength: 255
+          description: Location; stored as the company profile address.
+        registration_number:
+          type: string
+          maxLength: 100
+          description: Business registration number.
+        phone:
+          type: string
+          maxLength: 64
 
     UserLogin:
       type: object
@@ -1267,6 +1284,8 @@ components:
       required:
         - id
         - legal_name
+        - legal_form
+        - registration_number
         - address
         - contact_person
         - phone
@@ -1283,6 +1302,12 @@ components:
         legal_name:
           type: string
           maxLength: 255
+        legal_form:
+          type: string
+          maxLength: 100
+        registration_number:
+          type: string
+          maxLength: 100
         address:
           type: string
         contact_person:
@@ -1385,6 +1410,8 @@ components:
       type: object
       required:
         - legal_name
+        - legal_form
+        - registration_number
         - address
         - contact_person
         - phone
@@ -1394,6 +1421,12 @@ components:
         legal_name:
           type: string
           maxLength: 255
+        legal_form:
+          type: string
+          maxLength: 100
+        registration_number:
+          type: string
+          maxLength: 100
         address:
           type: string
         contact_person:
@@ -1451,6 +1484,8 @@ components:
       required:
         - id
         - legal_name
+        - legal_form
+        - registration_number
         - address
         - website
         - description
@@ -1461,6 +1496,10 @@ components:
           format: uuid
           description: UUID of the company profile record.
         legal_name:
+          type: string
+        legal_form:
+          type: string
+        registration_number:
           type: string
         address:
           type: string
@@ -1587,6 +1626,10 @@ components:
         - verified_at
         - rejection_reason
         - legal_name
+        - legal_form
+        - registration_number
+        - address
+        - phone
       properties:
         id:
           type: string
@@ -1615,6 +1658,14 @@ components:
         rejection_reason:
           type: string
         legal_name:
+          type: string
+        legal_form:
+          type: string
+        registration_number:
+          type: string
+        address:
+          type: string
+        phone:
           type: string
 
     AdminCompanyPage:

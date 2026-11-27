@@ -31,6 +31,8 @@ export const S = {
     subtitle: 'Company details, contact information and verification status.',
     info: 'Company information',
     companyName: 'Company name',
+    legalForm: 'Legal form',
+    registrationNumber: 'Registration number',
     contactPerson: 'Contact person',
     location: 'Location',
     website: 'Website',

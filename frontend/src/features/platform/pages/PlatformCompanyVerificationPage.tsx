@@ -14,7 +14,7 @@ import { normalizeError } from '@/lib/errors';
 import { pageCount, PAGE_SIZE } from '@/lib/pagination';
 import { getStatusInfo } from '@/lib/status';
 import { CompanyLocation } from '../components/CompanyLocation';
-import { useAdminCompanies, useCompanyLocation, useRejectCompany, useVerifyCompany } from '../hooks';
+import { useAdminCompanies, useRejectCompany, useVerifyCompany } from '../hooks';
 import { S } from '../strings';
 
 const FILTERS: VerificationStatus[] = ['pending', 'active', 'rejected'];
@@ -35,9 +35,10 @@ interface CompanyDetailsProps {
   onReject(): void;
 }
 
-/** Right-hand panel of 24:285. The public profile exposes address but not phone (contract). */
+/** Right-hand panel of 24:285. All details were submitted at registration. */
 function CompanyDetails({ company, isVerifying, onVerify, onReject }: CompanyDetailsProps) {
-  const location = useCompanyLocation(company);
+  const valueOrNotProvided = (value: string | undefined) =>
+    value?.trim() || S.verification.notProvided;
   return (
     <aside className="flex min-h-[610px] flex-col rounded-panel bg-mint p-5">
       <h2 className="text-[16px] font-semibold leading-[19px] text-forest-900">
@@ -46,13 +47,24 @@ function CompanyDetails({ company, isVerifying, onVerify, onReject }: CompanyDet
       <div className="mt-[27px] space-y-6">
         <DetailField label={S.verification.details.company} value={company.name} />
         <DetailField label={S.verification.details.email} value={company.email} />
-        <DetailField label={S.verification.details.phone} value={S.verification.notProvided} />
+        <DetailField
+          label={S.verification.details.phone}
+          value={valueOrNotProvided(company.phone)}
+        />
         <DetailField
           label={S.verification.details.location}
-          value={location ?? S.verification.notProvided}
+          value={valueOrNotProvided(company.address)}
+        />
+        <DetailField
+          label={S.verification.details.legalForm}
+          value={valueOrNotProvided(company.legal_form)}
+        />
+        <DetailField
+          label={S.verification.details.registrationNumber}
+          value={valueOrNotProvided(company.registration_number)}
         />
       </div>
-      <div className="mt-[116px] space-y-3">
+      <div className="mt-8 space-y-3">
         <Button
           className="h-10 w-full rounded-[10px] text-[13px] font-medium"
           isLoading={isVerifying}

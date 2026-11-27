@@ -29,6 +29,12 @@ class UserRegistrationSerializer(serializers.Serializer):
     )
     name = serializers.CharField(max_length=255)
     role = serializers.ChoiceField(choices=UserRole.choices)
+    legal_form = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    location = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    registration_number = serializers.CharField(
+        max_length=100, required=False, allow_blank=True
+    )
+    phone = serializers.CharField(max_length=64, required=False, allow_blank=True)
 
     def validate(self, attrs):
         email = attrs["email"].strip().lower()
@@ -51,9 +57,28 @@ class UserRegistrationSerializer(serializers.Serializer):
         return attrs
 
     def create(self, validated_data):
+        company_details = {
+            field: validated_data.pop(field, "")
+            for field in ("legal_form", "location", "registration_number", "phone")
+        }
         try:
             user = User.objects.create_user(**validated_data)
-            ensure_role_profile(user)
+            profile = ensure_role_profile(user)
+            if isinstance(profile, CompanyProfile):
+                profile.legal_name = user.name
+                profile.legal_form = company_details["legal_form"]
+                profile.registration_number = company_details["registration_number"]
+                profile.address = company_details["location"]
+                profile.phone = company_details["phone"]
+                profile.save(
+                    update_fields=(
+                        "legal_name",
+                        "legal_form",
+                        "registration_number",
+                        "address",
+                        "phone",
+                    )
+                )
             return user
         except IntegrityError as exc:
             raise serializers.ValidationError(
@@ -254,6 +279,10 @@ class StudentProfileSerializer(StrictModelSerializer):
 
 class CompanyProfileSerializer(StrictModelSerializer):
     legal_name = serializers.CharField(max_length=255, required=True, allow_blank=True)
+    legal_form = serializers.CharField(max_length=100, required=True, allow_blank=True)
+    registration_number = serializers.CharField(
+        max_length=100, required=True, allow_blank=True
+    )
     address = serializers.CharField(required=True, allow_blank=True)
     contact_person = serializers.CharField(max_length=255, required=True, allow_blank=True)
     phone = serializers.CharField(max_length=64, required=True, allow_blank=True)
@@ -266,6 +295,8 @@ class CompanyProfileSerializer(StrictModelSerializer):
         fields = (
             "id",
             "legal_name",
+            "legal_form",
+            "registration_number",
             "address",
             "contact_person",
             "phone",
@@ -291,6 +322,8 @@ class PublicCompanyProfileSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "legal_name",
+            "legal_form",
+            "registration_number",
             "address",
             "website",
             "description",

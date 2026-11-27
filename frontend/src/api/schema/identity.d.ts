@@ -38,7 +38,9 @@ export interface paths {
          * @description Public registration is limited to the `company` role. Students,
          *     supervisors and administrators must be provisioned by an administrator.
          *     Company accounts are created inactive until a platform administrator
-         *     verifies and activates them.
+         *     verifies and activates them. The company name, legal form, registration
+         *     number, location and phone are stored on the company profile so the
+         *     administrator can verify the submitted details.
          */
         post: operations["registerUser"];
         delete?: never;
@@ -583,6 +585,13 @@ export interface components {
             password: string;
             name: string;
             role: components["schemas"]["PublicRole"];
+            /** @description Legal form; stored on the company profile at registration. */
+            legal_form?: string;
+            /** @description Location; stored as the company profile address. */
+            location?: string;
+            /** @description Business registration number. */
+            registration_number?: string;
+            phone?: string;
         };
         UserLogin: {
             /** Format: email */
@@ -632,6 +641,8 @@ export interface components {
             /** Format: uuid */
             id: string;
             legal_name: string;
+            legal_form: string;
+            registration_number: string;
             address: string;
             contact_person: string;
             phone: string;
@@ -669,6 +680,8 @@ export interface components {
         };
         CompanyProfileUpdate: {
             legal_name: string;
+            legal_form: string;
+            registration_number: string;
             address: string;
             contact_person: string;
             phone: string;
@@ -693,6 +706,8 @@ export interface components {
              */
             id: string;
             legal_name: string;
+            legal_form: string;
+            registration_number: string;
             address: string;
             /** @description May be empty or a valid URL. */
             website: string;
@@ -756,6 +771,10 @@ export interface components {
             verified_at: string | null;
             rejection_reason: string;
             legal_name: string;
+            legal_form: string;
+            registration_number: string;
+            address: string;
+            phone: string;
         };
         AdminCompanyPage: {
             count: number;

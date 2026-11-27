@@ -28,8 +28,8 @@ import { companyProfileSchema, type CompanyProfileFormValues } from '../schemas'
 import { S } from '../strings';
 
 /**
- * Company — Profile, Figma 26:185. Legal form/Industry removed (plan Δ); Contact person, Website and
- * Phone are editable here because PUT /api/users/me/profile/ requires them.
+ * Company — Profile, Figma 26:185. Legal form and registration number are editable
+ * here alongside the other company details captured at registration.
  */
 export function CompanyProfilePage() {
   const { user } = useAuth();
@@ -72,6 +72,8 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
     resolver: zodResolver(companyProfileSchema),
     defaultValues: {
       companyName: profile.legal_name,
+      legalForm: profile.legal_form,
+      registrationNumber: profile.registration_number,
       contactPerson: profile.contact_person,
       location: profile.address,
       website: profile.website,
@@ -81,6 +83,8 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
   });
   const feedback = useSaveFeedback<CompanyProfileFormValues>(setError, {
     legal_name: 'companyName',
+    legal_form: 'legalForm',
+    registration_number: 'registrationNumber',
     contact_person: 'contactPerson',
     address: 'location',
     website: 'website',
@@ -94,6 +98,8 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
         account: values.companyName !== user.name ? { name: values.companyName } : undefined,
         role: {
           legal_name: values.companyName,
+          legal_form: values.legalForm,
+          registration_number: values.registrationNumber,
           address: values.location,
           contact_person: values.contactPerson,
           phone: values.phone,
@@ -124,6 +130,8 @@ function CompanyProfileForm({ user, profile }: { user: AuthUser; profile: Compan
               <div className="sm:col-span-2">
                 <TextField label={S.company.companyName} autoComplete="organization" error={errors.companyName?.message} {...register('companyName')} />
               </div>
+              <TextField label={S.company.legalForm} error={errors.legalForm?.message} {...register('legalForm')} />
+              <TextField label={S.company.registrationNumber} error={errors.registrationNumber?.message} {...register('registrationNumber')} />
               <TextField label={S.company.contactPerson} autoComplete="name" error={errors.contactPerson?.message} {...register('contactPerson')} />
               <TextField label={S.company.location} autoComplete="address-level2" error={errors.location?.message} {...register('location')} />
               <TextField label={S.company.website} type="url" autoComplete="url" error={errors.website?.message} {...register('website')} />

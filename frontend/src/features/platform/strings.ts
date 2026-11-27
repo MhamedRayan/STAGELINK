@@ -42,6 +42,8 @@ export const S = {
       email: 'Contact email',
       phone: 'Phone',
       location: 'Location',
+      legalForm: 'Legal form',
+      registrationNumber: 'Registration number',
     },
     verify: 'Verify & activate',
     reject: 'Keep inactive',

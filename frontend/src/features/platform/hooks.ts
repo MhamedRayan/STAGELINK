@@ -1,13 +1,11 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createAdminUser,
-  getPublicCompanyProfile,
   listAdminCompanies,
   listAdminUsers,
   rejectAdminCompany,
   updateAdminUser,
   verifyAdminCompany,
-  type AdminCompanySummary,
   type AdminUserCreateRequest,
   type AdminUserUpdateRequest,
   type Role,
@@ -92,18 +90,4 @@ export function useUpdateUniversityAccount() {
     }) => updateAdminUser(userId, input),
     onSuccess: () => void invalidate(),
   });
-}
-
-/** Address from the public profile; only verified companies expose one (others 404 → null). */
-export function useCompanyLocation(
-  company: Pick<AdminCompanySummary, 'id' | 'verification_status'>,
-): string | null {
-  const { data } = useQuery({
-    queryKey: platformKeys.companyProfile(company.id),
-    queryFn: () => getPublicCompanyProfile(company.id),
-    enabled: company.verification_status === 'active',
-    retry: false,
-    staleTime: 5 * 60_000,
-  });
-  return data?.address?.trim() || null;
 }

@@ -1,9 +1,7 @@
 import type { AdminCompanySummary } from '@/api/identity';
-import { useCompanyLocation } from '../hooks';
 import { S } from '../strings';
 
-/** Location cell: the public profile address for verified companies, "Not provided" otherwise. */
+/** Location cell: submitted during registration, available on the admin summary. */
 export function CompanyLocation({ company }: { company: AdminCompanySummary }) {
-  const location = useCompanyLocation(company);
-  return <>{location ?? S.common.notProvided}</>;
+  return <>{company.address?.trim() || S.common.notProvided}</>;
 }

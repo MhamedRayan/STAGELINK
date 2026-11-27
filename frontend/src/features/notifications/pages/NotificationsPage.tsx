@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROUTES } from '@/app/routes';
 import {
+  Button,
   EmptyState,
   ErrorState,
   PageHeader,
@@ -16,7 +17,12 @@ import { formatDateTime, formatRelative } from '@/lib/format';
 import { normalizeError } from '@/lib/errors';
 import { PAGE_SIZE } from '@/lib/pagination';
 import type { Role } from '@/lib/roles';
-import { useMarkNotificationRead, useNotificationsList } from '../hooks';
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotificationsList,
+  useUnreadCount,
+} from '../hooks';
 import { S } from '../strings';
 
 /** Deep-link targets are role-specific; unknown object types stay on this page. */
@@ -59,6 +65,8 @@ export function NotificationsPage() {
   const { role } = useAuth();
   const notifications = useNotificationsList(page);
   const markRead = useMarkNotificationRead();
+  const markAll = useMarkAllNotificationsRead();
+  const { data: unreadCount = 0 } = useUnreadCount();
 
   const open = async (notification: Notification) => {
     try {
@@ -70,9 +78,32 @@ export function NotificationsPage() {
     }
   };
 
+  const markAllRead = async () => {
+    try {
+      const result = await markAll.mutateAsync();
+      if (result.marked_read > 0) toast.success(S.allRead);
+    } catch (error) {
+      toast.error(normalizeError(error).message);
+    }
+  };
+
   return (
     <div className="max-w-content">
-      <PageHeader title={S.title} subtitle={S.subtitle} />
+      <PageHeader
+        title={S.title}
+        subtitle={S.subtitle}
+        action={
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={unreadCount === 0 || markAll.isPending}
+            isLoading={markAll.isPending}
+            onClick={() => void markAllRead()}
+          >
+            {S.markAll}
+          </Button>
+        }
+      />
 
       {notifications.isError ? (
         <div className="mt-6">
