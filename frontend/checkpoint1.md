@@ -24,7 +24,7 @@ sandbox. **Nothing has been run against the live backend or compared visually in
 - [x] `AuthLoginPage` matching Figma 24:3 (user confirmed "exactly as the design")
 - [x] `Logo`, `Button` (+ `lg` size), `Input`, `Field`
 - [x] 401 → "Invalid email or password", 403 → "awaiting platform verification"
-- [x] "Forgot password?" shown, shows a "not available yet" message (reset deferred)
+- [x] "Forgot password?" removed from Login (no password-reset API)
 
 ### Step 3 — Register + guest link (`stagelink-step3-register.zip`)
 - [x] `AuthCompanyRegisterPage`, `AuthRegistrationSubmittedPage`
@@ -94,7 +94,7 @@ sandbox. **Nothing has been run against the live backend or compared visually in
 | # | Item | State |
 | --- | --- | --- |
 | 1 | Register: legal form, location, registration number, phone are shown but **not stored** (API accepts name/email/password only) | Needs backend support |
-| 2 | Forgot password: no API; link shows a notice | Deferred by you |
+| 2 | Forgot password: no API; link removed from Login | Removed by you |
 | 3 | Company profile: contact email is read-only text; phone, website, contact person are editable | As designed + plan |
 | 4 | Profile save sends the full role body, so blank required fields must be filled first | By API design |
 | 5 | Sidebar 260 px / content 1100 px (Figma) instead of 300 / 1140 (plan) | Decided, in `AGENTS.md` |

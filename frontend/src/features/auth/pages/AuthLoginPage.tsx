@@ -34,7 +34,7 @@ export function AuthLoginPage() {
     defaultValues: { email: '', password: '' },
   });
 
-  // One message slot next to "Forgot password?" so the card layout never shifts.
+  // Fixed-height message slot so the card layout never shifts when an error appears.
   const message = errors.email?.message ?? errors.password?.message ?? serverMessage;
 
   const onSubmit = handleSubmit(async ({ email, password }) => {
@@ -89,17 +89,10 @@ export function AuthLoginPage() {
             />
           </Field>
 
-          <div className="mt-1.5 flex min-h-[15px] items-start justify-between gap-4">
+          <div className="mt-1.5 min-h-[15px]">
             <p role="alert" className="text-[12px] leading-[15px] text-pill-danger-fg">
               {message}
             </p>
-            <button
-              type="button"
-              onClick={() => setServerMessage(S.login.forgotUnavailable)}
-              className="shrink-0 text-[12px] font-medium leading-[15px] text-surface-600 hover:underline"
-            >
-              {S.login.forgot}
-            </button>
           </div>
 
           <Button type="submit" size="lg" isLoading={isSubmitting} className="mt-[17px] w-full">

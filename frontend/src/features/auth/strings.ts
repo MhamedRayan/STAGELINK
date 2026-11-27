@@ -7,9 +7,6 @@ export const S = {
     emailPlaceholder: 'name@university.dz',
     passwordLabel: 'Password',
     passwordPlaceholder: '••••••••',
-    forgot: 'Forgot password?',
-    forgotUnavailable:
-      'Password reset is not available yet. Please contact your university administrator.',
     submit: 'Log in',
     note: 'Students and supervisors use accounts created by the university. Companies register and log in after verification.',
     newCompany: 'New company? Create an account',
