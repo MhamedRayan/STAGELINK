@@ -673,3 +673,65 @@ class PublicCompanyVerificationTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["verification_status"], "active")
+
+
+class AdminUserDeletionTests(APITestCase):
+    def setUp(self):
+        cache.clear()
+        self.platform_admin = User.objects.create_user(
+            email="delete-platform@example.edu",
+            password="PlatformAdminStrong!2026",
+            name="Platform Admin",
+            role=UserRole.PLATFORM_ADMIN,
+        )
+        self.university_admin = User.objects.create_user(
+            email="delete-uni-admin@example.edu",
+            password="UniversityAdminStrong!2026",
+            name="University Admin",
+            role=UserRole.UNIVERSITY_ADMIN,
+        )
+        UniversityAdminProfile.objects.filter(user=self.university_admin).update(
+            university=ADMIN_UNIVERSITY
+        )
+        self.student = User.objects.create_user(
+            email="delete-student@example.edu",
+            password="StudentStrong!2026",
+            name="Student",
+            role=UserRole.STUDENT,
+        )
+        StudentProfile.objects.filter(user=self.student).update(
+            university=ADMIN_UNIVERSITY
+        )
+
+    def test_platform_admin_can_delete_account_and_its_role_profile(self):
+        self.client.force_authenticate(user=self.platform_admin)
+
+        response = self.client.delete(
+            reverse("admin-user-detail", args=[self.student.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(pk=self.student.pk).exists())
+        self.assertFalse(StudentProfile.objects.filter(user_id=self.student.pk).exists())
+
+    def test_university_admin_cannot_delete_account(self):
+        self.client.force_authenticate(user=self.university_admin)
+
+        response = self.client.delete(
+            reverse("admin-user-detail", args=[self.student.id])
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(User.objects.filter(pk=self.student.pk).exists())
+
+    def test_delete_unknown_account_is_not_found(self):
+        self.client.force_authenticate(user=self.platform_admin)
+
+        response = self.client.delete(
+            reverse(
+                "admin-user-detail",
+                args=["00000000-0000-4000-8000-000000000000"],
+            )
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

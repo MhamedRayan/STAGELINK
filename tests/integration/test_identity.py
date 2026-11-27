@@ -21,6 +21,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import requests
 
+from integration_accounts import INTEGRATION_EMAIL_DOMAIN, cleanup_integration_accounts
+
 DEFAULT_IDENTITY_BASE_URL = "http://localhost:8001"
 DEFAULT_OFFERS_BASE_URL = "http://localhost:8002"
 DEFAULT_APPLICATIONS_BASE_URL = "http://localhost:8003"
@@ -56,8 +58,16 @@ ROLE_SUPERVISOR = "supervisor"
 ROLE_UNIVERSITY_ADMIN = "university_admin"
 
 
+def setUpModule():
+    cleanup_integration_accounts()
+
+
+def tearDownModule():
+    cleanup_integration_accounts()
+
+
 def unique_email(prefix):
-    return f"{prefix}.{uuid.uuid4().hex[:12]}@integration.stagelink.test"
+    return f"{prefix}.{uuid.uuid4().hex[:12]}@{INTEGRATION_EMAIL_DOMAIN}"
 
 
 def auth_headers(access):

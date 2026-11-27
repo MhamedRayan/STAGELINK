@@ -16,8 +16,8 @@ services with explicit, contract-first HTTP APIs.
 | `internships`   | Active internships and supervision                  | `8004`     |
 | `notifications` | User notifications and delivery preferences         | `8005`     |
 
-The planned web client lives in [`frontend/`](frontend/README.md). It is not
-implemented yet.
+The web client lives in [`frontend/`](frontend/README.md). It is a React 18
+single-page application that consumes the contracts through `/svc/<service>/`.
 
 ## Repository layout
 

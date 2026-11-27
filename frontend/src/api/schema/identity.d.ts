@@ -475,7 +475,13 @@ export interface paths {
         get: operations["getAdminUser"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete a user account
+         * @description Permanently removes a user account and its role profiles. Only platform
+         *     administrators may delete accounts; university administrators can read
+         *     and edit only their own institution's users.
+         */
+        delete: operations["deleteAdminUser"];
         options?: never;
         head?: never;
         /**
@@ -1558,6 +1564,29 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminUserSummary"];
                 };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteAdminUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];

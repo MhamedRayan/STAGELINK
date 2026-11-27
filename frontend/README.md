@@ -1,24 +1,42 @@
 # Frontend
 
-The STAGELINK web client is not implemented yet. This directory is reserved for
-it so that the backend contracts and local ports can be planned consistently.
+The STAGELINK web client is a React 18 + TypeScript single-page application
+built with Vite, Tailwind CSS 3.4, React Router 6 and TanStack Query 5.
 
-## Intended direction
+## Local development
 
-- A TypeScript single-page application.
-- Consumes the services through their OpenAPI contracts in `contracts/`.
-- Runs on `http://localhost:3000` in local development (see `.env.example`).
-- Talks to `identity` for authentication and to the domain services for
-  offers, applications, internships and notifications.
-- Sends `Authorization: Bearer <access>` on every API call. There are no
-  cookies, so `CORS_ALLOWED_ORIGINS` only needs to list the front-end origin.
-- Stores the rotated `refresh` token returned by every refresh; the previous
-  one is blacklisted.
-- Calls `POST /api/auth/logout/`, `POST /api/users/me/password/` and
-  `POST /api/users/me/deactivate/` for account lifecycle. Password changes and
-  deactivation revoke all refresh tokens.
-- Never calls `/api/internal/` routes; those require the service token.
+```bash
+npm install
+npm run dev
+```
 
-The framework choice, build tooling and test strategy will be captured in
-`docs/decisions.md` when the client is scaffolded. Until then, this directory
-contains documentation only.
+The dev server runs at `http://localhost:3000` and proxies `/svc/<service>/`
+to the Compose services on ports 8001–8005. Start the backend stack from the
+repository root first (see [`../docs/setup.md`](../docs/setup.md)).
+
+Authentication uses `Authorization: Bearer <access>`; the rotated refresh
+token is kept in local storage. The client never calls `/api/internal/` routes.
+
+## API types
+
+`src/api/schema/*.d.ts` is generated from `contracts/*.yaml`. Regenerate it
+after a contract change:
+
+```bash
+npm run gen:api
+```
+
+Do not edit the generated files by hand.
+
+## Verification
+
+```bash
+npm run typecheck
+npm run lint
+npm run test
+npm run build
+```
+
+`npm run test:e2e` runs the Playwright smoke tests against an already-started,
+seeded stack on `http://localhost:3000`. Set `E2E_BASE_URL` to use another
+origin.

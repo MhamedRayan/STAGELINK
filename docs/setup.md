@@ -42,10 +42,10 @@ The first run builds five images and initialises five PostgreSQL databases. Use
 docker compose --env-file .env -f infra/docker/docker-compose.yml up --build -d
 ```
 
-The stack also starts two scheduler sidecars, `scheduler-offers` and
-`scheduler-applications`, which run the idempotent maintenance commands every
-five minutes. Failed runs are retried on the next interval; stop them with the
-rest of the stack.
+The stack also starts three scheduler sidecars, `scheduler-offers`,
+`scheduler-applications` and `scheduler-internships`, which run the idempotent
+maintenance commands every five minutes. Failed runs are retried on the next
+interval; stop them with the rest of the stack.
 
 ## Account lifecycle
 
@@ -388,8 +388,9 @@ This permanently removes the local databases.
 
 ## Frontend
 
-The web client is not implemented yet. `frontend/README.md` records the
-intended stack and will be replaced when the application is scaffolded.
+The React web client is in `frontend/`. Run `npm install && npm run dev` there
+to serve it on `http://localhost:3000`; see `frontend/README.md` for the full
+workflow.
 
 The APIs accept browser requests from the origins in `CORS_ALLOWED_ORIGINS`.
 The Compose default allows `http://localhost:3000` and

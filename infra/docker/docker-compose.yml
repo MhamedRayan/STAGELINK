@@ -219,6 +219,33 @@ services:
     healthcheck: *postgres-healthcheck
     restart: unless-stopped
 
+  # Moves confirmed internships to In progress once their start date is reached.
+  # The command is idempotent and locks the rows, so overlapping runs are safe.
+  scheduler-internships:
+    build:
+      context: ../../services/internships
+    command:
+      - sh
+      - -c
+      - |
+        while true; do
+          python manage.py start_due_internships || true
+          sleep 300
+        done
+    environment:
+      <<: *service-environment
+      DB_NAME: internships
+      DB_HOST: db-internships
+      IDENTITY_BASE_URL: "http://identity:8000"
+      NOTIFICATIONS_BASE_URL: "http://notifications:8000"
+      APPLICATIONS_BASE_URL: "http://applications:8000"
+    depends_on:
+      db-internships:
+        condition: service_healthy
+      internships:
+        condition: service_healthy
+    restart: unless-stopped
+
   notifications:
     build:
       context: ../../services/notifications

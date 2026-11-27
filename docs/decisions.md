@@ -208,7 +208,10 @@ services, and irreversible state, so their rules must be explicit.
 **Decision:**
 
 - The internship lifecycle remains `confirmed → in_progress → completed`.
-  `cancelled` is reached only through an approved cancellation request.
+  University administration may start a confirmed placement manually, and the
+  idempotent `start_due_internships` scheduler starts the rest when their start
+  date is reached. `cancelled` is reached only through an approved cancellation
+  request.
 - The student on the internship uploads versioned final submissions while the
   internship is `in_progress`. At most one version is pending. A rejected
   version allows a resubmission; an approved version ends the upload flow.
@@ -440,7 +443,7 @@ origins in `CORS_ALLOWED_ORIGINS`; credentials are disabled because
 authentication uses the `Authorization` header, not cookies. All services apply
 the same `SECURE_*`, cookie, referrer and frame settings, with
 `SECURE_PROXY_SSL_HEADER` enabled only behind a trusted TLS-terminating proxy.
-The two idempotent commands run as Compose scheduler sidecars every five
+The three idempotent commands run as Compose scheduler sidecars every five
 minutes. The production procedure is documented in `docs/deployment.md`.
 
 **Consequences:** Adding a new front-end origin requires a configuration change,

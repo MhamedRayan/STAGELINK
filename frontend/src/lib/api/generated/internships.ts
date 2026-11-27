@@ -160,9 +160,10 @@ export interface paths {
         /**
          * Complete an internship
          * @description Moves an `in_progress` internship to `completed`. Allowed for the assigned
-         *     supervisor and for university administration. Requires an approved
-         *     evaluation: until the evaluation feature exists, this always returns `409`
-         *     with `evaluation_required`.
+         *     supervisor and for university administration. A recorded supervisor
+         *     evaluation is required; without one the request returns `409` with
+         *     `evaluation_required`. Posting the final evaluation also completes the
+         *     internship in the same transaction.
          */
         post: operations["completeInternship"];
         delete?: never;

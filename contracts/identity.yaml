@@ -895,6 +895,33 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+        - Admin
+      operationId: deleteAdminUser
+      summary: Delete a user account
+      description: |
+        Permanently removes a user account and its role profiles. Only platform
+        administrators may delete accounts; university administrators can read
+        and edit only their own institution's users.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: The account was deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
 components:
   securitySchemes:

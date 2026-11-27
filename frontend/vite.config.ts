@@ -28,6 +28,18 @@ export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   server: { port: 3000, strictPort: true, proxy },
   preview: { port: 3000, strictPort: true, proxy },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ['react', 'react-dom', 'react-router-dom'],
+          query: ['@tanstack/react-query'],
+          forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
+          icons: ['lucide-react'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

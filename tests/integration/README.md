@@ -80,8 +80,12 @@ full-flow test skips with instructions if `seed_demo` has not been run.
 ## Conventions
 
 Integration tests use unique emails, offer titles and application IDs, so the
-suite can run repeatedly against the same database. They leave their data in
-place; use `down -v` only when you want a clean local environment.
+suite can run repeatedly against the same database. Test accounts use the
+reserved `@integration.stagelink.test` domain. Every test module deletes those
+accounts before and after its run, including leftovers from an interrupted run.
+Use `down -v` only when you want to reset the whole local environment; domain
+records created by a test remain in their own service databases and are keyed
+by those user IDs.
 
 ## Stop the stack
 

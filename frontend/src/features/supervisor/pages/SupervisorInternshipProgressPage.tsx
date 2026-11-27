@@ -16,7 +16,7 @@ import { useDirectoryUser, useUserLabel } from '@/features/directory/users';
 import { normalizeError } from '@/lib/errors';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { getStatusInfo } from '@/lib/status';
-import { useCompleteInternship, useInternship, useStartInternship, useSubmissions } from '../hooks';
+import { useCompleteInternship, useInternship, useSubmissions } from '../hooks';
 import { S } from '../strings';
 
 /** Supervisor Internship Progress — Figma 27:534. Related files = submission versions (Δ). */
@@ -25,7 +25,6 @@ export function SupervisorInternshipProgressPage() {
   const toast = useToast();
   const internship = useInternship(internshipId);
   const submissions = useSubmissions(internshipId);
-  const start = useStartInternship();
   const complete = useCompleteInternship();
   const offerTitle = useOfferTitle(internship.data?.offer_id);
   const companyName = useCompanyLabel(internship.data?.company_user_id);
@@ -62,11 +61,10 @@ export function SupervisorInternshipProgressPage() {
   const activeIndex = data.status === 'confirmed' ? 0 : data.status === 'in_progress' ? 1 : 2;
   const files = submissions.data ?? [];
 
-  const run = async (action: 'start' | 'complete') => {
+  const run = async () => {
     try {
-      if (action === 'start') await start.mutateAsync(data.id);
-      else await complete.mutateAsync(data.id);
-      toast.success(action === 'start' ? S.progress.started : S.progress.completed);
+      await complete.mutateAsync(data.id);
+      toast.success(S.progress.completed);
     } catch (error) {
       toast.error(normalizeError(error).message);
     }
@@ -114,13 +112,8 @@ export function SupervisorInternshipProgressPage() {
           </p>
         </div>
         <div className="mt-5 flex flex-wrap gap-3">
-          {data.status === 'confirmed' && (
-            <Button onClick={() => void run('start')} isLoading={start.isPending}>
-              {S.progress.start}
-            </Button>
-          )}
           {data.status === 'in_progress' && (
-            <Button onClick={() => void run('complete')} isLoading={complete.isPending}>
+            <Button onClick={() => void run()} isLoading={complete.isPending}>
               {S.progress.complete}
             </Button>
           )}

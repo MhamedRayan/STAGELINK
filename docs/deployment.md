@@ -177,13 +177,14 @@ Each service returns `{"status": "ok", "service": "<name>"}` on its own port.
 
 ## 5. Scheduled commands
 
-Two idempotent commands must run regularly. The development Compose file runs
+Three idempotent commands must run regularly. The development Compose file runs
 them as sidecar containers every five minutes. In production use cron, systemd
 timers, Kubernetes CronJobs or your platform scheduler:
 
 ```cron
 */5 * * * * docker run --rm --env-file /srv/stagelink/.env registry.example.com/stagelink/offers:1.0.0 python manage.py close_expired_offers
 */5 * * * * docker run --rm --env-file /srv/stagelink/.env registry.example.com/stagelink/applications:1.0.0 python manage.py reconcile_confirmed_applications --limit 100 --older-than 60
+*/5 * * * * docker run --rm --env-file /srv/stagelink/.env registry.example.com/stagelink/internships:1.0.0 python manage.py start_due_internships
 ```
 
 Replace `1.0.0` with the deployed tag. The examples assume the database hostnames
@@ -193,10 +194,13 @@ values when running outside the Compose network.
 - `close_expired_offers` closes published offers whose deadline passed.
 - `reconcile_confirmed_applications` retries applications stuck in
   `STUDENT_ACCEPTED` after a transient Internships failure.
+- `start_due_internships` moves confirmed internships to `in_progress` when
+  their start date is reached.
 
-Both are safe to run concurrently and safe to repeat. Alert if either command
+All three are safe to run concurrently and safe to repeat. Alert if any command
 fails repeatedly; the reconciliation command measures whether the confirmation
-flow is healthy.
+flow is healthy, and the internship command is the only automatic lifecycle
+transition.
 
 ## 6. Backups and restore
 
@@ -282,7 +286,7 @@ and the scheduled commands before touching production.
 - [ ] PostgreSQL roles use strong passwords and are not superusers.
 - [ ] Backups scheduled and a restore tested.
 - [ ] Media volume backed up.
-- [ ] Both scheduler commands running and monitored.
+- [ ] All three scheduler commands running and monitored.
 - [ ] Health checks and log shipping configured.
 - [ ] Login/registration throttles set to production values.
 - [ ] Demo credentials from `seed_demo` changed or removed.

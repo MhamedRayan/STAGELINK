@@ -22,7 +22,7 @@ from datetime import date, datetime, timedelta, timezone
 import jwt
 import requests
 
-from integration_accounts import create_flow_accounts
+from integration_accounts import cleanup_integration_accounts, create_flow_accounts
 
 DEFAULT_IDENTITY_BASE_URL = "http://localhost:8001"
 DEFAULT_OFFERS_BASE_URL = "http://localhost:8002"
@@ -49,6 +49,14 @@ SERVICE_STARTUP_TIMEOUT_SECONDS = 60
 ROLE_STUDENT = "student"
 ROLE_COMPANY = "company"
 ROLE_UNIVERSITY_ADMIN = "university_admin"
+
+
+def setUpModule():
+    cleanup_integration_accounts()
+
+
+def tearDownModule():
+    cleanup_integration_accounts()
 
 
 def make_token(user_id, role):

@@ -7,6 +7,7 @@ then return the IDs and bearer headers the flow tests need.
 """
 
 import os
+import time
 import uuid
 
 import requests
@@ -18,6 +19,7 @@ PASSWORD = "Z9!kTq2#vLm7"
 DEMO_PLATFORM_ADMIN_EMAIL = "admin@stagelink.demo"
 DEMO_PLATFORM_ADMIN_PASSWORD = "StagelinkDemo!2026"
 UNIVERSITY_PREFIX = "Integration Tenant"
+INTEGRATION_EMAIL_DOMAIN = "integration.stagelink.test"
 REQUEST_TIMEOUT_SECONDS = 10
 
 
@@ -40,7 +42,7 @@ def _assert(response, expected, action):
 
 
 def _unique_email(prefix):
-    return f"{prefix}.{uuid.uuid4().hex[:12]}@integration.stagelink.test"
+    return f"{prefix}.{uuid.uuid4().hex[:12]}@{INTEGRATION_EMAIL_DOMAIN}"
 
 
 def platform_headers():
@@ -134,3 +136,69 @@ def create_flow_accounts(university=None):
         "university_id": uuid.UUID(university_admin["id"]),
         "university_headers": _headers_for(university_admin["email"]),
     }
+
+
+def _wait_for_identity():
+    deadline = time.monotonic() + 60
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            response = requests.get(
+                f"{IDENTITY_BASE_URL}/health/", timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            if response.status_code == 200:
+                return
+            last_error = f"HTTP {response.status_code}"
+        except requests.RequestException as exc:
+            last_error = str(exc)
+        time.sleep(1)
+    raise RuntimeError(f"Identity did not become healthy: {last_error}")
+
+
+def cleanup_integration_accounts():
+    """Delete every account created by the integration suite.
+
+    Safe to call before a run (leftovers from a failed run) and after a run.
+    Accounts are identified by their reserved test email domain, so demo and
+    manually created users are never touched.
+    """
+
+    _wait_for_identity()
+    try:
+        headers = platform_headers()
+    except AssertionError:
+        # The full-flow identity test skips when the demo administrator has not
+        # been seeded; cleanup must not turn that skip into a hard failure.
+        return 0
+
+    user_ids = []
+    page = 1
+    while True:
+        response = requests.get(
+            f"{IDENTITY_BASE_URL}/api/admin/users/",
+            params={"q": INTEGRATION_EMAIL_DOMAIN, "page": page},
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        data = _assert(response, 200, "list integration accounts")
+        user_ids.extend(
+            user["id"]
+            for user in data["results"]
+            if user["email"].lower().endswith(f"@{INTEGRATION_EMAIL_DOMAIN}")
+        )
+        if not data.get("next"):
+            break
+        page += 1
+
+    for user_id in user_ids:
+        response = requests.delete(
+            f"{IDENTITY_BASE_URL}/api/admin/users/{user_id}/",
+            headers=headers,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+        if response.status_code not in (200, 204):
+            raise AssertionError(
+                f"delete integration account returned {response.status_code}: "
+                f"{response.text}"
+            )
+    return len(user_ids)

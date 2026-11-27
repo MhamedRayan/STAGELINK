@@ -764,6 +764,11 @@ class AdminUserListCreateView(APIView):
 class AdminUserDetailView(APIView):
     permission_classes = ADMIN_USER_PERMISSIONS
 
+    def get_permissions(self):
+        if self.request.method == "DELETE":
+            return (IsAuthenticated(), IsPlatformAdmin())
+        return super().get_permissions()
+
     def _get_user(self, request, user_id):
         user = scope_admin_users(request.user, User.objects.all()).filter(pk=user_id).first()
         if user is None:
@@ -868,3 +873,9 @@ class AdminUserDetailView(APIView):
                     {"email": "An account with this email address already exists."}
                 ) from exc
         return Response(_admin_user_summary(user))
+
+    @transaction.atomic
+    def delete(self, request, user_id):
+        user = self._get_user(request, user_id)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
